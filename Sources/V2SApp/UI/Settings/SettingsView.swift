@@ -107,6 +107,7 @@ struct SettingsView: View {
                     SettingsControlRow(label: model.localized(.interfaceLanguage)) {
                         CommonLanguageMenuPicker(
                             interfaceLanguageID: model.resolvedInterfaceLanguageID,
+                            options: LanguageCatalog.interface,
                             selection: model.interfaceLanguageSelectionBinding
                         )
                     }
@@ -134,7 +135,7 @@ struct SettingsView: View {
                     SettingsControlRow(label: model.localized(.defaultInputLanguage)) {
                         CommonLanguageMenuPicker(
                             interfaceLanguageID: model.resolvedInterfaceLanguageID,
-                            options: LanguageCatalog.speechInput,
+                            options: model.speechLanguageOptions,
                             selection: model.inputLanguageSelectionBinding
                         )
                         .disabled(model.isLanguagePairLocked)
@@ -143,6 +144,7 @@ struct SettingsView: View {
                     SettingsControlRow(label: model.localized(.defaultSubtitleLanguage)) {
                         CommonLanguageMenuPicker(
                             interfaceLanguageID: model.resolvedInterfaceLanguageID,
+                            options: model.translationLanguageOptions,
                             selection: model.outputLanguageSelectionBinding
                         )
                         .disabled(model.isLanguagePairLocked)
@@ -484,7 +486,7 @@ struct SettingsView: View {
                     SettingsControlRow(label: model.localized(.inputLanguage)) {
                         DefaultableLanguageMenuPicker(
                             interfaceLanguageID: model.resolvedInterfaceLanguageID,
-                            options: LanguageCatalog.speechInput,
+                            options: model.speechLanguageOptions,
                             defaultTitle: model.localized(
                                 .useDefaultFormat,
                                 model.languageName(for: model.inputLanguageID)
@@ -496,6 +498,7 @@ struct SettingsView: View {
                     SettingsControlRow(label: model.localized(.subtitleLanguage)) {
                         DefaultableLanguageMenuPicker(
                             interfaceLanguageID: model.resolvedInterfaceLanguageID,
+                            options: model.translationLanguageOptions,
                             defaultTitle: model.localized(
                                 .useDefaultFormat,
                                 model.languageName(for: model.outputLanguageID)

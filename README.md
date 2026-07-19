@@ -43,18 +43,16 @@
 - Transcript summarization powered by Apple Intelligence for quick overview of conversations.
 - Overlay styling controls so the subtitle bar stays readable on top of real work.
 
-## Input Languages
+## Input and Subtitle Languages
 
-v2s only lists input languages supported by Apple's SpeechAnalyzer/SpeechTranscriber path. Regional variants are not exposed in the UI; v2s chooses a default supported region for each language.
-
-Supported input languages: Cantonese, Chinese (Simplified), English, French, German, Italian, Japanese, Korean, Portuguese, and Spanish.
+v2s asks Apple's Speech and Translation frameworks which languages the current Mac supports, so the choices automatically follow OS and model updates. Regional variants are collapsed in the UI, while meaningful script variants such as Simplified and Traditional Chinese remain separate. Apple Translation availability is also checked for each source/destination pair before a session starts.
 
 ## Privacy
 
 - No account, cloud backend, analytics, or telemetry.
 - Audio and subtitle text never leave your Mac through v2s.
 - Translation uses Apple's on-device Translation framework. Some language packs may need to be downloaded first through System Settings.
-- Speech recognition uses Apple's on-device SpeechAnalyzer/SpeechTranscriber resources for the listed input languages.
+- Speech recognition uses Apple's on-device Speech frameworks for the available source languages.
 
 ## Getting Started
 
