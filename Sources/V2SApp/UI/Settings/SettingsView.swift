@@ -261,6 +261,16 @@ struct SettingsView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                     }
+                    Divider()
+                    settingsRow(model.localized(.invisibleInRecording)) {
+                        Toggle("", isOn: invisibleInRecordingBinding)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    Text(model.localized(.invisibleInRecordingHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 settingsCard {
                     sectionHeader(model.localized(.subtitleColor), icon: "paintpalette")
@@ -464,6 +474,10 @@ struct SettingsView: View {
 
     private var attachToSourceBinding: Binding<Bool> {
         overlayBinding(\.attachToSource)
+    }
+
+    private var invisibleInRecordingBinding: Binding<Bool> {
+        overlayBinding(\.invisibleInRecording)
     }
 
     private var translatedFontBinding: Binding<Double> {

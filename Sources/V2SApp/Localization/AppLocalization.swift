@@ -52,6 +52,8 @@ enum AppTextKey: String {
     case textOutline
     case outlineColor
     case attachToSource
+    case invisibleInRecording
+    case invisibleInRecordingHint
     case subtitleColor
     case backgroundColor
     case resetColors
@@ -334,6 +336,8 @@ enum AppLocalization {
             "textOutline": "Text Outline",
             "outlineColor": "Outline Color",
             "attachToSource": "Attach to Source",
+            "invisibleInRecording": "Invisible in Recording",
+            "invisibleInRecordingHint": "Subtitles stay on your screen but are left out of screen recordings, screenshots, and shared screens.",
             "subtitleColor": "Subtitle Color",
             "backgroundColor": "Background Color",
             "resetColors": "Reset Colors",
@@ -496,6 +500,8 @@ enum AppLocalization {
             "textOutline": "文字描边",
             "outlineColor": "描边颜色",
             "attachToSource": "附着到源应用",
+            "invisibleInRecording": "录屏中隐藏",
+            "invisibleInRecordingHint": "字幕仍显示在你的屏幕上，但不会出现在录屏、截图和屏幕共享中。",
             "subtitleColor": "字幕颜色",
             "backgroundColor": "背景颜色",
             "resetColors": "重置颜色",
@@ -658,6 +664,8 @@ enum AppLocalization {
             "textOutline": "Contorno del texto",
             "outlineColor": "Color del contorno",
             "attachToSource": "Vincular a la fuente",
+            "invisibleInRecording": "Invisible en grabaciones",
+            "invisibleInRecordingHint": "Los subtítulos siguen en tu pantalla, pero no aparecen en grabaciones de pantalla, capturas ni pantallas compartidas.",
             "subtitleColor": "Color del subtítulo",
             "backgroundColor": "Color de fondo",
             "resetColors": "Restablecer colores",
@@ -820,6 +828,8 @@ enum AppLocalization {
             "textOutline": "Textkontur",
             "outlineColor": "Konturfarbe",
             "attachToSource": "An Quelle anheften",
+            "invisibleInRecording": "In Aufnahmen unsichtbar",
+            "invisibleInRecordingHint": "Untertitel bleiben auf deinem Bildschirm sichtbar, erscheinen aber nicht in Bildschirmaufnahmen, Screenshots oder geteilten Bildschirmen.",
             "subtitleColor": "Untertitelfarbe",
             "backgroundColor": "Hintergrundfarbe",
             "resetColors": "Farben zurücksetzen",
@@ -982,6 +992,8 @@ enum AppLocalization {
             "textOutline": "文字の縁取り",
             "outlineColor": "縁取りの色",
             "attachToSource": "ソースに追従",
+            "invisibleInRecording": "録画に映さない",
+            "invisibleInRecordingHint": "字幕は画面に表示されたまま、画面収録・スクリーンショット・画面共有には映りません。",
             "subtitleColor": "字幕の色",
             "backgroundColor": "背景色",
             "resetColors": "色をリセット",
@@ -1144,6 +1156,8 @@ enum AppLocalization {
             "textOutline": "Contour du texte",
             "outlineColor": "Couleur du contour",
             "attachToSource": "Attacher à la source",
+            "invisibleInRecording": "Invisible à l'enregistrement",
+            "invisibleInRecordingHint": "Les sous-titres restent affichés sur votre écran mais n'apparaissent pas dans les enregistrements, les captures et les partages d'écran.",
             "subtitleColor": "Couleur des sous-titres",
             "backgroundColor": "Couleur de fond",
             "resetColors": "Réinitialiser les couleurs",
@@ -1306,6 +1320,8 @@ enum AppLocalization {
             "textOutline": "텍스트 외곽선",
             "outlineColor": "외곽선 색상",
             "attachToSource": "소스에 부착",
+            "invisibleInRecording": "녹화에 표시 안 함",
+            "invisibleInRecordingHint": "자막은 화면에 계속 표시되지만 화면 기록, 스크린샷, 화면 공유에는 나타나지 않습니다.",
             "subtitleColor": "자막 색상",
             "backgroundColor": "배경 색상",
             "resetColors": "색상 재설정",
@@ -1468,6 +1484,8 @@ enum AppLocalization {
             "textOutline": "حد النص",
             "outlineColor": "لون الحد",
             "attachToSource": "ربط بالمصدر",
+            "invisibleInRecording": "غير مرئي في التسجيل",
+            "invisibleInRecordingHint": "تبقى الترجمة ظاهرة على شاشتك لكنها لا تظهر في تسجيلات الشاشة أو لقطاتها أو مشاركة الشاشة.",
             "subtitleColor": "لون الترجمة",
             "backgroundColor": "لون الخلفية",
             "resetColors": "إعادة ضبط الألوان",
@@ -1630,6 +1648,8 @@ enum AppLocalization {
             "textOutline": "Contorno do texto",
             "outlineColor": "Cor do contorno",
             "attachToSource": "Fixar na fonte",
+            "invisibleInRecording": "Invisível em gravações",
+            "invisibleInRecordingHint": "As legendas continuam na sua tela, mas ficam de fora de gravações, capturas e compartilhamentos de tela.",
             "subtitleColor": "Cor da legenda",
             "backgroundColor": "Cor de fundo",
             "resetColors": "Redefinir cores",
@@ -1792,6 +1812,8 @@ enum AppLocalization {
             "textOutline": "Контур текста",
             "outlineColor": "Цвет контура",
             "attachToSource": "Привязать к источнику",
+            "invisibleInRecording": "Скрыть при записи",
+            "invisibleInRecordingHint": "Субтитры остаются на вашем экране, но не попадают в записи экрана, снимки и демонстрацию экрана.",
             "subtitleColor": "Цвет субтитров",
             "backgroundColor": "Цвет фона",
             "resetColors": "Сбросить цвета",
