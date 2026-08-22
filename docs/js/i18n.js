@@ -124,7 +124,7 @@
         title: "Local-first, with transparent fallbacks.",
         li1: "No account, cloud backend, analytics, or telemetry",
         li2: "v2s never sends audio or subtitle text to its own servers",
-        li3: "Translation is on-device; Intel speech may use Apple's service when no local model exists",
+        li3: "Translation is on-device; speech uses Apple's service only for languages with no local model",
         li4: "Permissions requested only for speech, mic, or app audio capture",
       },
       quickStart: {
@@ -271,7 +271,7 @@
         title: "本地优先，回退逻辑透明。",
         li1: "无需账号、云端后台、分析或遥测",
         li2: "v2s 不会把音频或字幕文本发送到自己的服务器",
-        li3: "翻译在本地完成；Intel Mac 没有本地语音模型时可能使用 Apple 服务",
+        li3: "翻译在本地完成；只有在语言没有本地模型时，语音识别才会使用 Apple 服务",
         li4: "仅在需要时请求语音、麦克风或应用音频捕获权限",
       },
       quickStart: {

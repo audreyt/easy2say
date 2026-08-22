@@ -2,6 +2,28 @@ import XCTest
 @testable import v2s
 
 final class LanguageCatalogTests: XCTestCase {
+    // A language keeps a single locale, and the winner used to be whichever identifier
+    // sorted first — which can be a variant with no on-device model.
+    func testOptionsKeepPreferredLocaleForALanguage() {
+        let locales = [Locale(identifier: "fr-BE"), Locale(identifier: "fr-FR")]
+
+        let unprioritized = LanguageCatalog.options(for: locales)
+        XCTAssertEqual(unprioritized.first(where: { $0.id == "fr" })?.localeIdentifier, "fr-BE")
+
+        let prioritized = LanguageCatalog.options(for: locales, preferring: ["fr-FR"])
+        XCTAssertEqual(prioritized.first(where: { $0.id == "fr" })?.localeIdentifier, "fr-FR")
+    }
+
+    func testOptionsIgnorePreferenceForOtherLanguages() {
+        let options = LanguageCatalog.options(
+            for: [Locale(identifier: "fr-BE"), Locale(identifier: "fr-FR"), Locale(identifier: "it-CH")],
+            preferring: ["fr-FR"]
+        )
+
+        XCTAssertEqual(options.first(where: { $0.id == "it" })?.localeIdentifier, "it-CH")
+        XCTAssertEqual(options.filter { $0.id == "fr" }.count, 1)
+    }
+
     func testSpeechInputLanguagesUseSpeechAnalyzerSupportedDefaults() {
         let expectedLocaleIdentifiers: [String: String] = [
             "en": "en-US",

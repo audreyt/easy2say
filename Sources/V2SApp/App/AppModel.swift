@@ -61,6 +61,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var overlayState: OverlayPreviewState?
     @Published private(set) var languageResourceStatuses: [LanguageResourceStatus] = []
     @Published private(set) var speechLanguageOptions = LanguageCatalog.speechInput
+    /// Speech languages this Mac can recognize without sending audio to Apple.
+    @Published private(set) var onDeviceSpeechLanguageIDs: Set<String> = []
     @Published private(set) var translationLanguageOptions = LanguageCatalog.common
     @Published private(set) var translationHostConfiguration: TranslationSession.Configuration?
     @Published private(set) var transcriptEntries: [TranscriptEntry] = []
@@ -526,6 +528,10 @@ final class AppModel: ObservableObject {
     }
 
     func startSession() async {
+        // An earlier session can still be capturing — a recognition failure reports an
+        // error without tearing the session down — and replacing the list below would
+        // otherwise orphan it with the microphone still open.
+        stopLiveTranscriptionSessions()
         refreshSources()
 
         let selectedSources = self.selectedSources
@@ -751,6 +757,26 @@ final class AppModel: ObservableObject {
         speechLanguageOptions.contains(where: { $0.id == identifier }) ? identifier : "en"
     }
 
+    /// Names the selected speech languages that this Mac can only recognize through
+    /// Apple's servers, or nil when everything selected stays on device.
+    var serverSpeechRecognitionNotice: String? {
+        let selectedLanguageIDs = selectedSources.isEmpty
+            ? [inputLanguageID]
+            : selectedSources.map { languageID(for: $0) }
+
+        let serverLanguageIDs = Set(selectedLanguageIDs).subtracting(onDeviceSpeechLanguageIDs)
+        guard serverLanguageIDs.isEmpty == false else {
+            return nil
+        }
+
+        let names = serverLanguageIDs
+            .map { languageName(for: $0) }
+            .sorted()
+            .joined(separator: ", ")
+
+        return localized(.speechUsesAppleServersFormat, names)
+    }
+
     private func speechLocaleIdentifier(for languageID: String) -> String {
         speechLanguageOptions.first(where: { $0.id == languageID })?.localeIdentifier
             ?? LanguageCatalog.speechLocaleIdentifier(for: languageID)
@@ -766,7 +792,8 @@ final class AppModel: ObservableObject {
         languageCatalogRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
-            let resolvedSpeechOptions = await self.loadSupportedSpeechLanguageOptions()
+            let resolvedSpeechCatalog = await self.loadSupportedSpeechLanguageOptions()
+            let resolvedSpeechOptions = resolvedSpeechCatalog.options
             let resolvedTranslationOptions = await self.loadSupportedTranslationLanguageOptions()
             guard Task.isCancelled == false else { return }
 
@@ -775,6 +802,7 @@ final class AppModel: ObservableObject {
 
             if resolvedSpeechOptions.isEmpty == false {
                 speechLanguageOptions = resolvedSpeechOptions
+                onDeviceSpeechLanguageIDs = resolvedSpeechCatalog.onDeviceLanguageIDs
                 let supportedIDs = Set(resolvedSpeechOptions.map(\.id))
                 sourceLanguageOverrides = sourceLanguageOverrides.filter {
                     supportedIDs.contains($0.value)
@@ -799,18 +827,37 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func loadSupportedSpeechLanguageOptions() async -> [LanguageOption] {
+    private func loadSupportedSpeechLanguageOptions() async -> SpeechLanguageCatalog {
         var locales: [Locale] = []
+        // Locales that can be recognized without leaving the Mac. A language keeps only
+        // one locale, so these have to outrank the rest — otherwise a variant with no
+        // local model could win a language and push the whole session onto Apple's
+        // speech service.
+        var onDeviceLocaleIdentifiers: Set<String> = []
+
         if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
-            locales.append(contentsOf: await SpeechTranscriber.supportedLocales)
+            let modernLocales = await SpeechTranscriber.supportedLocales
+            locales.append(contentsOf: modernLocales)
+            onDeviceLocaleIdentifiers.formUnion(modernLocales.map(\.identifier))
         }
 
         // The modern Speech stack is unavailable on some Macs (notably Intel models),
         // but the legacy recognizer can still support additional locales through
         // Apple's speech service. Keep those locales selectable and let the session
         // prefer on-device recognition whenever the legacy recognizer offers it.
-        locales.append(contentsOf: SFSpeechRecognizer.supportedLocales())
-        return LanguageCatalog.options(for: locales)
+        for locale in SFSpeechRecognizer.supportedLocales() {
+            locales.append(locale)
+            if SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true {
+                onDeviceLocaleIdentifiers.insert(locale.identifier)
+            }
+        }
+
+        let options = LanguageCatalog.options(for: locales, preferring: onDeviceLocaleIdentifiers)
+        let onDeviceLanguageIDs = options
+            .filter { $0.localeIdentifier.map(onDeviceLocaleIdentifiers.contains) ?? false }
+            .map(\.id)
+
+        return SpeechLanguageCatalog(options: options, onDeviceLanguageIDs: Set(onDeviceLanguageIDs))
     }
 
     private func loadSupportedTranslationLanguageOptions() async -> [LanguageOption] {
@@ -991,10 +1038,11 @@ final class AppModel: ObservableObject {
         let title = localized(.speechTitleFormat, languageName(for: languageID))
         let statusID = "speech:\(languageID)"
         let requestedLocale = Locale(identifier: speechLocaleIdentifier(for: languageID))
-        let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale)
+        let resolvedLocale = await LiveTranscriptionSession.modernSpeechLocale(equivalentTo: requestedLocale)
+        let hasLegacyRecognizer = SFSpeechRecognizer(locale: requestedLocale) != nil
 
         guard let resolvedLocale else {
-            if SFSpeechRecognizer(locale: requestedLocale) != nil {
+            if hasLegacyRecognizer {
                 removeLanguageResourceStatus(id: statusID)
                 return nil
             }
@@ -1022,6 +1070,10 @@ final class AppModel: ObservableObject {
             )
             removeLanguageResourceStatus(id: statusID)
         } catch is CancellationError {
+            removeLanguageResourceStatus(id: statusID)
+        } catch LanguageResourcePreparationError.unsupportedSpeechLanguage where hasLegacyRecognizer {
+            // Apple ships no modern assets for this language on this Mac. The session
+            // falls back to SFSpeechRecognizer, so this must not block starting.
             removeLanguageResourceStatus(id: statusID)
         } catch {
             upsertLanguageResourceStatus(
@@ -3016,6 +3068,11 @@ struct TranscriptEntry: Identifiable, Equatable {
     let id: UUID
     var sourceText: String
     var translatedText: String
+}
+
+private struct SpeechLanguageCatalog {
+    let options: [LanguageOption]
+    let onDeviceLanguageIDs: Set<String>
 }
 
 private enum LanguageResourcePreparationError: LocalizedError, AppLocalizableError {

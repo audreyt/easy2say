@@ -52,8 +52,8 @@ v2s asks Apple's Speech and Translation frameworks which languages the current M
 - No account, cloud backend, analytics, or telemetry.
 - v2s has no cloud backend and does not send audio or subtitle text to its own servers.
 - Translation uses Apple's on-device Translation framework. Some language packs may need to be downloaded first through System Settings.
-- On Apple silicon, v2s uses the modern on-device Speech stack when it is available.
-- On Intel Macs, the modern Speech stack is unavailable, so v2s falls back to `SFSpeechRecognizer`. It requires on-device recognition when the selected language supports it; otherwise Apple may process speech on its servers. Server-based recognition requires a network connection, is subject to Apple's service quotas, and sends captured speech to Apple under Apple's privacy terms.
+- Speech recognition prefers Apple's on-device models, and v2s picks a language variant that has a local model whenever one exists.
+- Some languages have no on-device model on a given Mac — this is common on Intel Macs, and for languages outside the modern Speech stack. Those run through Apple's server-based recognition, which needs a network connection, is subject to Apple's service quotas, and sends captured speech to Apple under Apple's privacy terms.
 
 ## Getting Started
 
@@ -73,7 +73,7 @@ v2s will ask for permissions on first use:
 ## Requirements
 
 - Speech transcription and translation require macOS 26 or newer
-- Apple silicon and Intel Macs are supported. Speech-language availability and whether recognition is on-device depend on the Mac and selected language.
+- Apple silicon and Intel Macs are supported. Which speech languages are available, and whether they recognize on device, depends on the Mac and the selected language.
 
 ## Building from Source
 

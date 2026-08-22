@@ -45,8 +45,8 @@ v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语�
 - 无需账号，也没有云端后台、分析或遥测。
 - v2s 没有云端后台，也不会把音频或字幕文本发送到自己的服务器。
 - 翻译依赖 Apple 的本地 Translation 框架，部分语言包可能需要先在系统设置中下载。
-- Apple 芯片 Mac 会在可用时使用新版的本地 Speech 识别能力。
-- Intel Mac 不支持新版 Speech 技术栈，因此 v2s 会回退到 `SFSpeechRecognizer`。如果所选语言支持本地识别，v2s 会强制使用本地模式；否则 Apple 可能通过服务器处理语音。在线识别需要网络连接，受 Apple 服务配额限制，并会依据 Apple 的隐私条款将捕获的语音发送给 Apple。
+- 语音识别优先使用 Apple 的本地模型；当某个语言存在本地模型时，v2s 会优先选用带本地模型的地区变体。
+- 部分语言在特定 Mac 上没有本地模型（Intel Mac 以及新版 Speech 技术栈未覆盖的语言尤其常见），这些语言会走 Apple 的服务器识别：需要网络连接，受 Apple 服务配额限制，并会依据 Apple 的隐私条款将捕获的语音发送给 Apple。
 
 ## 快速开始
 
@@ -66,7 +66,7 @@ v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语�
 ## 环境要求
 
 - 语音转写和翻译功能需要 macOS 26 或更高版本
-- 支持 Apple 芯片和 Intel Mac；可用的语音语言以及是否能在本地识别，取决于具体 Mac 和所选语言。
+- 支持 Apple 芯片和 Intel Mac；可用的语音语言以及能否在本地识别，取决于具体 Mac 和所选语言。
 
 ## 从源码构建
 

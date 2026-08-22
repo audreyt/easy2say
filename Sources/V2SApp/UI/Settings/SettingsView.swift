@@ -140,6 +140,12 @@ struct SettingsView: View {
                         )
                         .disabled(model.isLanguagePairLocked)
                     }
+                    if let notice = model.serverSpeechRecognitionNotice {
+                        Label(notice, systemImage: "icloud")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Divider()
                     SettingsControlRow(label: model.localized(.defaultSubtitleLanguage)) {
                         CommonLanguageMenuPicker(

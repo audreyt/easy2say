@@ -12,7 +12,27 @@ final class LiveTranscriptionSessionTests: XCTestCase {
     }
 
     func testLegacyRecognitionErrorDispositionStopsAfterServerQuotaError() {
-        XCTAssertEqual(disposition(code: 203), .stopAndSurface)
+        XCTAssertEqual(
+            disposition(
+                code: 203,
+                message: "Quota limit reached for resource: speech_api, actor_type: user"
+            ),
+            .stopAndSurface
+        )
+    }
+
+    // Code 203 also covers transient faults that a restart clears, so the code alone
+    // must not end the session.
+    func testLegacyRecognitionErrorDispositionRetriesNonQuotaCode203() {
+        XCTAssertEqual(disposition(code: 203, message: "Retry"), .retryWithBackoff)
+        XCTAssertEqual(disposition(code: 203, message: "Corrupt"), .retryWithBackoff)
+    }
+
+    func testLegacyRecognitionErrorDispositionStopsOnQuotaRegardlessOfCode() {
+        XCTAssertEqual(
+            disposition(code: 1700, message: "Quota limit reached for resource: speech_api"),
+            .stopAndSurface
+        )
     }
 
     func testLegacyRecognitionErrorDispositionBacksOffOtherErrors() {
@@ -26,12 +46,25 @@ final class LiveTranscriptionSessionTests: XCTestCase {
         )
     }
 
+    // A cancellation code from another domain is a real failure, not our own teardown.
+    func testLegacyRecognitionErrorDispositionDoesNotIgnoreForeignDomains() {
+        XCTAssertEqual(
+            LiveTranscriptionSession.legacyRecognitionErrorDisposition(
+                domain: NSURLErrorDomain,
+                code: 216
+            ),
+            .retryWithBackoff
+        )
+    }
+
     private func disposition(
-        code: Int
+        code: Int,
+        message: String = ""
     ) -> LiveTranscriptionSession.LegacyRecognitionErrorDisposition {
         LiveTranscriptionSession.legacyRecognitionErrorDisposition(
             domain: "kAFAssistantErrorDomain",
-            code: code
+            code: code,
+            message: message
         )
     }
 }

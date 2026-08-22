@@ -65,12 +65,23 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         case stopAndSurface
     }
 
+    /// Decides what to do about a legacy recognition-task error.
+    ///
+    /// `message` is the error's localized description. Code 203 is a bucket Apple uses
+    /// for unrelated failures — the transient "Retry"/"Corrupt" faults that a restart
+    /// clears, and the server quota rejection that no amount of retrying clears — so
+    /// only the quota text earns a hard stop.
     static func legacyRecognitionErrorDisposition(
         domain: String,
-        code: Int
+        code: Int,
+        message: String = ""
     ) -> LegacyRecognitionErrorDisposition {
         guard domain == "kAFAssistantErrorDomain" else {
             return .retryWithBackoff
+        }
+
+        if message.range(of: "quota", options: .caseInsensitive) != nil {
+            return .stopAndSurface
         }
 
         switch code {
@@ -78,8 +89,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return .ignore
         case 1110:
             return .restartImmediately
-        case 203:
-            return .stopAndSurface
         default:
             return .retryWithBackoff
         }
@@ -428,6 +437,24 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Resolves `requestedLocale` to a locale the modern Speech stack actually carries.
+    ///
+    /// `SpeechTranscriber.supportedLocale(equivalentTo:)` answers with an equivalent
+    /// locale even for languages the stack does not support at all — `ru-RU` resolves
+    /// to `ru_RU` on a Mac whose supported list holds no Russian — so its answer only
+    /// counts when it appears in `supportedLocales`. Without this check the modern path
+    /// is entered for languages only the legacy recognizer can serve.
+    @available(macOS 26.0, *)
+    static func modernSpeechLocale(equivalentTo requestedLocale: Locale) async -> Locale? {
+        guard SpeechTranscriber.isAvailable,
+              let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+            return nil
+        }
+
+        let supportedIdentifiers = await Set(SpeechTranscriber.supportedLocales.map(\.identifier))
+        return supportedIdentifiers.contains(resolved.identifier) ? resolved : nil
+    }
+
     private func configureModernSpeechRecognizer(localeIdentifier: String) async throws -> Bool {
         guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
             return false
@@ -444,7 +471,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     @available(macOS 26.0, *)
     private func configureSpeechAnalyzerRecognizer(localeIdentifier: String) async throws -> Bool {
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let resolvedLocale = await Self.modernSpeechLocale(equivalentTo: requestedLocale) else {
             return false
         }
 
@@ -594,16 +621,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Builds a recognition request, keeping recognition on device wherever the
+    /// recognizer has a local model. Languages without one — Chinese on Intel, say —
+    /// are only served by Apple's speech service, and refusing that would leave them
+    /// with no recognition at all.
     private func makeRecognitionRequest(
-        requiresOnDeviceRecognition: Bool? = nil
+        requiresOnDeviceRecognition: Bool
     ) -> SFSpeechAudioBufferRecognitionRequest {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.addsPunctuation = true
         request.requiresOnDeviceRecognition = requiresOnDeviceRecognition
-            ?? speechRecognizer?.supportsOnDeviceRecognition
-            ?? true
         request.contextualStrings = recognitionContextualStrings
         return request
     }
@@ -1704,7 +1733,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         // dispatched by the cancelled task are silently ignored.
         recognitionGeneration &+= 1
 
-        let request = makeRecognitionRequest()
+        let request = makeRecognitionRequest(
+            requiresOnDeviceRecognition: recognizer.supportsOnDeviceRecognition
+        )
 
         let task = recognizer.recognitionTask(with: request, resultHandler: makeRecognitionHandler())
 
@@ -1740,7 +1771,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         consecutiveRecognitionFailures += 1
 
         guard consecutiveRecognitionFailures <= recognitionRestartBackoff.count else {
-            stopRecognitionAfterRepeatedFailures(error)
+            stopRecognitionAndSurface(error)
             return
         }
 
@@ -1760,23 +1791,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         captureQueue.asyncAfter(deadline: .now() + delay, execute: restart)
     }
 
-    /// Tears down the legacy recognizer after it has failed to recover and reports why.
-    /// Clearing `speechRecognizer` also closes the restart paths, which all require it.
-    private func stopRecognitionAfterRepeatedFailures(_ error: Error) {
-        pendingRecognitionRestart?.cancel()
-        pendingRecognitionRestart = nil
-        recognitionGeneration &+= 1
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        speechRecognizer = nil
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
-        resetDraftState()
+    /// Ends the session after recognition has failed for good, and reports why.
+    ///
+    /// Capture is torn down along with the recognizer: audio that nothing transcribes is
+    /// only a microphone left open, and the surfaced message tells the user the session
+    /// has stopped. `stopOnCaptureQueue` keeps `errorHandler` in place, so the message
+    /// still reaches the UI.
+    private func stopRecognitionAndSurface(_ error: Error) {
+        stopOnCaptureQueue()
 
         Task {
-            await self.emitPartialDraft(nil)
             await self.emitError(
                 self.localized(
                     .speechRecognitionStoppedFormat,
@@ -1803,7 +1827,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 let nsError = error as NSError
                 let disposition = Self.legacyRecognitionErrorDisposition(
                     domain: nsError.domain,
-                    code: nsError.code
+                    code: nsError.code,
+                    message: nsError.localizedDescription
                 )
 
                 // Codes 216/301 are intentional cancellation from our own restart/stop.
@@ -1815,14 +1840,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
                     switch disposition {
                     case .ignore:
-                        return
+                        break
                     case .restartImmediately:
                         // Code 1110 is a normal "no speech detected" timeout.
                         self.restartRecognitionTask()
                     case .stopAndSurface:
-                        // Code 203 is an exhausted Apple server quota. Retrying only
-                        // creates more rejected requests, so fail fast and tell the user.
-                        self.stopRecognitionAfterRepeatedFailures(error)
+                        // An exhausted Apple server quota. Retrying only produces more
+                        // rejected requests, so fail fast and tell the user.
+                        self.stopRecognitionAndSurface(error)
                     case .retryWithBackoff:
                         self.handleRecognitionFailure(error)
                     }
