@@ -23,6 +23,7 @@ struct StatusBarPopoverView: View {
             footerSection
         }
         .frame(width: 340)
+        .background(.regularMaterial)
         .environment(\.locale, model.interfaceLocale)
         .v2sTranslationHost(model: model)
         .onChange(of: model.sessionState) { _, newState in
@@ -223,7 +224,7 @@ struct StatusBarPopoverView: View {
             if model.selectedSources.isEmpty == false {
                 Text(model.selectedSourceDisplayName)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
@@ -321,6 +322,6 @@ struct VersionLink: View {
     private var versionLabel: some View {
         Text(verbatim: versionText)
             .font(font)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
     }
 }
