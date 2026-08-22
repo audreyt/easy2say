@@ -23,6 +23,7 @@ enum LanguageCatalog {
     static let interface: [LanguageOption] = [
         LanguageOption(id: "en", displayName: "English"),
         LanguageOption(id: "zh-Hans", displayName: "Chinese (Simplified)"),
+        LanguageOption(id: "zh-Hant", displayName: "Chinese (Traditional)"),
         LanguageOption(id: "es", displayName: "Spanish"),
         LanguageOption(id: "de", displayName: "German"),
         LanguageOption(id: "ja", displayName: "Japanese"),
@@ -104,6 +105,12 @@ enum LanguageCatalog {
 
     static func displayName(for identifier: String) -> String {
         (speechInput + common).first(where: { $0.id == identifier })?.displayName ?? identifier
+    }
+
+    /// Native name of a language as written by itself.
+    static func autonym(for identifier: String) -> String {
+        Locale(identifier: identifier).localizedString(forIdentifier: identifier)
+            ?? displayName(for: identifier)
     }
 
     static func displayName(for identifier: String, in interfaceLanguageID: String) -> String {

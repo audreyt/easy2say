@@ -139,4 +139,27 @@ final class LanguageCatalogTests: XCTestCase {
         XCTAssertEqual(LanguageCatalog.supportedSpeechInputLanguageID(for: "xx"), "en")
         XCTAssertEqual(LanguageCatalog.supportedSpeechInputLanguageID(for: "it"), "it")
     }
+
+    func testChineseLanguageVariantsRemainIndependentAndAvailable() {
+        let interfaceLanguageIDs = Set(LanguageCatalog.interface.map(\.id))
+
+        XCTAssertTrue(interfaceLanguageIDs.contains("zh-Hans"))
+        XCTAssertTrue(interfaceLanguageIDs.contains("zh-Hant"))
+        XCTAssertEqual(
+            LanguageCatalog.supportedSpeechInputLanguageID(for: "zh-Hans"),
+            "zh-Hans"
+        )
+        XCTAssertEqual(
+            LanguageCatalog.supportedSpeechInputLanguageID(for: "zh-Hant"),
+            "zh-Hant"
+        )
+    }
+
+    func testTraditionalChineseUsesItsNativeAutonym() {
+        XCTAssertEqual(LanguageCatalog.autonym(for: "zh-Hant"), "繁體中文")
+    }
+
+    func testForkDefaultsSubtitleOutputToTraditionalChinese() {
+        XCTAssertEqual(AppSettings.default.outputLanguageID, "zh-Hant")
+    }
 }

@@ -19,7 +19,7 @@ struct AppSettings: Codable {
         sourceLanguageOverrides: [:],
         sourceOutputLanguageOverrides: [:],
         inputLanguageID: "en",
-        outputLanguageID: "zh-Hans",
+        outputLanguageID: "zh-Hant",
         interfaceLanguageID: nil,
         overlayStyle: .default,
         subtitleMode: .balanced,

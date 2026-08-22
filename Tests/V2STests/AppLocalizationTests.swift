@@ -54,4 +54,38 @@ final class AppLocalizationTests: XCTestCase {
             "12 مصدرًا"
         )
     }
+
+    func testChineseMultipleSourcesPreservesEachScript() {
+        XCTAssertEqual(
+            AppLocalization.multipleSourcesText(count: 3, languageID: "zh-Hans"),
+            "3 个来源"
+        )
+        XCTAssertEqual(
+            AppLocalization.multipleSourcesText(count: 3, languageID: "zh-Hant"),
+            "3 個來源"
+        )
+    }
+
+    func testEnglishAndChineseTablesHaveExactKeyParity() throws {
+        let expectedKeys = Set(AppTextKey.allCases.map(\.rawValue))
+
+        for languageID in ["en", "zh-Hans", "zh-Hant"] {
+            let table = try XCTUnwrap(
+                AppLocalization.tables[languageID],
+                "Missing localization table for \(languageID)"
+            )
+            XCTAssertEqual(Set(table.keys), expectedKeys, languageID)
+        }
+    }
+
+    func testIOSCopyUsesBothChineseScripts() {
+        XCTAssertEqual(
+            AppLocalization.string(.iosCopyAll, languageID: "zh-Hans"),
+            "全部复制"
+        )
+        XCTAssertEqual(
+            AppLocalization.string(.iosCopyAll, languageID: "zh-Hant"),
+            "全部拷貝"
+        )
+    }
 }
