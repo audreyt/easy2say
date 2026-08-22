@@ -58,6 +58,33 @@ struct RecognizedSentence: Equatable, Sendable {
 }
 
 final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
+    enum LegacyRecognitionErrorDisposition: Equatable {
+        case ignore
+        case restartImmediately
+        case retryWithBackoff
+        case stopAndSurface
+    }
+
+    static func legacyRecognitionErrorDisposition(
+        domain: String,
+        code: Int
+    ) -> LegacyRecognitionErrorDisposition {
+        guard domain == "kAFAssistantErrorDomain" else {
+            return .retryWithBackoff
+        }
+
+        switch code {
+        case 216, 301:
+            return .ignore
+        case 1110:
+            return .restartImmediately
+        case 203:
+            return .stopAndSurface
+        default:
+            return .retryWithBackoff
+        }
+    }
+
     private struct CommittedEmission {
         let text: String
         let promotionSegmentID: UUID?
@@ -140,6 +167,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     /// Incremented on every restart. Handlers capture their generation at creation time
     /// and discard callbacks that arrive after a newer generation has started.
     private var recognitionGeneration: Int = 0
+    /// Consecutive recognition-task failures since the last delivered result. Restarting
+    /// immediately recovers from a one-off fault, but a persistent one — an evicted
+    /// on-device asset, an unreachable backend — would otherwise spin the task in a hot
+    /// loop, so retries are spaced out and eventually surfaced instead of hidden.
+    private var consecutiveRecognitionFailures = 0
+    private var lastRecognitionFailureTime = Date.distantPast
+    private var pendingRecognitionRestart: DispatchWorkItem?
+    /// Delay before the Nth consecutive retry. The first stays immediate so ordinary
+    /// hiccups still recover without a visible gap.
+    private let recognitionRestartBackoff: [TimeInterval] = [0, 0.5, 1.5, 3, 5]
+    /// Failures spaced further apart than this are unrelated, not a failing recognizer.
+    private let recognitionFailureWindow: TimeInterval = 60
     private var preprocessingConverter: AVAudioConverter?
     private var preprocessingConverterInputSignature: AudioFormatSignature?
     private var audioConverter: AVAudioConverter?
@@ -283,6 +322,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         applicationAudioCapture = nil
 
         stopModernSpeechRecognizer()
+        resetRecognitionFailureState()
+        recognitionGeneration &+= 1
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -349,15 +390,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             throw SessionError.unsupportedSpeechLocale(localeIdentifier)
         }
 
-        guard recognizer.supportsOnDeviceRecognition else {
-            throw SessionError.unsupportedSpeechLocale(localeIdentifier)
-        }
-
         guard recognizer.isAvailable else {
             throw SessionError.unavailableSpeechRecognizer(localeIdentifier)
         }
 
-        let request = makeRecognitionRequest()
+        let request = makeRecognitionRequest(
+            requiresOnDeviceRecognition: recognizer.supportsOnDeviceRecognition
+        )
 
         let task = recognizer.recognitionTask(with: request, resultHandler: makeRecognitionHandler())
 
@@ -365,6 +404,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         recognitionRequest = request
         recognitionTask = task
         recognitionBackend = .legacy
+        resetRecognitionFailureState()
         resetAudioProcessingState()
         resetLegacyTranscriptionState()
         resetModernTranscriptionState()
@@ -554,12 +594,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private func makeRecognitionRequest() -> SFSpeechAudioBufferRecognitionRequest {
+    private func makeRecognitionRequest(
+        requiresOnDeviceRecognition: Bool? = nil
+    ) -> SFSpeechAudioBufferRecognitionRequest {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.addsPunctuation = true
-        request.requiresOnDeviceRecognition = true
+        request.requiresOnDeviceRecognition = requiresOnDeviceRecognition
+            ?? speechRecognizer?.supportsOnDeviceRecognition
+            ?? true
         request.contextualStrings = recognitionContextualStrings
         return request
     }
@@ -1506,6 +1550,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     private func processRecognitionResult(_ result: SFSpeechRecognitionResult) {
         lastRecognitionResultTime = Date()
+        // The recognizer is delivering again — forget any earlier failures.
+        consecutiveRecognitionFailures = 0
         let transcription = result.bestTranscription
         let segments = transcription.segments
         let formattedText = transcription.formattedString as NSString
@@ -1643,6 +1689,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func restartRecognitionTask() {
         guard let recognizer = speechRecognizer else { return }
 
+        // A restart from any source supersedes a retry still waiting on its backoff.
+        pendingRecognitionRestart?.cancel()
+        pendingRecognitionRestart = nil
+
         // Cleanly end the old request before discarding it.
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
@@ -1668,12 +1718,81 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         Task { await emitPartialDraft(nil) }
     }
 
+    private func resetRecognitionFailureState() {
+        pendingRecognitionRestart?.cancel()
+        pendingRecognitionRestart = nil
+        consecutiveRecognitionFailures = 0
+        lastRecognitionFailureTime = .distantPast
+    }
+
+    /// Recovers from a recognition-task error on captureQueue.
+    ///
+    /// Retries are spaced by `recognitionRestartBackoff` so a recognizer that fails the
+    /// instant it starts cannot loop at full speed. Once the retries are exhausted the
+    /// error reaches the UI — otherwise capture keeps running behind an overlay that
+    /// still claims to be waiting for audio.
+    private func handleRecognitionFailure(_ error: Error) {
+        let now = Date()
+        if now.timeIntervalSince(lastRecognitionFailureTime) > recognitionFailureWindow {
+            consecutiveRecognitionFailures = 0
+        }
+        lastRecognitionFailureTime = now
+        consecutiveRecognitionFailures += 1
+
+        guard consecutiveRecognitionFailures <= recognitionRestartBackoff.count else {
+            stopRecognitionAfterRepeatedFailures(error)
+            return
+        }
+
+        let delay = recognitionRestartBackoff[consecutiveRecognitionFailures - 1]
+        guard delay > 0 else {
+            restartRecognitionTask()
+            return
+        }
+
+        pendingRecognitionRestart?.cancel()
+        let restart = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingRecognitionRestart = nil
+            self.restartRecognitionTask()
+        }
+        pendingRecognitionRestart = restart
+        captureQueue.asyncAfter(deadline: .now() + delay, execute: restart)
+    }
+
+    /// Tears down the legacy recognizer after it has failed to recover and reports why.
+    /// Clearing `speechRecognizer` also closes the restart paths, which all require it.
+    private func stopRecognitionAfterRepeatedFailures(_ error: Error) {
+        pendingRecognitionRestart?.cancel()
+        pendingRecognitionRestart = nil
+        recognitionGeneration &+= 1
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        speechRecognizer = nil
+        cancelSilenceTimer()
+        cancelVADSilenceTimer()
+        resetDraftState()
+
+        Task {
+            await self.emitPartialDraft(nil)
+            await self.emitError(
+                self.localized(
+                    .speechRecognitionStoppedFormat,
+                    self.localizedErrorDescription(error)
+                )
+            )
+        }
+    }
+
     /// Builds the result/error handler used by every recognition task.
     ///
     /// On transient errors (no speech detected, internal failure, etc.) the handler
-    /// automatically restarts recognition so the pipeline never goes silent.
-    /// Fatal configuration errors (permission denied, unsupported locale) propagate
-    /// to the UI so the user knows why things stopped.
+    /// restarts recognition so the pipeline never goes silent. Repeated failures back
+    /// off and are eventually surfaced instead of retried forever — see
+    /// `handleRecognitionFailure`. Fatal configuration errors (permission denied,
+    /// unsupported locale) propagate to the UI so the user knows why things stopped.
     private func makeRecognitionHandler() -> (SFSpeechRecognitionResult?, Error?) -> Void {
         // Capture the generation at handler-creation time. Any callback arriving
         // after a restart (which bumps recognitionGeneration) will be discarded,
@@ -1682,19 +1801,31 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return { [weak self] result, error in
             if let error {
                 let nsError = error as NSError
-                // kAFAssistantErrorDomain 216/301 = intentional cancellation from our own
-                // restartRecognitionTask / stop calls — ignore silently.
-                let isCancellation = nsError.domain == "kAFAssistantErrorDomain"
-                    && (nsError.code == 216 || nsError.code == 301)
+                let disposition = Self.legacyRecognitionErrorDisposition(
+                    domain: nsError.domain,
+                    code: nsError.code
+                )
 
-                if isCancellation { return }
+                // Codes 216/301 are intentional cancellation from our own restart/stop.
+                if disposition == .ignore { return }
 
-                // For any other error, attempt a silent restart so recording continues.
-                // If the recogniser is truly unavailable the restart guard will bail out.
                 self?.captureQueue.async { [weak self] in
                     guard let self, self.speechRecognizer != nil,
                           self.recognitionGeneration == generation else { return }
-                    self.restartRecognitionTask()
+
+                    switch disposition {
+                    case .ignore:
+                        return
+                    case .restartImmediately:
+                        // Code 1110 is a normal "no speech detected" timeout.
+                        self.restartRecognitionTask()
+                    case .stopAndSurface:
+                        // Code 203 is an exhausted Apple server quota. Retrying only
+                        // creates more rejected requests, so fail fast and tell the user.
+                        self.stopRecognitionAfterRepeatedFailures(error)
+                    case .retryWithBackoff:
+                        self.handleRecognitionFailure(error)
+                    }
                 }
                 return
             }

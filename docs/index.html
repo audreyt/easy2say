@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. On-device speech and translation, menu bar workflow, zero cloud." />
+  <meta name="description" content="v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. Local-first speech, on-device translation, and a lightweight menu bar workflow." />
   <meta name="theme-color" content="#0a0c10" />
   <title>v2s — Live bilingual subtitles for macOS</title>
   <link rel="icon" href="assets/app-icon.png" type="image/png" />
@@ -69,10 +69,10 @@
       <div class="container hero-grid">
         <div class="hero-copy reveal">
           <div class="badge-row">
-            <span class="badge" data-i18n="hero.badgeOnDevice">100% on-device</span>
+            <span class="badge" data-i18n="hero.badgeOnDevice">Local-first</span>
             <span class="badge badge-muted" data-i18n="hero.badgeMac">macOS 26+</span>
           </div>
-          <h1 data-i18n="hero.title">v2s: Live bilingual subtitles, never uploaded to the cloud.</h1>
+          <h1 data-i18n="hero.title">v2s: Live bilingual subtitles, private by design.</h1>
           <p class="hero-lead" data-i18n="hero.lead">
             v2s turns microphone or app audio into a clean two-line subtitle bar for meetings, calls, streams, and videos.
             Hear the original language, read the translation, and stay on the window you already use.
@@ -121,7 +121,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v2m0 14v2M5.6 5.6l1.4 1.4m9.9 9.9 1.4 1.4M3 12h2m14 0h2M5.6 18.4l1.4-1.4m9.9-9.9 1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
           </div>
           <h3 data-i18n="highlights.h1Title">Private by design</h3>
-          <p data-i18n="highlights.h1Body">No account, analytics, or cloud backend. Audio and subtitles stay on your Mac through Apple's on-device frameworks.</p>
+          <p data-i18n="highlights.h1Body">No account, analytics, or v2s cloud backend. Translation is on-device; speech stays local whenever the selected language supports it.</p>
         </article>
         <article class="highlight-card reveal reveal-delay">
           <div class="highlight-icon" aria-hidden="true">
@@ -259,11 +259,11 @@
         </div>
         <div>
           <p class="eyebrow" data-i18n="privacy.eyebrow">Privacy</p>
-          <h2 data-i18n="privacy.title">Your meeting stays on your machine.</h2>
+          <h2 data-i18n="privacy.title">Local-first, with transparent fallbacks.</h2>
           <ul class="check-list">
             <li data-i18n="privacy.li1">No account, cloud backend, analytics, or telemetry</li>
-            <li data-i18n="privacy.li2">Audio and subtitle text never leave your Mac through v2s</li>
-            <li data-i18n="privacy.li3">Speech and translation use Apple's on-device frameworks</li>
+            <li data-i18n="privacy.li2">v2s never sends audio or subtitle text to its own servers</li>
+            <li data-i18n="privacy.li3">Translation is on-device; Intel speech may use Apple's service when no local model exists</li>
             <li data-i18n="privacy.li4">Permissions requested only for speech, mic, or app audio capture</li>
           </ul>
         </div>

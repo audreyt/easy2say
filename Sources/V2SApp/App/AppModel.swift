@@ -805,9 +805,11 @@ final class AppModel: ObservableObject {
             locales.append(contentsOf: await SpeechTranscriber.supportedLocales)
         }
 
-        locales.append(contentsOf: SFSpeechRecognizer.supportedLocales().filter { locale in
-            SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true
-        })
+        // The modern Speech stack is unavailable on some Macs (notably Intel models),
+        // but the legacy recognizer can still support additional locales through
+        // Apple's speech service. Keep those locales selectable and let the session
+        // prefer on-device recognition whenever the legacy recognizer offers it.
+        locales.append(contentsOf: SFSpeechRecognizer.supportedLocales())
         return LanguageCatalog.options(for: locales)
     }
 
@@ -979,20 +981,20 @@ final class AppModel: ObservableObject {
     private func prepareSpeechRecognitionResourceIfNeeded(
         for languageID: String
     ) async -> LanguageResourceSystemSettingsDestination? {
-        guard #available(macOS 26.0, *) else {
+        guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
+            // There are no modern speech assets to prepare when SpeechTranscriber is
+            // unavailable. The session will use SFSpeechRecognizer instead.
+            removeLanguageResourceStatus(id: "speech:\(languageID)")
             return nil
         }
 
         let title = localized(.speechTitleFormat, languageName(for: languageID))
         let statusID = "speech:\(languageID)"
         let requestedLocale = Locale(identifier: speechLocaleIdentifier(for: languageID))
-        let resolvedLocale = SpeechTranscriber.isAvailable
-            ? await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale)
-            : nil
+        let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale)
 
         guard let resolvedLocale else {
-            if let legacyRecognizer = SFSpeechRecognizer(locale: requestedLocale),
-               legacyRecognizer.supportsOnDeviceRecognition {
+            if SFSpeechRecognizer(locale: requestedLocale) != nil {
                 removeLanguageResourceStatus(id: statusID)
                 return nil
             }
