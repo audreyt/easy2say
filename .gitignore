@@ -18,6 +18,10 @@ xcuserdata/
 .build/
 .swiftpm/
 
+# XcodeGen output
+/ios/Info.plist
+/ios/v2s-ios.xcodeproj/
+
 # Local app artifacts
 *.log
 tmp/
