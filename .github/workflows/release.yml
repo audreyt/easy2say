@@ -53,6 +53,23 @@ jobs:
             -derivedDataPath .build/release \
             build
 
+      - name: Verify universal binary
+        run: |
+          APP_BINARY=".build/release/Build/Products/Release/v2s.app/Contents/MacOS/v2s"
+          ARCHS="$(lipo -archs "$APP_BINARY")"
+          echo "Built architectures: $ARCHS"
+
+          for required in arm64 x86_64; do
+            case " $ARCHS " in
+              *" $required "*)
+                ;;
+              *)
+                echo "::error::Release binary is missing the $required slice"
+                exit 1
+                ;;
+            esac
+          done
+
       - name: Package app
         id: package
         run: |

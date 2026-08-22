@@ -120,10 +120,22 @@ enum LanguageCatalog {
         speechInput.contains(where: { $0.id == identifier }) ? identifier : "en"
     }
 
-    static func options(for locales: [Locale]) -> [LanguageOption] {
+    /// Builds the catalog options for `locales`, keeping one locale per language.
+    ///
+    /// Identifiers in `preferredIdentifiers` win their language outright. Callers use
+    /// that to keep a capable locale — one that can be recognized on device — from
+    /// losing to a variant that merely sorts earlier.
+    static func options(
+        for locales: [Locale],
+        preferring preferredIdentifiers: Set<String> = []
+    ) -> [LanguageOption] {
         options(
             for: locales.map { locale in
-                (language: locale.language, localeIdentifier: locale.identifier)
+                (
+                    language: locale.language,
+                    localeIdentifier: locale.identifier,
+                    isPreferred: preferredIdentifiers.contains(locale.identifier)
+                )
             }
         )
     }
@@ -131,18 +143,28 @@ enum LanguageCatalog {
     static func options(for languages: [Locale.Language]) -> [LanguageOption] {
         options(
             for: languages.map { language in
-                (language: language, localeIdentifier: language.minimalIdentifier)
+                (
+                    language: language,
+                    localeIdentifier: language.minimalIdentifier,
+                    isPreferred: false
+                )
             }
         )
     }
 
     private static func options(
-        for candidates: [(language: Locale.Language, localeIdentifier: String)]
+        for candidates: [(language: Locale.Language, localeIdentifier: String, isPreferred: Bool)]
     ) -> [LanguageOption] {
         var optionsByID: [String: LanguageOption] = [:]
 
         let preferredLanguages = Locale.preferredLanguages.map { Locale(identifier: $0).language }
         let sortedCandidates = candidates.sorted { lhs, rhs in
+            // Each language keeps the first identifier it sees, so preferred
+            // identifiers have to sort ahead of everything else.
+            if lhs.isPreferred != rhs.isPreferred {
+                return lhs.isPreferred
+            }
+
             let lhsRank = preferenceRank(for: lhs.language, in: preferredLanguages)
             let rhsRank = preferenceRank(for: rhs.language, in: preferredLanguages)
             if lhsRank == rhsRank {

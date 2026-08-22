@@ -6,7 +6,7 @@
       meta: {
         title: "v2s — Live bilingual subtitles for macOS",
         description:
-          "v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. On-device speech and translation, menu bar workflow, zero cloud.",
+          "v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. Local-first speech, on-device translation, and a lightweight menu bar workflow.",
       },
       a11y: {
         skip: "Skip to content",
@@ -26,9 +26,9 @@
         download: "Download",
       },
       hero: {
-        badgeOnDevice: "100% on-device",
+        badgeOnDevice: "Local-first",
         badgeMac: "macOS 26+",
-        title: "v2s: Live bilingual subtitles, never uploaded to the cloud.",
+        title: "v2s: Live bilingual subtitles, private by design.",
         lead:
           "v2s turns microphone or app audio into a clean two-line subtitle bar for meetings, calls, streams, and videos. Hear the original language, read the translation, and stay on the window you already use.",
         ctaDownload: "Download for macOS",
@@ -42,7 +42,7 @@
       highlights: {
         h1Title: "Private by design",
         h1Body:
-          "No account, analytics, or cloud backend. Audio and subtitles stay on your Mac through Apple's on-device frameworks.",
+          "No account, analytics, or v2s cloud backend. Translation is on-device; speech stays local whenever the selected language supports it.",
         h2Title: "Menu bar first",
         h2Body:
           "Always one click away. Start, stop, and tune languages without leaving your meeting or player fullscreen.",
@@ -121,10 +121,10 @@
       },
       privacy: {
         eyebrow: "Privacy",
-        title: "Your meeting stays on your machine.",
+        title: "Local-first, with transparent fallbacks.",
         li1: "No account, cloud backend, analytics, or telemetry",
-        li2: "Audio and subtitle text never leave your Mac through v2s",
-        li3: "Speech and translation use Apple's on-device frameworks",
+        li2: "v2s never sends audio or subtitle text to its own servers",
+        li3: "Translation is on-device; speech uses Apple's service only for languages with no local model",
         li4: "Permissions requested only for speech, mic, or app audio capture",
       },
       quickStart: {
@@ -166,7 +166,7 @@
       meta: {
         title: "v2s — macOS 实时双语字幕",
         description:
-          "v2s — 适用于会议、通话、直播和视频的 macOS 实时双语字幕。本地语音与翻译、菜单栏工作流、零云端。",
+          "v2s — 适用于会议、通话、直播和视频的 macOS 实时双语字幕。本地优先语音识别、本地翻译与轻量菜单栏工作流。",
       },
       a11y: {
         skip: "跳到正文",
@@ -186,9 +186,9 @@
         download: "下载",
       },
       hero: {
-        badgeOnDevice: "100% 本地处理",
+        badgeOnDevice: "本地优先",
         badgeMac: "macOS 26+",
-        title: "v2s: 实时双语字幕，绝不上传云端。",
+        title: "v2s：重视隐私的实时双语字幕。",
         lead:
           "v2s 将麦克风或应用音频转换为简洁的双行字幕条，适用于会议、通话、直播和视频。一边听原语言，一边读翻译，无需切换窗口。",
         ctaDownload: "下载 macOS 版",
@@ -201,7 +201,7 @@
       },
       highlights: {
         h1Title: "隐私优先",
-        h1Body: "无需账号、分析或云端后台。音频与字幕通过 Apple 本地框架留在你的 Mac 上。",
+        h1Body: "无需账号、分析或 v2s 云端后台。翻译在本地完成；所选语言支持时，语音识别也在本地完成。",
         h2Title: "菜单栏即用",
         h2Body: "始终一键可达。开始、停止与语言设置，无需离开会议或播放器全屏。",
         h3Title: "自选音频源",
@@ -268,10 +268,10 @@
       },
       privacy: {
         eyebrow: "隐私保护",
-        title: "会议内容留在你的机器上。",
+        title: "本地优先，回退逻辑透明。",
         li1: "无需账号、云端后台、分析或遥测",
-        li2: "音频与字幕文本不会通过 v2s 离开 Mac",
-        li3: "语音与翻译使用 Apple 本地框架",
+        li2: "v2s 不会把音频或字幕文本发送到自己的服务器",
+        li3: "翻译在本地完成；只有在语言没有本地模型时，语音识别才会使用 Apple 服务",
         li4: "仅在需要时请求语音、麦克风或应用音频捕获权限",
       },
       quickStart: {

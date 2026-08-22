@@ -31,7 +31,7 @@
 - **菜单栏常驻应用**：启动后常驻于 macOS 菜单栏，随时可打开和控制字幕。
 - **双语字幕悬浮条**：第一行显示翻译结果，第二行显示原始语音文本，便于快速对照。
 - **灵活的音频输入**：既可使用麦克风，也可只捕获某个正在运行的 macOS 应用音频。
-- **本地语音转写**：基于 Apple SpeechAnalyzer 进行语音识别。
+- **语音转写**：基于 Apple Speech 框架，优先使用本地语音识别。
 - **本地翻译**：基于 Apple Translation 框架进行翻译处理。
 - **AI 摘要**：基于 Apple Intelligence 对字幕记录进行智能摘要；当 Apple Intelligence 不可用时，自动回退到本地提取式摘要，同样可以快速掌握对话要点。
 - **可调节的字幕样式**：支持调整悬浮条样式，保证字幕在真实工作场景中依然清晰可读。
@@ -43,9 +43,10 @@ v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语�
 ## 隐私保护
 
 - 无需账号，也没有云端后台、分析或遥测。
-- 音频和字幕文本不会通过 v2s 离开你的 Mac。
+- v2s 没有云端后台，也不会把音频或字幕文本发送到自己的服务器。
 - 翻译依赖 Apple 的本地 Translation 框架，部分语言包可能需要先在系统设置中下载。
-- 语音识别使用 Apple Speech 框架提供的本地识别能力，并仅面向当前设备可用的输入语言。
+- 语音识别优先使用 Apple 的本地模型；当某个语言存在本地模型时，v2s 会优先选用带本地模型的地区变体。
+- 部分语言在特定 Mac 上没有本地模型（Intel Mac 以及新版 Speech 技术栈未覆盖的语言尤其常见），这些语言会走 Apple 的服务器识别：需要网络连接，受 Apple 服务配额限制，并会依据 Apple 的隐私条款将捕获的语音发送给 Apple。
 
 ## 快速开始
 
@@ -65,6 +66,7 @@ v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语�
 ## 环境要求
 
 - 语音转写和翻译功能需要 macOS 26 或更高版本
+- 支持 Apple 芯片和 Intel Mac；可用的语音语言以及能否在本地识别，取决于具体 Mac 和所选语言。
 
 ## 从源码构建
 
@@ -78,6 +80,12 @@ open v2s.xcodeproj
 
 ```bash
 xcodebuild -project v2s.xcodeproj -scheme v2s -configuration Debug build
+```
+
+如需专门为 Intel Mac 构建：
+
+```bash
+swift build -c release --arch x86_64
 ```
 
 ## 许可证

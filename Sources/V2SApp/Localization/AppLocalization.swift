@@ -114,6 +114,7 @@ enum AppTextKey: String {
     case speechTitleFormat
     case translationTitleFormat
     case speechNotAvailableOnMacOS
+    case speechUsesAppleServersFormat
     case downloadingSpeechResources
     case translationNotSupportedPairOnMacOS
     case downloadingTranslationResources
@@ -398,6 +399,7 @@ enum AppLocalization {
             "speechTitleFormat": "Speech · %@",
             "translationTitleFormat": "Translation · %@ → %@",
             "speechNotAvailableOnMacOS": "Speech recognition is not available for this language on this macOS version.",
+            "speechUsesAppleServersFormat": "This Mac has no on-device speech model for %@, so Apple's servers handle recognition.",
             "downloadingSpeechResources": "Downloading on-device speech recognition resources...",
             "translationNotSupportedPairOnMacOS": "Translation is not supported for this language pair on this macOS version.",
             "downloadingTranslationResources": "Downloading on-device translation resources...",
@@ -562,6 +564,7 @@ enum AppLocalization {
             "speechTitleFormat": "语音识别 · %@",
             "translationTitleFormat": "翻译 · %@ → %@",
             "speechNotAvailableOnMacOS": "当前 macOS 版本不支持此语言的语音识别。",
+            "speechUsesAppleServersFormat": "本机没有%@的本地语音模型，识别将由 Apple 服务器完成。",
             "downloadingSpeechResources": "正在下载本地语音识别资源...",
             "translationNotSupportedPairOnMacOS": "当前 macOS 版本不支持此语言对的翻译。",
             "downloadingTranslationResources": "正在下载本地翻译资源...",
@@ -726,6 +729,7 @@ enum AppLocalization {
             "speechTitleFormat": "Reconocimiento de voz · %@",
             "translationTitleFormat": "Traducción · %@ → %@",
             "speechNotAvailableOnMacOS": "El reconocimiento de voz no está disponible para este idioma en esta versión de macOS.",
+            "speechUsesAppleServersFormat": "Este Mac no tiene un modelo de voz en el dispositivo para %@, así que el reconocimiento se realiza en los servidores de Apple.",
             "downloadingSpeechResources": "Descargando recursos de reconocimiento de voz en el dispositivo...",
             "translationNotSupportedPairOnMacOS": "La traducción no es compatible con este par de idiomas en esta versión de macOS.",
             "downloadingTranslationResources": "Descargando recursos de traducción en el dispositivo...",
@@ -890,6 +894,7 @@ enum AppLocalization {
             "speechTitleFormat": "Spracherkennung · %@",
             "translationTitleFormat": "Übersetzung · %@ → %@",
             "speechNotAvailableOnMacOS": "Spracherkennung ist für diese Sprache in dieser macOS-Version nicht verfügbar.",
+            "speechUsesAppleServersFormat": "Für %@ gibt es auf diesem Mac kein lokales Sprachmodell, daher übernehmen Apples Server die Erkennung.",
             "downloadingSpeechResources": "On-Device-Ressourcen für Spracherkennung werden heruntergeladen...",
             "translationNotSupportedPairOnMacOS": "Übersetzung wird für dieses Sprachpaar in dieser macOS-Version nicht unterstützt.",
             "downloadingTranslationResources": "On-Device-Übersetzungsressourcen werden heruntergeladen...",
@@ -1054,6 +1059,7 @@ enum AppLocalization {
             "speechTitleFormat": "音声認識 · %@",
             "translationTitleFormat": "翻訳 · %@ → %@",
             "speechNotAvailableOnMacOS": "この macOS バージョンでは、この言語の音声認識は利用できません。",
+            "speechUsesAppleServersFormat": "この Mac には%@のオンデバイス音声モデルがないため、認識は Apple のサーバーで行われます。",
             "downloadingSpeechResources": "オンデバイス音声認識リソースをダウンロード中...",
             "translationNotSupportedPairOnMacOS": "この macOS バージョンでは、この言語ペアの翻訳はサポートされていません。",
             "downloadingTranslationResources": "オンデバイス翻訳リソースをダウンロード中...",
@@ -1218,6 +1224,7 @@ enum AppLocalization {
             "speechTitleFormat": "Reconnaissance vocale · %@",
             "translationTitleFormat": "Traduction · %@ → %@",
             "speechNotAvailableOnMacOS": "La reconnaissance vocale n'est pas disponible pour cette langue sur cette version de macOS.",
+            "speechUsesAppleServersFormat": "Ce Mac n'a pas de modèle vocal local pour %@, la reconnaissance est donc effectuée sur les serveurs d'Apple.",
             "downloadingSpeechResources": "Téléchargement des ressources de reconnaissance vocale sur l'appareil...",
             "translationNotSupportedPairOnMacOS": "La traduction n'est pas prise en charge pour cette paire de langues sur cette version de macOS.",
             "downloadingTranslationResources": "Téléchargement des ressources de traduction sur l'appareil...",
@@ -1382,6 +1389,7 @@ enum AppLocalization {
             "speechTitleFormat": "음성 인식 · %@",
             "translationTitleFormat": "번역 · %@ → %@",
             "speechNotAvailableOnMacOS": "이 macOS 버전에서는 해당 언어의 음성 인식을 사용할 수 없습니다.",
+            "speechUsesAppleServersFormat": "이 Mac에는 %@의 온디바이스 음성 모델이 없어 인식은 Apple 서버에서 처리됩니다.",
             "downloadingSpeechResources": "온디바이스 음성 인식 리소스를 다운로드하는 중...",
             "translationNotSupportedPairOnMacOS": "이 macOS 버전에서는 해당 언어 쌍 번역을 지원하지 않습니다.",
             "downloadingTranslationResources": "온디바이스 번역 리소스를 다운로드하는 중...",
@@ -1546,6 +1554,7 @@ enum AppLocalization {
             "speechTitleFormat": "التعرّف على الكلام · %@",
             "translationTitleFormat": "الترجمة · %@ → %@",
             "speechNotAvailableOnMacOS": "التعرّف على الكلام غير متاح لهذه اللغة على هذا الإصدار من macOS.",
+            "speechUsesAppleServersFormat": "لا يتوفر على هذا الـ Mac نموذج صوتي محلي للغة %@، لذا تتم المعالجة على خوادم Apple.",
             "downloadingSpeechResources": "جارٍ تنزيل موارد التعرّف على الكلام على الجهاز...",
             "translationNotSupportedPairOnMacOS": "الترجمة غير مدعومة لهذا الزوج اللغوي على هذا الإصدار من macOS.",
             "downloadingTranslationResources": "جارٍ تنزيل موارد الترجمة على الجهاز...",
@@ -1710,6 +1719,7 @@ enum AppLocalization {
             "speechTitleFormat": "Reconhecimento de fala · %@",
             "translationTitleFormat": "Tradução · %@ → %@",
             "speechNotAvailableOnMacOS": "O reconhecimento de fala não está disponível para este idioma nesta versão do macOS.",
+            "speechUsesAppleServersFormat": "Este Mac não tem um modelo de voz no dispositivo para %@, então o reconhecimento é feito nos servidores da Apple.",
             "downloadingSpeechResources": "Baixando recursos de reconhecimento de fala no dispositivo...",
             "translationNotSupportedPairOnMacOS": "A tradução não é compatível com este par de idiomas nesta versão do macOS.",
             "downloadingTranslationResources": "Baixando recursos de tradução no dispositivo...",
@@ -1874,6 +1884,7 @@ enum AppLocalization {
             "speechTitleFormat": "Распознавание речи · %@",
             "translationTitleFormat": "Перевод · %@ → %@",
             "speechNotAvailableOnMacOS": "Распознавание речи недоступно для этого языка в этой версии macOS.",
+            "speechUsesAppleServersFormat": "На этом Mac нет локальной модели распознавания для %@, поэтому распознавание выполняется на серверах Apple.",
             "downloadingSpeechResources": "Загрузка локальных ресурсов распознавания речи...",
             "translationNotSupportedPairOnMacOS": "Перевод для этой языковой пары не поддерживается в этой версии macOS.",
             "downloadingTranslationResources": "Загрузка локальных ресурсов перевода...",

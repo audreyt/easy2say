@@ -38,7 +38,7 @@
 - Menu bar app built for always-available subtitle access.
 - Live subtitle overlay with translated text on the first line and source text on the second.
 - Audio source selection for microphones and running macOS apps.
-- On-device speech transcription powered by Apple SpeechAnalyzer.
+- Speech transcription powered by Apple's Speech frameworks, preferring on-device recognition.
 - On-device translation powered by Apple Translation.
 - Transcript summarization powered by Apple Intelligence, falling back to an on-device extractive summary when Apple Intelligence is unavailable.
 - Overlay styling controls so the subtitle bar stays readable on top of real work.
@@ -50,9 +50,10 @@ v2s asks Apple's Speech and Translation frameworks which languages the current M
 ## Privacy
 
 - No account, cloud backend, analytics, or telemetry.
-- Audio and subtitle text never leave your Mac through v2s.
+- v2s has no cloud backend and does not send audio or subtitle text to its own servers.
 - Translation uses Apple's on-device Translation framework. Some language packs may need to be downloaded first through System Settings.
-- Speech recognition uses Apple's on-device Speech frameworks for the available source languages.
+- Speech recognition prefers Apple's on-device models, and v2s picks a language variant that has a local model whenever one exists.
+- Some languages have no on-device model on a given Mac — this is common on Intel Macs, and for languages outside the modern Speech stack. Those run through Apple's server-based recognition, which needs a network connection, is subject to Apple's service quotas, and sends captured speech to Apple under Apple's privacy terms.
 
 ## Getting Started
 
@@ -72,6 +73,7 @@ v2s will ask for permissions on first use:
 ## Requirements
 
 - Speech transcription and translation require macOS 26 or newer
+- Apple silicon and Intel Macs are supported. Which speech languages are available, and whether they recognize on device, depends on the Mac and the selected language.
 
 ## Building from Source
 
@@ -85,6 +87,12 @@ Or from the terminal:
 
 ```bash
 xcodebuild -project v2s.xcodeproj -scheme v2s -configuration Debug build
+```
+
+To build specifically for an Intel Mac:
+
+```bash
+swift build -c release --arch x86_64
 ```
 
 ## License

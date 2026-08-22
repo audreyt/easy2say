@@ -420,7 +420,7 @@
 		A00000000000000000000017 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = arm64;
+				ARCHS = "$(ARCHS_STANDARD)";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
