@@ -528,10 +528,8 @@ final class AppModel: ObservableObject {
     }
 
     func startSession() async {
-        // An earlier session can still be capturing — a recognition failure reports an
-        // error without tearing the session down — and replacing the list below would
-        // otherwise orphan it with the microphone still open.
-        stopLiveTranscriptionSessions()
+        // Finish releasing any earlier capture resources before opening replacements.
+        await stopLiveTranscriptionSessionsAndWait()
         refreshSources()
 
         let selectedSources = self.selectedSources
@@ -572,12 +570,16 @@ final class AppModel: ObservableObject {
         let config = ModeConfig.config(for: subtitleMode)
         let recognitionHints = recognitionContextualStrings()
         var startedSessions: [LiveTranscriptionSession] = []
+        var fatalSessionError: String?
 
         do {
             for source in selectedSources {
                 let sourceLanguageID = languageID(for: source)
                 let targetLanguageID = outputLanguageIDForSource(source)
                 let session = LiveTranscriptionSession()
+                // Include the session in cleanup even if start() fails after partially
+                // configuring recognition or capture resources.
+                startedSessions.append(session)
                 try await session.start(
                     source: source,
                     localeIdentifier: speechLocaleIdentifier(for: sourceLanguageID),
@@ -608,9 +610,31 @@ final class AppModel: ObservableObject {
                             sourceText: message,
                             sourceName: source.name
                         )
+                    },
+                    fatalErrorHandler: { [weak self] message in
+                        guard let self else { return }
+                        fatalSessionError = message
+                        // One selected input failing ends the logical session. Stop its
+                        // siblings before showing a global "capture stopped" state.
+                        self.stopLiveTranscriptionSessions()
+                        self.sessionState = .error
+                        self.setStatus(.custom(message))
+                        self.overlayState = OverlayPreviewState(
+                            translatedText: self.captureStoppedText,
+                            sourceText: message,
+                            sourceName: source.name
+                        )
                     }
                 )
-                startedSessions.append(session)
+
+                // A recognition task can fail while start() is suspended. Its callback
+                // runs on the main actor, so do not overwrite that error with .running.
+                guard fatalSessionError == nil else {
+                    for startedSession in startedSessions {
+                        startedSession.stop()
+                    }
+                    return
+                }
             }
 
             liveTranscriptionSessions = startedSessions
@@ -652,15 +676,32 @@ final class AppModel: ObservableObject {
     }
 
     private func stopLiveTranscriptionSessions() {
-        if liveTranscriptionSessions.isEmpty {
-            liveTranscriptionSession?.stop()
-        } else {
-            for session in liveTranscriptionSessions {
-                session.stop()
-            }
+        let sessions = takeLiveTranscriptionSessions()
+        for session in sessions {
+            session.stop()
         }
+    }
+
+    private func stopLiveTranscriptionSessionsAndWait() async {
+        let sessions = takeLiveTranscriptionSessions()
+        for session in sessions {
+            await session.stopAndWait()
+        }
+    }
+
+    /// Detaches the current sessions atomically on the main actor. The returned strong
+    /// references keep them alive until their callers have scheduled or completed stop.
+    private func takeLiveTranscriptionSessions() -> [LiveTranscriptionSession] {
+        let sessions: [LiveTranscriptionSession]
+        if liveTranscriptionSessions.isEmpty {
+            sessions = liveTranscriptionSession.map { [$0] } ?? []
+        } else {
+            sessions = liveTranscriptionSessions
+        }
+
         liveTranscriptionSessions.removeAll()
         liveTranscriptionSession = nil
+        return sessions
     }
 
     func showOverlayPreview() {

@@ -217,6 +217,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var transcriptHandler: (@MainActor (RecognizedSentence) -> Void)?
     private var partialHandler: (@MainActor (DraftSegment?) -> Void)?
     private var errorHandler: (@MainActor (String) -> Void)?
+    /// Reports an unrecoverable recognition failure after this session has stopped.
+    /// The owner uses this separate callback to stop sibling sessions as well.
+    private var fatalErrorHandler: (@MainActor (String) -> Void)?
     @MainActor private var recentCommittedSentenceHistory: [RecentCommittedSentence] = []
 
     private func localized(_ key: AppTextKey, _ arguments: CVarArg...) -> String {
@@ -279,7 +282,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         contextualStrings: [String] = [],
         transcriptHandler: @escaping @MainActor (RecognizedSentence) -> Void,
         partialHandler: @escaping @MainActor (DraftSegment?) -> Void,
-        errorHandler: @escaping @MainActor (String) -> Void
+        errorHandler: @escaping @MainActor (String) -> Void,
+        fatalErrorHandler: @escaping @MainActor (String) -> Void
     ) async throws {
         self.transcriptHandler = transcriptHandler
         self.partialHandler = partialHandler
@@ -288,6 +292,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         self.activeLocaleIdentifier = localeIdentifier
         self.interfaceLanguageID = interfaceLanguageID
         self.errorHandler = errorHandler
+        self.fatalErrorHandler = fatalErrorHandler
         await MainActor.run {
             recentCommittedSentenceHistory.removeAll()
         }
@@ -315,8 +320,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     func stop() {
-        captureQueue.async { [weak self] in
-            self?.stopOnCaptureQueue()
+        // Keep the session alive until every capture resource has been released. The
+        // owner drops its references immediately after calling this method.
+        captureQueue.async { [self] in
+            stopOnCaptureQueue()
+        }
+    }
+
+    /// Stops the session and returns only after its capture queue has released all
+    /// microphone/Core Audio resources. Used before starting replacement sessions.
+    func stopAndWait() async {
+        await withCheckedContinuation { continuation in
+            captureQueue.async { [self] in
+                stopOnCaptureQueue()
+                continuation.resume()
+            }
         }
     }
 
@@ -609,14 +627,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             do {
                 try self.configureSpeechRecognizer(localeIdentifier: localeIdentifier)
             } catch {
-                Task {
-                    await self.emitError(
-                        self.localized(
-                            .speechRecognitionStoppedFormat,
-                            self.localizedErrorDescription(error)
-                        )
-                    )
-                }
+                self.stopRecognitionAndSurface(error)
             }
         }
     }
@@ -1275,6 +1286,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     @MainActor
+    private func emitFatalError(_ message: String) {
+        fatalErrorHandler?(message)
+    }
+
+    @MainActor
     private func prepareCommittedSentenceForEmission(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
@@ -1801,7 +1817,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         stopOnCaptureQueue()
 
         Task {
-            await self.emitError(
+            await self.emitFatalError(
                 self.localized(
                     .speechRecognitionStoppedFormat,
                     self.localizedErrorDescription(error)
