@@ -1,0 +1,121 @@
+# v2s-ios
+
+[English](README.md) · 繁體中文 · [简体中文](README.zh-CN.md)
+
+**iPhone 與 iPad 上私密、於裝置端處理的雙語字幕。**
+
+`v2s-ios` 是以 iOS 為優先的 [franklioxygen/v2s](https://github.com/franklioxygen/v2s) 分支。它透過裝置麥克風、Apple Speech 與 Apple Translation，同時顯示語音辨識原文與翻譯。此分支以[上游 pull request #20](https://github.com/franklioxygen/v2s/pull/20) 為起點，並保留該 PR 中由 [@oToToT](https://github.com/oToToT) 貢獻、擴充後的執行階段語言目錄。
+
+<p align="center">
+  <img src="docs/assets/v2s-ios-home.png" alt="v2s-ios 在 iPhone 上將原文與翻譯字幕各佔一半畫面顯示">
+</p>
+
+## 功能
+
+- 在裝置端轉寫麥克風音訊並翻譯字幕。
+- 讓原文與目標語言譯文各佔一半畫面。
+- 直向時上下排列兩個區塊，橫向時左右並排。
+- 只使用 iPhone 或 iPad 的麥克風。
+- 字幕輸出預設為繁體中文（`zh-Hant`），並可選擇繁體中文（`zh-Hant`）或簡體中文（`zh-Hans`）。
+- 提供應用程式內的字幕記錄與設定畫面。
+
+## iOS 與 macOS 功能比較
+
+| 功能 | iPhone/iPad 上的 `v2s-ios` | macOS 上的上游 `v2s` |
+| --- | --- | --- |
+| 即時麥克風字幕 | 是 | 是 |
+| 裝置端語音辨識與翻譯 | 是 | 是 |
+| 字幕呈現方式 | 原文與翻譯各佔一半；直向時上下排列，橫向時左右並排 | 浮動雙行字幕列 |
+| 擷取其他應用程式的音訊 | 否。iOS 應用程式僅使用麥克風。 | 是 |
+| 將字幕浮動顯示於其他應用程式上方 | 否。字幕只顯示在 `v2s-ios` 內。 | 是 |
+
+iOS 應用程式無法擷取其他應用程式的音訊，也不提供跨應用程式的浮動覆蓋層。
+
+## 隱私
+
+- 不設帳號，也沒有網路用戶端。
+- 不使用雲端轉寫，也沒有分析或遙測功能。
+- iOS 目標不含更新程式。
+- `v2s-ios` 不會將麥克風音訊或字幕傳送至伺服器。
+- Apple 可能會先下載其 Speech 與 Translation 框架所需的語言資源。之後，應用程式會使用這些資源在裝置端處理。
+- 語音活動偵測透過 Apple 系統內建的 Core ML 框架執行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；`v2s-ios` 不打包任何第三方推論執行環境，且[轉換過程可重現](scripts/convert_silero_vad_coreml.py)。
+
+## 系統需求
+
+- 執行 iOS 或 iPadOS 26.0 以上版本的 iPhone 或 iPad
+- Xcode 26 或以上版本
+- 麥克風與語音辨識權限
+
+## 建置與執行
+
+請安裝 XcodeGen、產生 iOS 專案，並從儲存庫根目錄開啟專案：
+
+```bash
+brew install xcodegen
+cd ios
+xcodegen generate
+open v2s-ios.xcodeproj
+```
+
+在 Xcode 中選擇 `v2s-ios` scheme 與 iPhone 或 iPad 模擬器，然後執行應用程式。
+
+從命令列建置 iOS 模擬器版本：
+
+```bash
+cd ios
+xcodegen generate
+xcodebuild \
+  -project v2s-ios.xcodeproj \
+  -scheme v2s-ios \
+  -configuration Debug \
+  -destination "generic/platform=iOS Simulator" \
+  -derivedDataPath .build/sim \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+若要在實體裝置上執行，請在本機 Xcode 的 Signing & Capabilities 中選取你的開發團隊。儲存庫未提交任何 `DEVELOPMENT_TEAM` 值。
+
+## 開發驗證
+
+從儲存庫根目錄執行共用引擎測試：
+
+```bash
+swift test
+```
+
+建置原始 macOS 目標，作為迴歸驗證：
+
+```bash
+xcodebuild \
+  -project v2s.xcodeproj \
+  -scheme v2s \
+  -configuration Release \
+  -derivedDataPath .build/release \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGN_IDENTITY=- \
+  build
+```
+
+產生 iOS 目標，並為模擬器建置：
+
+```bash
+cd ios
+xcodegen generate
+xcodebuild \
+  -project v2s-ios.xcodeproj \
+  -scheme v2s-ios \
+  -configuration Release \
+  -destination "generic/platform=iOS Simulator" \
+  -derivedDataPath .build/sim \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+## 上游與 macOS
+
+此分支讓原始 macOS 目標保持可建置，以供共用引擎開發與迴歸驗證使用。macOS 產品、發行版本與文件請使用 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
+
+## 授權
+
+[上游 README](https://github.com/franklioxygen/v2s#license) 宣告採用 MIT 授權，但上游儲存庫目前沒有 `LICENSE` 檔案。此分支在 [NOTICE](NOTICE) 中保留上游歸屬資訊。公開重新散佈此分支或其二進位檔之前，請先洽詢上游專案。

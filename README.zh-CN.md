@@ -1,117 +1,120 @@
-# v2s
+# v2s-ios
+
+[English](README.md) · [繁體中文](README.zh-Hant.md) · 简体中文
+
+**适用于 iPhone 和 iPad 的私密、端侧双语字幕。**
+
+`v2s-ios` 是 [franklioxygen/v2s](https://github.com/franklioxygen/v2s) 的一个以 iOS 为首要平台的分支。它使用设备麦克风、Apple Speech 和 Apple Translation，同时显示源语言语音和翻译结果。此分支基于 [上游拉取请求 #20](https://github.com/franklioxygen/v2s/pull/20)，并保留由 [@oToToT](https://github.com/oToToT) 贡献的扩展运行时语言目录。
 
 <p align="center">
-  <img src="Assets.xcassets/AppIcon.appiconset/AppIcon-256.png" alt="v2s 应用图标" width="256" height="256">
+  <img src="docs/assets/v2s-ios-home.png" alt="v2s-ios 在 iPhone 上以等分布局显示源语言字幕和翻译字幕">
 </p>
 
-<p align="center">
-  <strong>macOS 上适用于会议、通话、直播和视频的实时双语字幕。</strong>
-</p>
+## 功能
 
-<p align="center">
-  v2s 可以将麦克风输入或指定应用的音频转换成简洁的双行字幕条，让你在不离开当前屏幕的情况下，一边听原语言，一边看目标语言字幕。
-</p>
+- 在设备端转写麦克风音频并翻译字幕。
+- 源语言字幕和目标语言译文各占屏幕一半。
+- 竖屏时上下排列，横屏时并排显示。
+- 仅使用 iPhone 或 iPad 麦克风。
+- 默认字幕输出为繁体中文（`zh-Hant`），同时保留繁体中文（`zh-Hant`）和简体中文（`zh-Hans`）选项。
+- 提供应用程序内的转写记录和设置界面。
 
-<p align="center">
-  <a href="https://franklioxygen.github.io/v2s/">官网</a>
-  ·
-  <a href="README.md">English Doc</a>
-</p>
+## iOS 与 macOS 功能对比
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/b65167ee-ae7e-4e37-8316-ebd200ae89a7" alt="Mar-20-2026 11-08-59">
-</p>
+| 功能 | iPhone/iPad 上的 `v2s-ios` | macOS 上的上游 `v2s` |
+| --- | --- | --- |
+| 实时麦克风字幕 | 是 | 是 |
+| 设备端语音识别和翻译 | 是 | 是 |
+| 字幕呈现方式 | 源语言字幕和译文各占一半；竖屏时上下排列，横屏时并排显示 | 悬浮式双行字幕条 |
+| 采集其他应用程序的音频 | 否。iOS 应用程序仅使用麦克风。 | 是 |
+| 在其他应用程序上方悬浮显示字幕 | 否。字幕始终显示在 `v2s-ios` 内。 | 是 |
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/449039ee-c329-426e-a55b-ab6660c56ca7" alt="Screenshot 2026-03-25 at 1 10 39 PM" width="500">
-</p>
+iOS 应用程序无法采集其他应用程序的音频，也不提供跨应用程序的悬浮层。
 
-## 功能特性
+## 隐私
 
-- **菜单栏常驻应用**：启动后常驻于 macOS 菜单栏，随时可打开和控制字幕。
-- **双语字幕悬浮条**：第一行显示翻译结果，第二行显示原始语音文本，便于快速对照。
-- **灵活的音频输入**：既可使用麦克风，也可只捕获某个正在运行的 macOS 应用音频。
-- **语音转写**：基于 Apple Speech 框架，优先使用本地语音识别。
-- **本地翻译**：基于 Apple Translation 框架进行翻译处理。
-- **AI 摘要**：基于 Apple Intelligence 对字幕记录进行智能摘要；当 Apple Intelligence 不可用时，自动回退到本地提取式摘要，同样可以快速掌握对话要点。
-- **可调节的字幕样式**：支持调整悬浮条样式，保证字幕在真实工作场景中依然清晰可读。
-
-## 输入与字幕语言
-
-v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语言，因此语言选项会自动跟随系统与模型更新。界面会合并地区变体，但保留简体中文和繁体中文等有实际意义的文字变体。开始会话前，v2s 还会检查 Apple Translation 是否支持所选的源语言与目标语言组合。
-
-## 隐私保护
-
-- 无需账号，也没有云端后台、分析或遥测。
-- v2s 没有云端后台，也不会把音频或字幕文本发送到自己的服务器。
-- 翻译依赖 Apple 的本地 Translation 框架，部分语言包可能需要先在系统设置中下载。
-- 语音识别优先使用 Apple 的本地模型；当某个语言存在本地模型时，v2s 会优先选用带本地模型的地区变体。
-- 部分语言在特定 Mac 上没有本地模型（Intel Mac 以及新版 Speech 技术栈未覆盖的语言尤其常见），这些语言会走 Apple 的服务器识别：需要网络连接，受 Apple 服务配额限制，并会依据 Apple 的隐私条款将捕获的语音发送给 Apple。
-
-## 快速开始
-
-### 使用 Homebrew 安装
-
-```bash
-brew install --cask franklioxygen/v2s/v2s
-```
-
-v2s 尚未通过 Apple 公证，macOS 会在下载后将其隔离。执行一次下面的命令清除隔离标记，
-之后即可正常启动：
-
-```bash
-xattr -dr com.apple.quarantine /Applications/v2s.app
-```
-
-如果之前手动安装过、`Applications` 里已经有 `v2s.app`，请加上 `--adopt`，让
-Homebrew 接管现有副本，而不是因为无法覆盖而报错。
-
-更新由应用内的更新器负责。如果希望改由 Homebrew 管理更新，可以运行
-`brew upgrade --cask --greedy v2s`。
-
-### 手动安装
-
-1. 从 [Releases](https://github.com/franklioxygen/v2s/releases) 页面下载最新的 `.app.zip`。
-2. 解压后将 `v2s.app` 移动到 `Applications` 文件夹。
-
-### 首次运行
-
-1. 启动 v2s，它会以图标形式出现在菜单栏中。
-2. 选择输入源：麦克风或某个正在运行的应用。
-3. 选择输入语言和字幕语言。
-4. 点击 **Start**。
-
-首次使用时，v2s 会请求以下权限：
-
-- **Speech Recognition**：用于将音频转写为文本。
-- **Microphone**：当输入源为麦克风时需要。
-- **Audio Capture**：当输入源为其他应用时需要。
+- 无账号，也没有网络客户端。
+- 不使用云端转写、分析或遥测。
+- iOS 目标中不包含更新程序。
+- `v2s-ios` 不会将麦克风音频或字幕发送到服务器。
+- Apple 可能会先下载其 Speech 和 Translation 框架所需的语言资源。随后，应用程序使用这些资源在设备端进行处理。
+- 语音活动检测通过 Apple 系统内建的 Core ML 框架运行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；`v2s-ios` 不打包任何第三方推理运行时，且[转换过程可复现](scripts/convert_silero_vad_coreml.py)。
 
 ## 环境要求
 
-- 语音转写和翻译功能需要 macOS 26 或更高版本
-- 支持 Apple 芯片和 Intel Mac；可用的语音语言以及能否在本地识别，取决于具体 Mac 和所选语言。
+- 运行 iOS 或 iPadOS 26.0 或更高版本的 iPhone 或 iPad
+- Xcode 26 或更高版本
+- 麦克风和语音识别权限
 
-## 从源码构建
+## 构建与运行
 
-```bash
-git clone https://github.com/franklioxygen/v2s.git
-cd v2s
-open v2s.xcodeproj
-```
-
-也可以直接使用终端构建：
+安装 XcodeGen，在仓库根目录中生成 iOS 项目并将其打开：
 
 ```bash
-xcodebuild -project v2s.xcodeproj -scheme v2s -configuration Debug build
+brew install xcodegen
+cd ios
+xcodegen generate
+open v2s-ios.xcodeproj
 ```
 
-如需专门为 Intel Mac 构建：
+在 Xcode 中选择 `v2s-ios` scheme 和 iPhone 或 iPad 模拟器，然后运行应用程序。
+
+通过命令行针对 iOS 模拟器构建：
 
 ```bash
-swift build -c release --arch x86_64
+cd ios
+xcodegen generate
+xcodebuild \
+  -project v2s-ios.xcodeproj \
+  -scheme v2s-ios \
+  -configuration Debug \
+  -destination "generic/platform=iOS Simulator" \
+  -derivedDataPath .build/sim \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 ```
 
+对于实体设备，请在本机 Xcode 的 Signing & Capabilities 中选择你的开发团队。仓库中未提交 `DEVELOPMENT_TEAM` 值。
+
+## 开发检查
+
+在仓库根目录运行共享引擎测试：
+
+```bash
+swift test
+```
+
+构建原始 macOS 目标，作为回归验证：
+
+```bash
+xcodebuild \
+  -project v2s.xcodeproj \
+  -scheme v2s \
+  -configuration Release \
+  -derivedDataPath .build/release \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGN_IDENTITY=- \
+  build
+```
+
+生成 iOS 目标并针对模拟器构建：
+
+```bash
+cd ios
+xcodegen generate
+xcodebuild \
+  -project v2s-ios.xcodeproj \
+  -scheme v2s-ios \
+  -configuration Release \
+  -destination "generic/platform=iOS Simulator" \
+  -derivedDataPath .build/sim \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+## 上游与 macOS
+
+此分支保留原始 macOS 目标的可构建状态，用于共享引擎开发和回归验证。macOS 产品、发行版和文档请使用 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
 ## 许可证
 
-MIT
+[上游 README](https://github.com/franklioxygen/v2s#license) 声明使用 MIT 许可证，但上游仓库目前没有 `LICENSE` 文件。此分支在 [NOTICE](NOTICE) 中保留上游署名信息。公开重新分发此分支或其二进制文件前，请咨询上游。

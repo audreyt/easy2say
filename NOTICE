@@ -1,0 +1,10 @@
+v2s-ios attribution notice
+
+This repository is an iOS-first fork of franklioxygen/v2s:
+https://github.com/franklioxygen/v2s
+
+It starts from and retains the expanded runtime language-catalog work in pull request #20, contributed by @oToToT:
+https://github.com/franklioxygen/v2s/pull/20
+https://github.com/oToToT
+
+This fork adds an iPhone and iPad app with microphone-only capture, equal source and translation layouts for portrait and landscape, transcript and settings views, and iOS project and build configuration. It adds a Traditional Chinese interface and default subtitle output while keeping Simplified Chinese selectable. The original macOS target remains as shared engine and regression coverage.
