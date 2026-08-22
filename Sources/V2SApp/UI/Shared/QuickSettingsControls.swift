@@ -143,7 +143,7 @@ struct SourceMultiSelectPicker: View {
                 .frame(minWidth: 180, minHeight: 32, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .controlColor))
+                    .fill(.fill.quaternary)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
