@@ -563,52 +563,6 @@ struct SettingsView: View {
     }
 }
 
-struct LanguageResourceStatusListView: View {
-    let statuses: [LanguageResourceStatus]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(statuses) { status in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(status.title)
-                            .font(.caption.weight(.semibold))
-                        Spacer()
-                        if let progress = status.progress, status.isError == false {
-                            Text("\(Int((progress * 100).rounded()))%")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if status.isError {
-                        Text(status.detail)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    } else if let progress = status.progress {
-                        ProgressView(value: progress)
-                            .progressViewStyle(.linear)
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity)
-                        Text(status.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ProgressView()
-                            .progressViewStyle(.linear)
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity)
-                        Text(status.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(10)
-                .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-}
 
 private struct GlossaryAddRow: View {
     let sourcePlaceholder: String

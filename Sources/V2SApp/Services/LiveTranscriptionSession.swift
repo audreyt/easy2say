@@ -1,6 +1,10 @@
+#if os(macOS)
 import AppKit
+#endif
 import AVFoundation
+#if os(macOS)
 import CoreAudio
+#endif
 import CoreMedia
 import Foundation
 import Speech
@@ -57,11 +61,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let promotionSegmentID: UUID?
     }
 
+#if os(macOS)
     private struct ApplicationCaptureDescriptor: Sendable {
         let appName: String
         let processObjectIDs: [AudioObjectID]
         let readStreamFailureMessage: String
     }
+#endif
 
     @MainActor
     private struct RecentCommittedSentence {
@@ -170,7 +176,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var modernCommittedPrefixText = ""
 
     private var microphoneCaptureSession: AVCaptureSession?
+#if os(macOS)
     private var applicationAudioCapture: ApplicationAudioCapture?
+#endif
 
     private var transcriptHandler: (@MainActor (RecognizedSentence) -> Void)?
     private var partialHandler: (@MainActor (DraftSegment?) -> Void)?
@@ -268,12 +276,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 try self.startMicrophoneCapture(deviceUniqueID: source.detail)
             }
         case .application:
+#if os(macOS)
             let captureDescriptor = try await MainActor.run {
                 try self.makeApplicationCaptureDescriptor(for: source)
             }
             try await runOnCaptureQueue {
                 try self.startApplicationAudioCapture(descriptor: captureDescriptor)
             }
+#else
+            throw SessionError.missingApplication(source.name)
+#endif
         }
     }
 
@@ -300,11 +312,31 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         cancelSilenceTimer()
         cancelVADSilenceTimer()
 
+#if os(iOS)
+        let hadMicrophoneCaptureSession = microphoneCaptureSession != nil
+#endif
         microphoneCaptureSession?.stopRunning()
         microphoneCaptureSession = nil
+#if os(iOS)
+        if hadMicrophoneCaptureSession {
+            do {
+                try AVAudioSession.sharedInstance().setActive(
+                    false,
+                    options: .notifyOthersOnDeactivation
+                )
+            } catch {
+                let message = localizedErrorDescription(error)
+                Task {
+                    await emitError(message)
+                }
+            }
+        }
+#endif
 
+#if os(macOS)
         applicationAudioCapture?.stop()
         applicationAudioCapture = nil
+#endif
 
         stopModernSpeechRecognizer()
         resetRecognitionFailureState()
@@ -682,10 +714,23 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         session.addOutput(output)
         session.commitConfiguration()
 
+#if os(iOS)
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement)
+            try audioSession.setActive(true)
+        } catch {
+            let message = localizedErrorDescription(error)
+            Task {
+                await emitError(message)
+            }
+        }
+#endif
         microphoneCaptureSession = session
         session.startRunning()
     }
 
+#if os(macOS)
     @MainActor
     private func makeApplicationCaptureDescriptor(for source: InputSource) throws -> ApplicationCaptureDescriptor {
         ApplicationCaptureDescriptor(
@@ -788,6 +833,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         return application
     }
+#endif
 
     private func append(sampleBuffer: CMSampleBuffer) {
         guard CMSampleBufferDataIsReady(sampleBuffer) else {
@@ -2463,6 +2509,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return NSRange(location: firstRange.location, length: endLocation - firstRange.location)
     }
 
+#if os(macOS)
     private func mapApplicationCaptureError(_ error: ApplicationAudioCapture.CaptureError) -> SessionError {
         switch error {
         case .permissionDenied:
@@ -2477,6 +2524,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             )
         }
     }
+#endif
 }
 
 extension LiveTranscriptionSession: AVCaptureAudioDataOutputSampleBufferDelegate {
@@ -2489,6 +2537,7 @@ extension LiveTranscriptionSession: AVCaptureAudioDataOutputSampleBufferDelegate
     }
 }
 
+#if os(macOS)
 private final class ApplicationAudioCapture {
     enum CaptureError: Error {
         case permissionDenied
@@ -2658,6 +2707,7 @@ private final class ApplicationAudioCapture {
         audioHandler(buffer)
     }
 }
+#endif
 
 private struct AudioFormatSignature: Equatable {
     let sampleRate: Double
@@ -2679,6 +2729,7 @@ private extension AVAudioFormat {
     }
 }
 
+#if os(macOS)
 private extension InputSource {
     var processIdentifierHint: pid_t? {
         guard detail.hasPrefix("pid-") else {
@@ -2782,6 +2833,7 @@ private struct ApplicationProcessAssociation {
         return helperPathFragments.contains(where: { candidate.contains($0) })
     }
 }
+#endif
 
 private extension String {
     var containsSentenceTerminator: Bool {
@@ -2829,6 +2881,7 @@ private extension LiveTranscriptionSession {
         .union(.punctuationCharacters)
 }
 
+#if os(macOS)
 private extension OSStatus {
     var readableDescription: String {
         let nsError = NSError(domain: NSOSStatusErrorDomain, code: Int(self))
@@ -2900,3 +2953,4 @@ private extension URL {
         return nil
     }
 }
+#endif

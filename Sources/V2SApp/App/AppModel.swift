@@ -1,6 +1,10 @@
 import Combine
 import Foundation
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import os.log
 import Speech
 import SwiftUI
@@ -24,8 +28,10 @@ private struct SessionStartupFailure: Error, AppLocalizableError {
 private enum AppBuildInfo {
     static let marketingVersion = "0.3.37"
     static let buildNumber = "41"
+#if os(macOS)
     static let repositoryURLString = "https://github.com/franklioxygen/v2s"
     static let repositoryURL = URL(string: repositoryURLString)
+#endif
 }
 
 @MainActor
@@ -400,7 +406,11 @@ final class AppModel: ObservableObject {
     }
 
     var appRepositoryURL: URL? {
+#if os(macOS)
         AppBuildInfo.repositoryURL
+#else
+        nil
+#endif
     }
 
     var showsOriginalSubtitle: Bool {
@@ -1637,10 +1647,14 @@ final class AppModel: ObservableObject {
             return
         }
 
+#if os(macOS)
         if NSWorkspace.shared.open(url) == false,
            let fallbackURL = URL(string: "x-apple.systempreferences:") {
             _ = NSWorkspace.shared.open(fallbackURL)
         }
+#else
+        UIApplication.shared.open(url)
+#endif
     }
 
     // MARK: - Draft handler
@@ -3155,6 +3169,8 @@ final class AppModel: ObservableObject {
         switch languageID {
         case "zh-Hans":
             return "欢迎使用 v2s，顶部字幕条已经准备好了。"
+        case "zh-Hant":
+            return "歡迎使用 v2s，頂部字幕列已經準備好了。"
         case "es":
             return "Bienvenido a v2s. La barra de subtitulos ya esta lista."
         case "de":

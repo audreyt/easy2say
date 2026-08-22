@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AVFoundation
 import Foundation
 
@@ -9,11 +11,19 @@ struct SourceCatalogSnapshot: Equatable {
 
 @MainActor
 final class SourceCatalogService {
+#if os(macOS)
     private let microphoneDiscoverySession = AVCaptureDevice.DiscoverySession(
         deviceTypes: [.microphone, .external],
         mediaType: .audio,
         position: .unspecified
     )
+#elseif os(iOS)
+    private let microphoneDiscoverySession = AVCaptureDevice.DiscoverySession(
+        deviceTypes: [.microphone, .external],
+        mediaType: .audio,
+        position: .unspecified
+    )
+#endif
 
     func loadSnapshot() -> SourceCatalogSnapshot {
         SourceCatalogSnapshot(
@@ -23,6 +33,7 @@ final class SourceCatalogService {
     }
 
     private func loadApplications() -> [InputSource] {
+#if os(macOS)
         let runningApps = NSWorkspace.shared.runningApplications
             .filter { app in
                 app.activationPolicy == .regular
@@ -40,9 +51,13 @@ final class SourceCatalogService {
 
         return deduplicated(runningApps)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+#elseif os(iOS)
+        return []
+#endif
     }
 
     private func loadMicrophones() -> [InputSource] {
+#if os(macOS)
         let devices = microphoneDiscoverySession.devices.map { device in
             InputSource(
                 id: "mic:\(device.uniqueID)",
@@ -51,6 +66,16 @@ final class SourceCatalogService {
                 category: .microphone
             )
         }
+#elseif os(iOS)
+        let devices = microphoneDiscoverySession.devices.map { device in
+            InputSource(
+                id: device.uniqueID,
+                name: device.localizedName,
+                detail: device.uniqueID,
+                category: .microphone
+            )
+        }
+#endif
 
         return deduplicated(devices)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }

@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Foundation
 import SwiftUI
 
@@ -40,6 +44,7 @@ struct OverlayColor: Codable, Equatable {
     }
 
     init(color: Color) {
+#if os(macOS)
         let srgbColor = NSColor(color).usingColorSpace(.sRGB)
             ?? NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
         self.init(
@@ -48,6 +53,28 @@ struct OverlayColor: Codable, Equatable {
             blue: Double(srgbColor.blueComponent),
             alpha: Double(srgbColor.alphaComponent)
         )
+#else
+        let platformColor = UIColor(color)
+        var convertedRed: CGFloat = 1
+        var convertedGreen: CGFloat = 1
+        var convertedBlue: CGFloat = 1
+        var convertedAlpha: CGFloat = 1
+        if platformColor.getRed(
+            &convertedRed,
+            green: &convertedGreen,
+            blue: &convertedBlue,
+            alpha: &convertedAlpha
+        ) {
+            self.init(
+                red: Double(convertedRed),
+                green: Double(convertedGreen),
+                blue: Double(convertedBlue),
+                alpha: Double(convertedAlpha)
+            )
+        } else {
+            self.init(red: 1, green: 1, blue: 1, alpha: 1)
+        }
+#endif
     }
 
     var color: Color {

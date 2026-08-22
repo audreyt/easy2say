@@ -1,3 +1,8 @@
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 struct SettingsControlRow<Content: View>: View {
@@ -97,6 +102,22 @@ struct SourceMultiSelectPicker: View {
     @Binding var selection: Set<String>
     @State private var isPresented = false
 
+    private var controlBackgroundColor: Color {
+#if os(macOS)
+        return Color(nsColor: .controlColor)
+#else
+        return Color(uiColor: .secondarySystemBackground)
+#endif
+    }
+
+    private var controlSeparatorColor: Color {
+#if os(macOS)
+        return Color(nsColor: .separatorColor)
+#else
+        return Color(uiColor: .separator)
+#endif
+    }
+
     private var allSourceIDs: Set<String> {
         Set(sources.map(\.id))
     }
@@ -143,11 +164,11 @@ struct SourceMultiSelectPicker: View {
                 .frame(minWidth: 180, minHeight: 32, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.fill.quaternary)
+                    .fill(controlBackgroundColor)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 0.5)
+                    .stroke(controlSeparatorColor.opacity(0.35), lineWidth: 0.5)
             )
             .overlay(alignment: .trailing) {
                 Image(systemName: "chevron.up.chevron.down")
@@ -367,6 +388,53 @@ struct LanguageResourcesFooter: View {
 
         if !model.languageResourceStatuses.isEmpty {
             LanguageResourceStatusListView(statuses: model.languageResourceStatuses)
+        }
+    }
+}
+
+struct LanguageResourceStatusListView: View {
+    let statuses: [LanguageResourceStatus]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(statuses) { status in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(status.title)
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                        if let progress = status.progress, status.isError == false {
+                            Text("\(Int((progress * 100).rounded()))%")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if status.isError {
+                        Text(status.detail)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    } else if let progress = status.progress {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity)
+                        Text(status.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity)
+                        Text(status.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 }
