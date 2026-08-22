@@ -349,6 +349,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             throw SessionError.unsupportedSpeechLocale(localeIdentifier)
         }
 
+        guard recognizer.supportsOnDeviceRecognition else {
+            throw SessionError.unsupportedSpeechLocale(localeIdentifier)
+        }
+
         guard recognizer.isAvailable else {
             throw SessionError.unavailableSpeechRecognizer(localeIdentifier)
         }
@@ -555,6 +559,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.addsPunctuation = true
+        request.requiresOnDeviceRecognition = true
         request.contextualStrings = recognitionContextualStrings
         return request
     }

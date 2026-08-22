@@ -33,6 +33,8 @@ final class AppModel: ObservableObject {
     private var draftClearTask: Task<Void, Never>?
     private var committedCaptionArchiveTask: Task<Void, Never>?
     private var languageResourcePreparationTask: Task<Void, Never>?
+    private var languageCatalogRefreshTask: Task<Void, Never>?
+    private var isRefreshingLanguageCatalogs = false
     private var activeDraftSourceLanguageID: String?
     private var activeDraftTargetLanguageID: String?
     private var lastDraftSourceID: String?
@@ -58,6 +60,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var statusMessage = ""
     @Published private(set) var overlayState: OverlayPreviewState?
     @Published private(set) var languageResourceStatuses: [LanguageResourceStatus] = []
+    @Published private(set) var speechLanguageOptions = LanguageCatalog.speechInput
+    @Published private(set) var translationLanguageOptions = LanguageCatalog.common
     @Published private(set) var translationHostConfiguration: TranslationSession.Configuration?
     @Published private(set) var transcriptEntries: [TranscriptEntry] = []
     @Published private(set) var transcriptGeneration: Int = 0
@@ -87,7 +91,9 @@ final class AppModel: ObservableObject {
         didSet {
             persistSettings()
             syncOverlayPreviewIfNeeded()
-            scheduleSelectedLanguageResourcePreparation(openSystemSettingsIfNeeded: true)
+            if isRefreshingLanguageCatalogs == false {
+                scheduleSelectedLanguageResourcePreparation(openSystemSettingsIfNeeded: true)
+            }
         }
     }
 
@@ -95,7 +101,7 @@ final class AppModel: ObservableObject {
         didSet {
             persistSettings()
             syncOverlayPreviewIfNeeded()
-            if sessionState != .running {
+            if sessionState != .running, isRefreshingLanguageCatalogs == false {
                 scheduleSelectedLanguageResourcePreparation(openSystemSettingsIfNeeded: true)
             }
         }
@@ -105,7 +111,7 @@ final class AppModel: ObservableObject {
         didSet {
             persistSettings()
             syncOverlayPreviewIfNeeded()
-            if sessionState != .running {
+            if sessionState != .running, isRefreshingLanguageCatalogs == false {
                 scheduleSelectedLanguageResourcePreparation(openSystemSettingsIfNeeded: true)
             }
         }
@@ -115,10 +121,12 @@ final class AppModel: ObservableObject {
         didSet {
             persistSettings()
             syncOverlayPreviewIfNeeded()
-            scheduleSelectedLanguageResourcePreparation(
-                refreshTranslations: liveTranscriptionSession != nil,
-                openSystemSettingsIfNeeded: true
-            )
+            if isRefreshingLanguageCatalogs == false {
+                scheduleSelectedLanguageResourcePreparation(
+                    refreshTranslations: liveTranscriptionSession != nil,
+                    openSystemSettingsIfNeeded: true
+                )
+            }
         }
     }
 
@@ -172,11 +180,9 @@ final class AppModel: ObservableObject {
             initialSelectedSourceIDs = [selectedSourceID]
         }
         self.selectedSourceIDs = initialSelectedSourceIDs
-        self.sourceLanguageOverrides = settings.sourceLanguageOverrides.mapValues {
-            LanguageCatalog.supportedSpeechInputLanguageID(for: $0)
-        }
+        self.sourceLanguageOverrides = settings.sourceLanguageOverrides
         self.sourceOutputLanguageOverrides = settings.sourceOutputLanguageOverrides
-        self.inputLanguageID = LanguageCatalog.supportedSpeechInputLanguageID(for: settings.inputLanguageID)
+        self.inputLanguageID = settings.inputLanguageID
         self.outputLanguageID = settings.outputLanguageID
         self.usesSystemInterfaceLanguage = settings.interfaceLanguageID == nil
         self.interfaceLanguageID = LanguageCatalog.preferredInterfaceLanguageID(
@@ -193,6 +199,10 @@ final class AppModel: ObservableObject {
         translationCoordinator.onConfigurationChange = { [weak self] configuration in
             self?.translationHostConfiguration = configuration
         }
+        translationCoordinator.localeIdentifierForLanguageID = { [weak self] languageID in
+            self?.translationLocaleIdentifier(for: languageID)
+                ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
+        }
 
         isBootstrapping = false
         applyStatusMessage()
@@ -200,6 +210,7 @@ final class AppModel: ObservableObject {
             persistSettings()
         }
         refreshSources()
+        refreshSupportedLanguageOptions()
     }
 
     convenience init() {
@@ -254,7 +265,7 @@ final class AppModel: ObservableObject {
 
     func setLanguageID(_ languageID: String, for source: InputSource) {
         var overrides = sourceLanguageOverrides
-        let normalizedLanguageID = LanguageCatalog.supportedSpeechInputLanguageID(for: languageID)
+        let normalizedLanguageID = supportedSpeechInputLanguageID(languageID)
         if normalizedLanguageID == inputLanguageID {
             overrides.removeValue(forKey: source.id)
         } else {
@@ -563,7 +574,7 @@ final class AppModel: ObservableObject {
                 let session = LiveTranscriptionSession()
                 try await session.start(
                     source: source,
-                    localeIdentifier: LanguageCatalog.speechLocaleIdentifier(for: sourceLanguageID),
+                    localeIdentifier: speechLocaleIdentifier(for: sourceLanguageID),
                     interfaceLanguageID: resolvedInterfaceLanguageID,
                     modeConfig: config,
                     contextualStrings: recognitionHints,
@@ -736,6 +747,75 @@ final class AppModel: ObservableObject {
         LanguageCatalog.displayName(for: identifier, in: resolvedInterfaceLanguageID)
     }
 
+    func supportedSpeechInputLanguageID(_ identifier: String) -> String {
+        speechLanguageOptions.contains(where: { $0.id == identifier }) ? identifier : "en"
+    }
+
+    private func speechLocaleIdentifier(for languageID: String) -> String {
+        speechLanguageOptions.first(where: { $0.id == languageID })?.localeIdentifier
+            ?? LanguageCatalog.speechLocaleIdentifier(for: languageID)
+    }
+
+    private func translationLocaleIdentifier(for languageID: String) -> String {
+        translationLanguageOptions.first(where: { $0.id == languageID })?.localeIdentifier
+            ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
+    }
+
+    private func refreshSupportedLanguageOptions() {
+        languageCatalogRefreshTask?.cancel()
+        languageCatalogRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let resolvedSpeechOptions = await self.loadSupportedSpeechLanguageOptions()
+            let resolvedTranslationOptions = await self.loadSupportedTranslationLanguageOptions()
+            guard Task.isCancelled == false else { return }
+
+            isRefreshingLanguageCatalogs = true
+            defer { isRefreshingLanguageCatalogs = false }
+
+            if resolvedSpeechOptions.isEmpty == false {
+                speechLanguageOptions = resolvedSpeechOptions
+                let supportedIDs = Set(resolvedSpeechOptions.map(\.id))
+                sourceLanguageOverrides = sourceLanguageOverrides.filter {
+                    supportedIDs.contains($0.value)
+                }
+                if supportedIDs.contains(inputLanguageID) == false {
+                    inputLanguageID = resolvedSpeechOptions.first(where: { $0.id == "en" })?.id
+                        ?? resolvedSpeechOptions[0].id
+                }
+            }
+
+            if resolvedTranslationOptions.isEmpty == false {
+                translationLanguageOptions = resolvedTranslationOptions
+                let supportedIDs = Set(resolvedTranslationOptions.map(\.id))
+                sourceOutputLanguageOverrides = sourceOutputLanguageOverrides.filter {
+                    supportedIDs.contains($0.value)
+                }
+                if supportedIDs.contains(outputLanguageID) == false {
+                    outputLanguageID = resolvedTranslationOptions.first(where: { $0.id == "en" })?.id
+                        ?? resolvedTranslationOptions[0].id
+                }
+            }
+        }
+    }
+
+    private func loadSupportedSpeechLanguageOptions() async -> [LanguageOption] {
+        var locales: [Locale] = []
+        if #available(macOS 26.0, *), SpeechTranscriber.isAvailable {
+            locales.append(contentsOf: await SpeechTranscriber.supportedLocales)
+        }
+
+        locales.append(contentsOf: SFSpeechRecognizer.supportedLocales().filter { locale in
+            SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true
+        })
+        return LanguageCatalog.options(for: locales)
+    }
+
+    private func loadSupportedTranslationLanguageOptions() async -> [LanguageOption] {
+        guard #available(macOS 15.0, *) else { return [] }
+        return LanguageCatalog.options(for: await LanguageAvailability().supportedLanguages)
+    }
+
     private func preferredPrimarySourceID(for selectedSourceIDs: Set<String>) -> String? {
         if let selectedSourceID, selectedSourceIDs.contains(selectedSourceID) {
             return selectedSourceID
@@ -905,9 +985,18 @@ final class AppModel: ObservableObject {
 
         let title = localized(.speechTitleFormat, languageName(for: languageID))
         let statusID = "speech:\(languageID)"
-        let requestedLocale = Locale(identifier: LanguageCatalog.speechLocaleIdentifier(for: languageID))
+        let requestedLocale = Locale(identifier: speechLocaleIdentifier(for: languageID))
+        let resolvedLocale = SpeechTranscriber.isAvailable
+            ? await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale)
+            : nil
 
-        guard let resolvedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let resolvedLocale else {
+            if let legacyRecognizer = SFSpeechRecognizer(locale: requestedLocale),
+               legacyRecognizer.supportsOnDeviceRecognition {
+                removeLanguageResourceStatus(id: statusID)
+                return nil
+            }
+
             upsertLanguageResourceStatus(
                 LanguageResourceStatus(
                     id: statusID,
@@ -1311,8 +1400,12 @@ final class AppModel: ObservableObject {
             return .unsupported
         }
 
-        let sourceLanguage = Locale.Language(identifier: sourceLanguageID)
-        let targetLanguage = Locale.Language(identifier: targetLanguageID)
+        let sourceLanguage = Locale.Language(
+            identifier: translationLocaleIdentifier(for: sourceLanguageID)
+        )
+        let targetLanguage = Locale.Language(
+            identifier: translationLocaleIdentifier(for: targetLanguageID)
+        )
         let availability = LanguageAvailability()
         return await availability.status(from: sourceLanguage, to: targetLanguage)
     }

@@ -96,6 +96,7 @@ final class TranslationCoordinator: ObservableObject {
     }
 
     var onConfigurationChange: ((TranslationSession.Configuration?) -> Void)?
+    var localeIdentifierForLanguageID: ((String) -> String)?
 
     private(set) var configuration: TranslationSession.Configuration? {
         didSet {
@@ -328,8 +329,8 @@ final class TranslationCoordinator: ObservableObject {
         // so SwiftUI's .translationTask() fires with a new session
         currentPair = LanguagePair(source: source, target: target)
         configuration = TranslationSession.Configuration(
-            source: Locale.Language(identifier: source),
-            target: Locale.Language(identifier: target)
+            source: Locale.Language(identifier: localeIdentifier(for: source)),
+            target: Locale.Language(identifier: localeIdentifier(for: target))
         )
     }
 
@@ -359,8 +360,8 @@ final class TranslationCoordinator: ObservableObject {
         if currentPair != pair || configuration == nil {
             currentPair = pair
             configuration = TranslationSession.Configuration(
-                source: Locale.Language(identifier: pair.source),
-                target: Locale.Language(identifier: pair.target)
+                source: Locale.Language(identifier: localeIdentifier(for: pair.source)),
+                target: Locale.Language(identifier: localeIdentifier(for: pair.target))
             )
             return
         }
@@ -597,8 +598,8 @@ final class TranslationCoordinator: ObservableObject {
             return .installed
         }
 
-        let sourceLanguage = Locale.Language(identifier: pair.source)
-        let targetLanguage = Locale.Language(identifier: pair.target)
+        let sourceLanguage = Locale.Language(identifier: localeIdentifier(for: pair.source))
+        let targetLanguage = Locale.Language(identifier: localeIdentifier(for: pair.target))
         let availability = LanguageAvailability()
         let availabilityStatus = await availability.status(from: sourceLanguage, to: targetLanguage)
 
@@ -611,5 +612,10 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         return availabilityStatus
+    }
+
+    private func localeIdentifier(for languageID: String) -> String {
+        localeIdentifierForLanguageID?(languageID)
+            ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
     }
 }

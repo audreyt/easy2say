@@ -171,12 +171,12 @@ enum AppTextKey: String {
 enum AppLocalization {
     static func resolvedInterfaceLanguageID(storedIdentifier: String?) -> String {
         if let storedIdentifier,
-           LanguageCatalog.common.contains(where: { $0.id == storedIdentifier }) {
+           LanguageCatalog.interface.contains(where: { $0.id == storedIdentifier }) {
             return storedIdentifier
         }
 
         return Bundle.preferredLocalizations(
-            from: LanguageCatalog.common.map(\.id),
+            from: LanguageCatalog.interface.map(\.id),
             forPreferences: Locale.preferredLanguages
         ).first ?? "en"
     }
