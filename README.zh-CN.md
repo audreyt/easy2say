@@ -50,12 +50,36 @@ v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 支持的语�
 
 ## 快速开始
 
+### 使用 Homebrew 安装
+
+```bash
+brew install --cask franklioxygen/v2s/v2s
+```
+
+v2s 尚未通过 Apple 公证，macOS 会在下载后将其隔离。执行一次下面的命令清除隔离标记，
+之后即可正常启动：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/v2s.app
+```
+
+如果之前手动安装过、`Applications` 里已经有 `v2s.app`，请加上 `--adopt`，让
+Homebrew 接管现有副本，而不是因为无法覆盖而报错。
+
+更新由应用内的更新器负责。如果希望改由 Homebrew 管理更新，可以运行
+`brew upgrade --cask --greedy v2s`。
+
+### 手动安装
+
 1. 从 [Releases](https://github.com/franklioxygen/v2s/releases) 页面下载最新的 `.app.zip`。
 2. 解压后将 `v2s.app` 移动到 `Applications` 文件夹。
-3. 启动 v2s，它会以图标形式出现在菜单栏中。
-4. 选择输入源：麦克风或某个正在运行的应用。
-5. 选择输入语言和字幕语言。
-6. 点击 **Start**。
+
+### 首次运行
+
+1. 启动 v2s，它会以图标形式出现在菜单栏中。
+2. 选择输入源：麦克风或某个正在运行的应用。
+3. 选择输入语言和字幕语言。
+4. 点击 **Start**。
 
 首次使用时，v2s 会请求以下权限：
 

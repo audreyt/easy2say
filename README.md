@@ -57,12 +57,37 @@ v2s asks Apple's Speech and Translation frameworks which languages the current M
 
 ## Getting Started
 
+### Install with Homebrew
+
+```bash
+brew install --cask franklioxygen/v2s/v2s
+```
+
+v2s is not notarized by Apple yet, so macOS quarantines it after download. Clear
+the flag once, then launch the app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/v2s.app
+```
+
+If you already have `v2s.app` in your Applications folder from a manual install,
+add `--adopt` so Homebrew takes over the existing copy instead of refusing to
+overwrite it.
+
+Updates arrive through the in-app updater. To let Homebrew handle them instead,
+run `brew upgrade --cask --greedy v2s`.
+
+### Install manually
+
 1. Download the latest `.app.zip` from [Releases](https://github.com/franklioxygen/v2s/releases).
 2. Unzip and move `v2s.app` to your Applications folder.
-3. Launch v2s — it appears as an icon in your menu bar.
-4. Select an input source (a running app or microphone).
-5. Choose your input and subtitle languages.
-6. Click **Start**.
+
+### First run
+
+1. Launch v2s — it appears as an icon in your menu bar.
+2. Select an input source (a running app or microphone).
+3. Choose your input and subtitle languages.
+4. Click **Start**.
 
 v2s will ask for permissions on first use:
 
