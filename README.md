@@ -40,7 +40,7 @@
 - Audio source selection for microphones and running macOS apps.
 - On-device speech transcription powered by Apple SpeechAnalyzer.
 - On-device translation powered by Apple Translation.
-- Transcript summarization powered by Apple Intelligence for quick overview of conversations.
+- Transcript summarization powered by Apple Intelligence, falling back to an on-device extractive summary when Apple Intelligence is unavailable.
 - Overlay styling controls so the subtitle bar stays readable on top of real work.
 
 ## Input and Subtitle Languages

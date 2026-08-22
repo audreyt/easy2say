@@ -33,8 +33,8 @@
 		A00000000000000000000063 /* ModeConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000042 /* ModeConfig.swift */; };
 		A00000000000000000000064 /* SegmentStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000043 /* SegmentStateMachine.swift */; };
 		A00000000000000000000065 /* SubtitleSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000044 /* SubtitleSegment.swift */; };
-		A00000000000000000000066 /* EntityCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000045 /* EntityCache.swift */; };
 		A00000000000000000000067 /* GlossaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000046 /* GlossaryService.swift */; };
+		A00000000000000000000092 /* TranslationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000093 /* TranslationCoordinator.swift */; };
 		A00000000000000000000068 /* SpeedMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000047 /* SpeedMonitor.swift */; };
 		A00000000000000000000079 /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000007A /* TranscriptView.swift */; };
 		A0000000000000000000007B /* SileroVADEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000007C /* SileroVADEngine.swift */; };
@@ -46,6 +46,7 @@
 		A0000000000000000000008C /* QuickSettingsControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000008D /* QuickSettingsControls.swift */; };
 		A0000000000000000000008E /* PopoverOutsideClickMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000008F /* PopoverOutsideClickMonitor.swift */; };
 		A00000000000000000000090 /* SentenceBoundaryHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */; };
+		A00000000000000000000094 /* TranscriptSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000095 /* TranscriptSummarizer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -77,8 +78,8 @@
 		A00000000000000000000042 /* ModeConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeConfig.swift; sourceTree = "<group>"; };
 		A00000000000000000000043 /* SegmentStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentStateMachine.swift; sourceTree = "<group>"; };
 		A00000000000000000000044 /* SubtitleSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleSegment.swift; sourceTree = "<group>"; };
-		A00000000000000000000045 /* EntityCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityCache.swift; sourceTree = "<group>"; };
 		A00000000000000000000046 /* GlossaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlossaryService.swift; sourceTree = "<group>"; };
+		A00000000000000000000093 /* TranslationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationCoordinator.swift; sourceTree = "<group>"; };
 		A00000000000000000000047 /* SpeedMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedMonitor.swift; sourceTree = "<group>"; };
 		A0000000000000000000007A /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		A0000000000000000000007C /* SileroVADEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SileroVADEngine.swift; sourceTree = "<group>"; };
@@ -88,6 +89,7 @@
 		A0000000000000000000008D /* QuickSettingsControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSettingsControls.swift; sourceTree = "<group>"; };
 		A0000000000000000000008F /* PopoverOutsideClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverOutsideClickMonitor.swift; sourceTree = "<group>"; };
 		A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceBoundaryHeuristics.swift; sourceTree = "<group>"; };
+		A00000000000000000000095 /* TranscriptSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSummarizer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -189,10 +191,11 @@
 		A0000000000000000000000F /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				A00000000000000000000045 /* EntityCache.swift */,
 				A00000000000000000000046 /* GlossaryService.swift */,
+				A00000000000000000000093 /* TranslationCoordinator.swift */,
 				A00000000000000000000041 /* LiveTranscriptionSession.swift */,
 				A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */,
+				A00000000000000000000095 /* TranscriptSummarizer.swift */,
 				A00000000000000000000039 /* SettingsStore.swift */,
 				A0000000000000000000007C /* SileroVADEngine.swift */,
 				A0000000000000000000008B /* SileroVADHysteresis.swift */,
@@ -373,9 +376,10 @@
 				A00000000000000000000058 /* SessionState.swift in Sources */,
 				A00000000000000000000083 /* SubtitleDisplayMode.swift in Sources */,
 				A00000000000000000000065 /* SubtitleSegment.swift in Sources */,
-				A00000000000000000000066 /* EntityCache.swift in Sources */,
 				A00000000000000000000067 /* GlossaryService.swift in Sources */,
+				A00000000000000000000092 /* TranslationCoordinator.swift in Sources */,
 				A00000000000000000000090 /* SentenceBoundaryHeuristics.swift in Sources */,
+				A00000000000000000000094 /* TranscriptSummarizer.swift in Sources */,
 				A00000000000000000000059 /* SettingsStore.swift in Sources */,
 				A0000000000000000000007B /* SileroVADEngine.swift in Sources */,
 				A0000000000000000000008A /* SileroVADHysteresis.swift in Sources */,
@@ -434,7 +438,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;
@@ -443,7 +447,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.3.32;
+				MARKETING_VERSION = 0.3.34;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -463,7 +467,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;
@@ -472,7 +476,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.3.32;
+				MARKETING_VERSION = 0.3.34;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
