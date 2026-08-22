@@ -6,8 +6,8 @@ import SwiftUI
 import Translation
 
 private enum AppBuildInfo {
-    static let marketingVersion = "0.3.32"
-    static let buildNumber = "36"
+    static let marketingVersion = "0.3.33"
+    static let buildNumber = "37"
     static let repositoryURLString = "https://github.com/franklioxygen/v2s"
     static let repositoryURL = URL(string: repositoryURLString)
 }
