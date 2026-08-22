@@ -22,14 +22,13 @@ same version again is allowed, so a rebuilt asset can correct a checksum.
 
 ## Setup
 
-The tap repository exists and is seeded with the cask for v0.3.35, so
-`brew install --cask franklioxygen/v2s/v2s` already works. One step is left
-before releases update it automatically:
+Setup is complete: the tap repository is seeded with the cask for v0.3.35, and
+the `HOMEBREW_TAP_TOKEN` secret is set, so releases update the tap on their own.
 
-- Create a fine-grained personal access token scoped to `homebrew-v2s` with
-  `Contents: Read and write` permission, and add it to this repository as the
-  `HOMEBREW_TAP_TOKEN` secret. Without it the release workflow logs a skip
-  instead of failing.
+That secret is a fine-grained personal access token scoped to `homebrew-v2s`
+with `Contents: Read and write` permission. If it is ever removed or expires,
+the release workflow logs a skip instead of failing, and the tap simply stops
+receiving new versions until it is replaced.
 
 To regenerate the cask by hand, from a checkout of the tap:
 
