@@ -45,7 +45,7 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: v2s-ios
         MARKETING_VERSION: "0.3.37"
-        CURRENT_PROJECT_VERSION: "43"
+        CURRENT_PROJECT_VERSION: "44"
     info:
       path: Info.plist
       properties:
@@ -65,6 +65,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: "v2s-ios uses the microphone to generate live subtitles entirely on device."
+        NSCameraUsageDescription: "v2s-ios does not capture video. This declaration is required because its on-device audio framework links Apple's camera-capable capture API."
         NSSpeechRecognitionUsageDescription: "v2s-ios uses on-device speech recognition to transcribe audio into subtitles."
         ITSAppUsesNonExemptEncryption: false
 schemes:
