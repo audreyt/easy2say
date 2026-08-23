@@ -39,6 +39,9 @@ final class AppModel: ObservableObject {
     private let settingsStore: SettingsStore
     private let sourceCatalogService: SourceCatalogService
     private let translationCoordinator = TranslationCoordinator()
+#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+    private let translateGemmaService = TranslateGemmaTranslationService()
+#endif
     private let glossaryService = GlossaryService()
     private let speedMonitor = SpeedMonitor()
     private var liveTranscriptionSession: LiveTranscriptionSession?
@@ -243,6 +246,21 @@ final class AppModel: ObservableObject {
             self?.translationLocaleIdentifier(for: languageID)
                 ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
         }
+#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+        let fallback = translateGemmaService
+        translationCoordinator.fallbackPrepare = { source, target in
+            guard #available(macOS 27.0, *) else {
+                throw TranslationCoordinator.ServiceError.unavailableOnSystem
+            }
+            try await fallback.prepare(from: source, to: target)
+        }
+        translationCoordinator.fallbackTranslate = { text, source, target in
+            guard #available(macOS 27.0, *) else {
+                throw TranslationCoordinator.ServiceError.unavailableOnSystem
+            }
+            return try await fallback.translate(text, from: source, to: target)
+        }
+#endif
 
         isBootstrapping = false
         applyStatusMessage()
@@ -663,6 +681,9 @@ final class AppModel: ObservableObject {
 
             if sourceLanguageID == "nan" {
                 setStatus(.custom(localized(.taigiPreparingModel)))
+            }
+            if sourceLanguageID == "bo" {
+                setStatus(.custom(localized(.tibetanPreparingModel)))
             }
             do {
                 try await session.start(
@@ -1101,6 +1122,16 @@ final class AppModel: ObservableObject {
             onDeviceLocaleIdentifiers.insert(taigiLocale.identifier)
         }
 #endif
+#if os(macOS) && canImport(WhisperKit)
+        if Bundle.main.url(
+            forResource: "MonlamWhisperTibetan",
+            withExtension: nil
+        ) != nil {
+            let tibetanLocale = Locale(identifier: "bo")
+            locales.append(tibetanLocale)
+            onDeviceLocaleIdentifiers.insert(tibetanLocale.identifier)
+        }
+#endif
 
         // Keep server-capable legacy locales available on macOS, where upstream
         // deliberately discloses that tradeoff. The iOS fork promises local-only
@@ -1130,7 +1161,22 @@ final class AppModel: ObservableObject {
 
     private func loadSupportedTranslationLanguageOptions() async -> [LanguageOption] {
         guard #available(macOS 15.0, *) else { return [] }
-        return LanguageCatalog.options(for: await LanguageAvailability().supportedLanguages)
+        var options = LanguageCatalog.options(
+            for: await LanguageAvailability().supportedLanguages
+        )
+#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+        if Bundle.main.url(forResource: "TranslateGemma", withExtension: nil) != nil,
+           options.contains(where: { $0.id == "bo" }) == false {
+            options.append(
+                LanguageOption(
+                    id: "bo",
+                    displayName: "Tibetan",
+                    localeIdentifier: "bo"
+                )
+            )
+        }
+#endif
+        return options
     }
 
     private func preferredPrimarySourceID(for selectedSourceIDs: Set<String>) -> String? {
@@ -1164,14 +1210,15 @@ final class AppModel: ObservableObject {
                         targetLanguageID: effectiveOutputLanguageID
                     ),
                 ]
-            let speechLanguages = inputLanguageID == "nan" ? [] : [inputLanguageID]
+            let usesLocalSpeechModel = inputLanguageID == "nan" || inputLanguageID == "bo"
+            let speechLanguages = usesLocalSpeechModel ? [] : [inputLanguageID]
             return (speechLanguages, translationPairs)
         }
 
         let speechLanguageIDs = Set(
             selectedSources
                 .map { languageID(for: $0) }
-                .filter { $0 != "nan" }
+                .filter { $0 != "nan" && $0 != "bo" }
         ).sorted()
         let translationPairs = Set(
             selectedSources.compactMap { source -> LanguagePairRequirement? in
@@ -1505,6 +1552,7 @@ final class AppModel: ObservableObject {
         let downloadingDetail = localized(.downloadingTranslationResources)
         let waitingDetail = localized(.waitingTranslationResourcesInstalling)
         let manualDownloadDetail = localized(.manualTranslationDownloadDetail)
+        let localFallbackDetail = localized(.preparingLocalTranslationFallback)
         let maxAttempts = 3
         var attemptCount = 0
 
@@ -1518,14 +1566,34 @@ final class AppModel: ObservableObject {
             case .unsupported:
                 upsertLanguageResourceStatus(
                     LanguageResourceStatus(
-                    id: statusID,
-                    kind: .translation,
-                    title: title,
-                    detail: localized(.translationNotSupportedPairOnMacOS),
-                    progress: nil,
-                    isError: true
+                        id: statusID,
+                        kind: .translation,
+                        title: title,
+                        detail: localFallbackDetail,
+                        progress: nil,
+                        isError: false
+                    )
                 )
-                )
+                do {
+                    try await prepareTranslationResourceWithTimeout(
+                        from: sourceLanguageID,
+                        to: targetLanguageID
+                    )
+                    removeLanguageResourceStatus(id: statusID)
+                } catch is CancellationError {
+                    removeLanguageResourceStatus(id: statusID)
+                } catch {
+                    upsertLanguageResourceStatus(
+                        LanguageResourceStatus(
+                            id: statusID,
+                            kind: .translation,
+                            title: title,
+                            detail: localizedErrorDescription(error),
+                            progress: nil,
+                            isError: true
+                        )
+                    )
+                }
                 return nil
             case .supported, .installed:
                 attemptCount += 1

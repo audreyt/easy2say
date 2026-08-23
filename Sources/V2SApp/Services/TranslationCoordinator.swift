@@ -97,6 +97,9 @@ final class TranslationCoordinator: ObservableObject {
 
     var onConfigurationChange: ((TranslationSession.Configuration?) -> Void)?
     var localeIdentifierForLanguageID: ((String) -> String)?
+    /// Optional local backend used only when Apple reports a pair unsupported.
+    var fallbackPrepare: ((String, String) async throws -> Void)?
+    var fallbackTranslate: ((String, String, String) async throws -> String)?
 
     private(set) var configuration: TranslationSession.Configuration? {
         didSet {
@@ -132,7 +135,19 @@ final class TranslationCoordinator: ObservableObject {
 
         let pair = LanguagePair(source: sourceIdentifier, target: targetIdentifier)
         let requestGeneration = generation
-        let status = try await availabilityStatus(for: pair)
+        let status: LanguageAvailability.Status
+        do {
+            status = try await availabilityStatus(for: pair)
+        } catch let error as ServiceError {
+            guard shouldUseFallback(for: error), let fallbackPrepare else {
+                throw error
+            }
+            try await fallbackPrepare(sourceIdentifier, targetIdentifier)
+            guard requestGeneration == generation else {
+                throw CancellationError()
+            }
+            return
+        }
         guard requestGeneration == generation else {
             throw CancellationError()
         }
@@ -176,7 +191,23 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         let requestGeneration = generation
-        _ = try await availabilityStatus(for: pair)
+        do {
+            _ = try await availabilityStatus(for: pair)
+        } catch let error as ServiceError {
+            guard shouldUseFallback(for: error), let fallbackTranslate else {
+                throw error
+            }
+            let result = try await fallbackTranslate(
+                trimmedText,
+                sourceIdentifier,
+                targetIdentifier
+            )
+            guard requestGeneration == generation else {
+                throw CancellationError()
+            }
+            memoizeTranslation(result, pair: pair, sourceText: trimmedText)
+            return result
+        }
         guard requestGeneration == generation else {
             throw CancellationError()
         }
@@ -586,6 +617,13 @@ final class TranslationCoordinator: ObservableObject {
             continuation.resume(throwing: error)
         } else {
             continuation.resume(returning: result ?? "")
+        }
+    }
+
+    private func shouldUseFallback(for error: ServiceError) -> Bool {
+        switch error {
+        case .unsupportedPair, .unavailableOnSystem:
+            return true
         }
     }
 

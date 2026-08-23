@@ -118,6 +118,7 @@ enum AppTextKey: String, CaseIterable {
     case downloadingSpeechResources
     case translationNotSupportedPairOnMacOS
     case downloadingTranslationResources
+    case preparingLocalTranslationFallback
     case waitingTranslationResourcesInstalling
     case manualTranslationDownloadDetail
     case speechResourcesNotSupportedOnMacOS
@@ -203,6 +204,11 @@ enum AppTextKey: String, CaseIterable {
     case taigiEmptyTranscript
     case taigiLanguageName
     case taigiPreparingModel
+    case translateGemmaModelMissing
+    case translateGemmaEmptyTranslation
+    case tibetanModelMissing
+    case tibetanEmptyTranscript
+    case tibetanPreparingModel
 }
 
 enum AppLocalization {
@@ -439,6 +445,7 @@ enum AppLocalization {
             "downloadingSpeechResources": "Downloading on-device speech recognition resources...",
             "translationNotSupportedPairOnMacOS": "Translation is not supported for this language pair on this macOS version.",
             "downloadingTranslationResources": "Downloading on-device translation resources...",
+            "preparingLocalTranslationFallback": "Preparing the local translation fallback...",
             "waitingTranslationResourcesInstalling": "Waiting for translation resources to finish installing...",
             "manualTranslationDownloadDetail": "This translation download may still be in progress. macOS language packages can be large and may take longer than expected. Open macOS System Settings > General > Language & Region > Translation Languages to check the download progress and finish downloading this translation language if needed.",
             "speechResourcesNotSupportedOnMacOS": "Speech recognition resources are not supported for this language on this macOS version.",
@@ -524,6 +531,11 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 could not recognize this Taigi utterance.",
             "taigiLanguageName": "Taiwanese Hokkien (Mandarin-character transcription)",
             "taigiPreparingModel": "Preparing Breeze-ASR-26. The first load can take several minutes; later starts are cached.",
+            "translateGemmaModelMissing": "The local TranslateGemma fallback model is unavailable.",
+            "translateGemmaEmptyTranslation": "TranslateGemma returned an empty translation.",
+            "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
+            "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
+            "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
         ],
         "zh-Hans": [
             "start": "开始",
@@ -638,6 +650,7 @@ enum AppLocalization {
             "downloadingSpeechResources": "正在下载本地语音识别资源...",
             "translationNotSupportedPairOnMacOS": "当前 macOS 版本不支持此语言对的翻译。",
             "downloadingTranslationResources": "正在下载本地翻译资源...",
+            "preparingLocalTranslationFallback": "正在准备本机翻译备用模型...",
             "waitingTranslationResourcesInstalling": "正在等待翻译资源安装完成...",
             "manualTranslationDownloadDetail": "该翻译下载可能仍在进行中。macOS 的语言资源包通常较大，下载时间可能比预期更长。请打开 macOS 系统设置 > 通用 > 语言与地区 > 翻译语言，查看下载进度，并在需要时完成该翻译语言的下载。",
             "speechResourcesNotSupportedOnMacOS": "当前 macOS 版本不支持此语言的语音识别资源。",
@@ -723,6 +736,11 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 无法识别这段台语语音。",
             "taigiLanguageName": "台语（华文转写）",
             "taigiPreparingModel": "正在准备 Breeze-ASR-26。首次加载可能需要数分钟，之后启动会使用缓存。",
+            "translateGemmaModelMissing": "本机 TranslateGemma 备用模型无法使用。",
+            "translateGemmaEmptyTranslation": "TranslateGemma 未生成翻译内容。",
+            "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
+            "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
+            "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
         ],
         "zh-Hant": [
             "start": "開始",
@@ -837,6 +855,7 @@ enum AppLocalization {
             "downloadingSpeechResources": "正在下載本機語音辨識資源...",
             "translationNotSupportedPairOnMacOS": "目前的 macOS 版本不支援此語言對的翻譯。",
             "downloadingTranslationResources": "正在下載本機翻譯資源...",
+            "preparingLocalTranslationFallback": "正在準備本機翻譯備援模型...",
             "waitingTranslationResourcesInstalling": "正在等待翻譯資源安裝完成...",
             "manualTranslationDownloadDetail": "該翻譯的下載可能仍在進行中。macOS 的語言資源套件通常較大，下載時間可能比預期更長。請打開 macOS「系統設定」>「一般」>「語言與地區」>「翻譯語言」查看下載進度，並在需要時完成該翻譯語言的下載。",
             "speechResourcesNotSupportedOnMacOS": "目前的 macOS 版本不支援此語言的語音辨識資源。",
@@ -922,6 +941,11 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 無法辨識這段台語語音。",
             "taigiLanguageName": "台語（華文轉寫）",
             "taigiPreparingModel": "正在準備 Breeze-ASR-26。首次載入可能需要數分鐘，之後啟動會使用快取。",
+            "translateGemmaModelMissing": "本機 TranslateGemma 備援模型無法使用。",
+            "translateGemmaEmptyTranslation": "TranslateGemma 未產生翻譯內容。",
+            "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
+            "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
+            "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",
         ],
         "es": [
             "start": "Iniciar",

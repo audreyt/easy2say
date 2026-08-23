@@ -90,6 +90,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         case speechAnalyzer
 #if canImport(WhisperKit)
         case localTaigi
+#if os(macOS)
+        case localTibetan
+#endif
 #endif
     }
 
@@ -187,14 +190,30 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
 #if canImport(WhisperKit)
     private var taigiEngine: TaigiASREngine?
-    private var taigiPreRoll: [Float] = []
-    private var taigiSegment: [Float] = []
-    private var taigiSpeechActive = false
-    private var taigiPendingSegments: [[Float]] = []
-    private var taigiTranscriptionTask: Task<Void, Never>?
-    private let taigiPreRollSampleCount = 4_800  // 300 ms at 16 kHz
-    private let taigiMinimumSegmentSampleCount = 4_000
-    private let taigiMaximumSegmentSampleCount = 240_000  // 15 seconds
+#if os(macOS)
+    private var tibetanEngine: TibetanASREngine?
+#endif
+    private var usesLocalWhisperRecognizer: Bool {
+        switch recognitionBackend {
+        case .localTaigi:
+            return true
+#if os(macOS)
+        case .localTibetan:
+            return true
+#endif
+        default:
+            return false
+        }
+    }
+
+    private var localASRPreRoll: [Float] = []
+    private var localASRSegment: [Float] = []
+    private var localASRSpeechActive = false
+    private var localASRPendingSegments: [[Float]] = []
+    private var localASRTranscriptionTask: Task<Void, Never>?
+    private let localASRPreRollSampleCount = 4_800  // 300 ms at 16 kHz
+    private let localASRMinimumSegmentSampleCount = 4_000
+    private let localASRMaximumSegmentSampleCount = 240_000  // 15 seconds
 #endif
 
     private var microphoneCaptureSession: AVCaptureSession?
@@ -292,9 +311,15 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         try await ensureStartupIsCurrent(startGeneration)
 
         let usesLocalTaigi = localeIdentifier.lowercased().hasPrefix("nan")
+#if os(macOS) && canImport(WhisperKit)
+        let usesLocalTibetan = localeIdentifier.lowercased().hasPrefix("bo")
+#else
+        let usesLocalTibetan = false
+#endif
         try await requestRequiredPermissions(
             for: source,
-            requiresSpeechAuthorization: usesLocalTaigi == false
+            requiresSpeechAuthorization:
+                usesLocalTaigi == false && usesLocalTibetan == false
         )
         try await ensureStartupIsCurrent(startGeneration)
 #if canImport(WhisperKit)
@@ -304,14 +329,24 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             try await runOnCaptureQueue {
                 try self.configureLocalTaigiRecognizer(engine)
             }
-        } else {
+        }
+#if os(macOS)
+        if usesLocalTibetan {
+            let engine = try await TibetanASREngine.load()
+            try await ensureStartupIsCurrent(startGeneration)
+            try await runOnCaptureQueue {
+                try self.configureLocalTibetanRecognizer(engine)
+            }
+        }
+#endif
+        if usesLocalTaigi == false, usesLocalTibetan == false {
             let configuredModern = try await configureModernSpeechRecognizer(
                 localeIdentifier: localeIdentifier
             )
             try await ensureStartupIsCurrent(startGeneration)
             if configuredModern == false {
-            try await runOnCaptureQueue {
-                try self.configureSpeechRecognizer(localeIdentifier: localeIdentifier)
+                try await runOnCaptureQueue {
+                    try self.configureSpeechRecognizer(localeIdentifier: localeIdentifier)
                 }
             }
         }
@@ -412,13 +447,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         resetRecognitionFailureState()
         recognitionGeneration &+= 1
 #if canImport(WhisperKit)
-        taigiTranscriptionTask?.cancel()
-        taigiTranscriptionTask = nil
+        localASRTranscriptionTask?.cancel()
+        localASRTranscriptionTask = nil
         taigiEngine = nil
-        taigiPreRoll.removeAll(keepingCapacity: false)
-        taigiSegment.removeAll(keepingCapacity: false)
-        taigiPendingSegments.removeAll()
-        taigiSpeechActive = false
+#if os(macOS)
+        tibetanEngine = nil
+#endif
+        localASRPreRoll.removeAll(keepingCapacity: false)
+        localASRSegment.removeAll(keepingCapacity: false)
+        localASRPendingSegments.removeAll()
+        localASRSpeechActive = false
 #endif
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
@@ -492,10 +530,38 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         recognitionTask = nil
         recognitionBackend = .localTaigi
         taigiEngine = engine
-        taigiPreRoll.removeAll(keepingCapacity: true)
-        taigiSegment.removeAll(keepingCapacity: true)
-        taigiPendingSegments.removeAll()
-        taigiSpeechActive = false
+#if os(macOS)
+        tibetanEngine = nil
+#endif
+        localASRPreRoll.removeAll(keepingCapacity: true)
+        localASRSegment.removeAll(keepingCapacity: true)
+        localASRPendingSegments.removeAll()
+        localASRSpeechActive = false
+        resetRecognitionFailureState()
+        resetAudioProcessingState()
+        resetLegacyTranscriptionState()
+        resetModernTranscriptionState()
+        cancelSilenceTimer()
+        cancelVADSilenceTimer()
+        resetDraftState()
+        vadEngine = try SileroVADEngine()
+    }
+#endif
+#if os(macOS) && canImport(WhisperKit)
+    private func configureLocalTibetanRecognizer(
+        _ engine: TibetanASREngine
+    ) throws {
+        stopModernSpeechRecognizer()
+        speechRecognizer = nil
+        recognitionRequest = nil
+        recognitionTask = nil
+        recognitionBackend = .localTibetan
+        tibetanEngine = engine
+        taigiEngine = nil
+        localASRPreRoll.removeAll(keepingCapacity: true)
+        localASRSegment.removeAll(keepingCapacity: true)
+        localASRPendingSegments.removeAll()
+        localASRSpeechActive = false
         resetRecognitionFailureState()
         resetAudioProcessingState()
         resetLegacyTranscriptionState()
@@ -999,7 +1065,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             lastVADProbability = vadResult.speechProbability
 
 #if canImport(WhisperKit)
-            let usesASRSilenceTimers = recognitionBackend != .localTaigi
+            let usesASRSilenceTimers = usesLocalWhisperRecognizer == false
 #else
             let usesASRSilenceTimers = true
 #endif
@@ -1014,8 +1080,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
 #if canImport(WhisperKit)
-        if recognitionBackend == .localTaigi {
-            appendToLocalTaigi(processingBuffer, vadResult: currentVADResult)
+        if usesLocalWhisperRecognizer {
+            appendToLocalWhisper(processingBuffer, vadResult: currentVADResult)
             return
         }
 #endif
@@ -1053,7 +1119,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
 #if canImport(WhisperKit)
-    private func appendToLocalTaigi(
+    private func appendToLocalWhisper(
         _ processingBuffer: AVAudioPCMBuffer,
         vadResult: VADResult?
     ) {
@@ -1066,88 +1132,120 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         )
         guard samples.isEmpty == false else { return }
 
-        let startsSpeech = taigiSpeechActive == false
+        let startsSpeech = localASRSpeechActive == false
             && (vadResult?.containsSpeechOnset == true || vadResult?.isSpeech == true)
         if startsSpeech {
-            taigiSpeechActive = true
-            taigiSegment = taigiPreRoll
-            taigiPreRoll.removeAll(keepingCapacity: true)
+            localASRSpeechActive = true
+            localASRSegment = localASRPreRoll
+            localASRPreRoll.removeAll(keepingCapacity: true)
         }
 
-        if taigiSpeechActive {
-            taigiSegment.append(contentsOf: samples)
+        if localASRSpeechActive {
+            localASRSegment.append(contentsOf: samples)
         } else {
-            taigiPreRoll.append(contentsOf: samples)
-            if taigiPreRoll.count > taigiPreRollSampleCount {
-                taigiPreRoll.removeFirst(
-                    taigiPreRoll.count - taigiPreRollSampleCount
+            localASRPreRoll.append(contentsOf: samples)
+            if localASRPreRoll.count > localASRPreRollSampleCount {
+                localASRPreRoll.removeFirst(
+                    localASRPreRoll.count - localASRPreRollSampleCount
                 )
             }
         }
 
         let endsSpeech = vadResult?.containsSpeechOffset == true
-        let reachesMaximum = taigiSegment.count >= taigiMaximumSegmentSampleCount
-        guard taigiSpeechActive, endsSpeech || reachesMaximum else { return }
+        let reachesMaximum = localASRSegment.count >= localASRMaximumSegmentSampleCount
+        guard localASRSpeechActive, endsSpeech || reachesMaximum else { return }
 
-        enqueueTaigiSegment(taigiSegment)
-        taigiSegment.removeAll(keepingCapacity: true)
+        enqueueLocalASRSegment(localASRSegment)
+        localASRSegment.removeAll(keepingCapacity: true)
         if endsSpeech, vadResult?.isSpeech == true {
             // One capture buffer can contain offset then a new onset. Preserve the
             // ambiguous buffer as pre-roll for the new segment rather than dropping
             // the newly-started utterance.
-            taigiSpeechActive = true
-            taigiSegment = samples
+            localASRSpeechActive = true
+            localASRSegment = samples
         } else {
-            taigiSpeechActive = endsSpeech == false
+            localASRSpeechActive = endsSpeech == false
         }
-        if taigiSpeechActive == false {
-            taigiPreRoll.removeAll(keepingCapacity: true)
+        if localASRSpeechActive == false {
+            localASRPreRoll.removeAll(keepingCapacity: true)
         }
     }
 
-    private func enqueueTaigiSegment(_ audio: [Float]) {
-        guard audio.count >= taigiMinimumSegmentSampleCount else { return }
-        taigiPendingSegments.append(audio)
-        startNextTaigiTranscriptionIfNeeded()
+    private func enqueueLocalASRSegment(_ audio: [Float]) {
+        guard audio.count >= localASRMinimumSegmentSampleCount else { return }
+        localASRPendingSegments.append(audio)
+        startNextLocalASRTranscriptionIfNeeded()
     }
 
-    private func startNextTaigiTranscriptionIfNeeded() {
-        guard taigiTranscriptionTask == nil,
-              let engine = taigiEngine,
-              taigiPendingSegments.isEmpty == false else {
+    private func startNextLocalASRTranscriptionIfNeeded() {
+        guard localASRTranscriptionTask == nil,
+              localASRPendingSegments.isEmpty == false else {
             return
         }
 
-        let audio = taigiPendingSegments.removeFirst()
+        let transcribe: @Sendable ([Float]) async throws -> String
+        switch recognitionBackend {
+        case .localTaigi:
+            guard let engine = taigiEngine else { return }
+            transcribe = { audio in
+                try await engine.transcribe(audio)
+            }
+#if os(macOS)
+        case .localTibetan:
+            guard let engine = tibetanEngine else { return }
+            transcribe = { audio in
+                try await engine.transcribe(audio)
+            }
+#endif
+        default:
+            return
+        }
+
+        let audio = localASRPendingSegments.removeFirst()
         let generation = recognitionGeneration
-        taigiTranscriptionTask = Task { [weak self] in
+        localASRTranscriptionTask = Task { [weak self] in
             guard let self else { return }
             defer {
                 self.captureQueue.async { [weak self] in
                     guard let self, self.recognitionGeneration == generation else {
                         return
                     }
-                    self.taigiTranscriptionTask = nil
-                    self.startNextTaigiTranscriptionIfNeeded()
+                    self.localASRTranscriptionTask = nil
+                    self.startNextLocalASRTranscriptionIfNeeded()
                 }
             }
 
             do {
-                let text = try await engine.transcribe(audio)
+                let text = try await transcribe(audio)
                 guard Task.isCancelled == false else { return }
                 if let prepared = await self.prepareCommittedSentenceForEmission(text) {
                     await self.emitRecognizedText(prepared)
                 }
-            } catch TaigiASREngine.EngineError.emptyTranscript {
-                // False VAD onset or breath/noise: skip this slice and keep listening.
-                return
             } catch is CancellationError {
                 return
             } catch {
+                if Self.isEmptyLocalTranscriptError(error) {
+                    // False VAD onset or breath/noise: skip this slice and keep listening.
+                    return
+                }
                 let message = self.localizedErrorDescription(error)
                 await self.emitFatalError(message)
             }
         }
+    }
+
+    private static func isEmptyLocalTranscriptError(_ error: Error) -> Bool {
+        if let engineError = error as? TaigiASREngine.EngineError,
+           case .emptyTranscript = engineError {
+            return true
+        }
+#if os(macOS)
+        if let engineError = error as? TibetanASREngine.EngineError,
+           case .emptyTranscript = engineError {
+            return true
+        }
+#endif
+        return false
     }
 #endif
 

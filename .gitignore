@@ -28,8 +28,10 @@ tmp/
 dist/
 reports/
 
-# Downloaded on-device ASR assets (fetched reproducibly by script)
+# Downloaded or locally converted model assets
 /ios/Resources/BreezeASR26/
+/macOS/Resources/TranslateGemma/
+/macOS/Resources/MonlamWhisperTibetan/
 .claude/worktrees/
 
 

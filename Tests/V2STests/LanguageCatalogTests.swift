@@ -136,6 +136,14 @@ final class LanguageCatalogTests: XCTestCase {
         )
     }
 
+    func testRuntimeLocaleCanExposeTibetanWithoutAdvertisingItByDefault() {
+        let options = LanguageCatalog.options(for: [Locale(identifier: "bo")])
+
+        XCTAssertFalse(LanguageCatalog.speechInput.contains(where: { $0.id == "bo" }))
+        XCTAssertEqual(options.map(\.id), ["bo"])
+        XCTAssertEqual(options.first?.localeIdentifier, "bo")
+    }
+
     func testUnsupportedStoredSpeechInputFallsBackToEnglish() {
         XCTAssertEqual(LanguageCatalog.supportedSpeechInputLanguageID(for: "xx"), "en")
         XCTAssertEqual(LanguageCatalog.supportedSpeechInputLanguageID(for: "it"), "it")
