@@ -183,6 +183,22 @@ enum AppTextKey: String, CaseIterable {
     case iosAccentViolet
     case iosAccentCoral
     case iosSettings
+    case conversationMode
+    case conversationCaptionsMode
+    case conversationStart
+    case conversationStop
+    case conversationPreparing
+    case conversationListening
+    case conversationClaimFloorFormat
+    case conversationEmptyHint
+    case conversationFaceToFace
+    case conversationFaceToFaceHint
+    case conversationYourLanguage
+    case conversationTheirLanguage
+    case conversationClear
+    case conversationSameLanguage
+    case conversationUnavailableFormat
+    case conversationSpeakingFormat
 }
 
 enum AppLocalization {
@@ -484,6 +500,22 @@ enum AppLocalization {
             "iosAccentViolet": "Violet",
             "iosAccentCoral": "Coral",
             "iosSettings": "Settings",
+            "conversationMode": "Conversation",
+            "conversationCaptionsMode": "Captions",
+            "conversationStart": "Start conversation",
+            "conversationStop": "End conversation",
+            "conversationPreparing": "Preparing both languages…",
+            "conversationListening": "Listening in both languages",
+            "conversationClaimFloorFormat": "Speak %@",
+            "conversationEmptyHint": "Just talk. Each side reads the conversation in their own language.",
+            "conversationFaceToFace": "Face to face",
+            "conversationFaceToFaceHint": "Turns the other person's half upside down so it reads across a table.",
+            "conversationYourLanguage": "Your language",
+            "conversationTheirLanguage": "Their language",
+            "conversationClear": "Clear conversation",
+            "conversationSameLanguage": "Pick two different languages.",
+            "conversationUnavailableFormat": "Conversation needs an on-device speech model for %@ on this device.",
+            "conversationSpeakingFormat": "%@ speaking",
         ],
         "zh-Hans": [
             "start": "开始",
@@ -663,6 +695,22 @@ enum AppLocalization {
             "iosAccentViolet": "紫罗兰",
             "iosAccentCoral": "珊瑚",
             "iosSettings": "设置",
+            "conversationMode": "对话",
+            "conversationCaptionsMode": "字幕",
+            "conversationStart": "开始对话",
+            "conversationStop": "结束对话",
+            "conversationPreparing": "正在准备两种语言…",
+            "conversationListening": "正在聆听两种语言",
+            "conversationClaimFloorFormat": "用%@说话",
+            "conversationEmptyHint": "直接说话即可。双方都能用自己的语言阅读整段对话。",
+            "conversationFaceToFace": "面对面",
+            "conversationFaceToFaceHint": "将对方那一半屏幕上下翻转，方便隔桌阅读。",
+            "conversationYourLanguage": "你的语言",
+            "conversationTheirLanguage": "对方的语言",
+            "conversationClear": "清空对话",
+            "conversationSameLanguage": "请选择两种不同的语言。",
+            "conversationUnavailableFormat": "此设备需要%@的设备端语音模型才能使用对话功能。",
+            "conversationSpeakingFormat": "%@正在说话",
         ],
         "zh-Hant": [
             "start": "開始",
@@ -842,6 +890,22 @@ enum AppLocalization {
             "iosAccentViolet": "紫羅蘭",
             "iosAccentCoral": "珊瑚",
             "iosSettings": "設定",
+            "conversationMode": "對話",
+            "conversationCaptionsMode": "字幕",
+            "conversationStart": "開始對話",
+            "conversationStop": "結束對話",
+            "conversationPreparing": "正在準備兩種語言…",
+            "conversationListening": "正在聆聽兩種語言",
+            "conversationClaimFloorFormat": "用%@說話",
+            "conversationEmptyHint": "直接開口就好。雙方都會以自己的語言看到完整對話。",
+            "conversationFaceToFace": "面對面",
+            "conversationFaceToFaceHint": "將對方那一半螢幕上下翻轉，方便隔桌閱讀。",
+            "conversationYourLanguage": "你的語言",
+            "conversationTheirLanguage": "對方的語言",
+            "conversationClear": "清除對話",
+            "conversationSameLanguage": "請選擇兩種不同的語言。",
+            "conversationUnavailableFormat": "這台裝置需要%@的裝置端語音模型，才能使用對話功能。",
+            "conversationSpeakingFormat": "%@正在說話",
         ],
         "es": [
             "start": "Iniciar",

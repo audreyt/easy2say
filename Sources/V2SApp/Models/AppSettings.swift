@@ -7,6 +7,10 @@ struct AppSettings: Codable {
     var sourceOutputLanguageOverrides: [String: String]
     var inputLanguageID: String
     var outputLanguageID: String
+    var conversationPrimaryLanguageID: String
+    var conversationSecondaryLanguageID: String
+    var conversationFaceToFace: Bool
+    var conversationModeActive: Bool
     var interfaceLanguageID: String?
     var overlayStyle: OverlayStyle
     var subtitleMode: SubtitleMode
@@ -20,6 +24,10 @@ struct AppSettings: Codable {
         sourceOutputLanguageOverrides: [:],
         inputLanguageID: "en",
         outputLanguageID: "zh-Hant",
+        conversationPrimaryLanguageID: "zh-Hant",
+        conversationSecondaryLanguageID: "en",
+        conversationFaceToFace: true,
+        conversationModeActive: false,
         interfaceLanguageID: nil,
         overlayStyle: .default,
         subtitleMode: .balanced,
@@ -42,6 +50,14 @@ struct AppSettings: Codable {
             ?? AppSettings.default.inputLanguageID
         outputLanguageID = (try? c.decodeIfPresent(String.self, forKey: .outputLanguageID))
             ?? AppSettings.default.outputLanguageID
+        conversationPrimaryLanguageID = (try? c.decodeIfPresent(String.self, forKey: .conversationPrimaryLanguageID))
+            ?? AppSettings.default.conversationPrimaryLanguageID
+        conversationSecondaryLanguageID = (try? c.decodeIfPresent(String.self, forKey: .conversationSecondaryLanguageID))
+            ?? AppSettings.default.conversationSecondaryLanguageID
+        conversationFaceToFace = (try? c.decodeIfPresent(Bool.self, forKey: .conversationFaceToFace))
+            ?? AppSettings.default.conversationFaceToFace
+        conversationModeActive = (try? c.decodeIfPresent(Bool.self, forKey: .conversationModeActive))
+            ?? AppSettings.default.conversationModeActive
         interfaceLanguageID = try? c.decodeIfPresent(String.self, forKey: .interfaceLanguageID)
         overlayStyle = (try? c.decodeIfPresent(OverlayStyle.self, forKey: .overlayStyle))
             ?? AppSettings.default.overlayStyle
@@ -60,6 +76,10 @@ struct AppSettings: Codable {
         sourceOutputLanguageOverrides: [String: String] = [:],
         inputLanguageID: String,
         outputLanguageID: String,
+        conversationPrimaryLanguageID: String = "zh-Hant",
+        conversationSecondaryLanguageID: String = "en",
+        conversationFaceToFace: Bool = true,
+        conversationModeActive: Bool = false,
         interfaceLanguageID: String?,
         overlayStyle: OverlayStyle,
         subtitleMode: SubtitleMode,
@@ -72,6 +92,10 @@ struct AppSettings: Codable {
         self.sourceOutputLanguageOverrides = sourceOutputLanguageOverrides
         self.inputLanguageID  = inputLanguageID
         self.outputLanguageID = outputLanguageID
+        self.conversationPrimaryLanguageID = conversationPrimaryLanguageID
+        self.conversationSecondaryLanguageID = conversationSecondaryLanguageID
+        self.conversationFaceToFace = conversationFaceToFace
+        self.conversationModeActive = conversationModeActive
         self.interfaceLanguageID = interfaceLanguageID
         self.overlayStyle     = overlayStyle
         self.subtitleMode     = subtitleMode

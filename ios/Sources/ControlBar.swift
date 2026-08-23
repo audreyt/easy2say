@@ -328,7 +328,7 @@ private struct ControlMenuLabel: View {
     }
 }
 
-private struct ControlIconButton: View {
+struct ControlIconButton: View {
     let symbol: String
     let title: String
     let action: () -> Void
@@ -349,7 +349,7 @@ private struct ControlIconButton: View {
     }
 }
 
-private struct SessionCapsuleButton: View {
+struct SessionCapsuleButton: View {
     let title: String
     let isLive: Bool
     let showsActivity: Bool

@@ -13,6 +13,11 @@ struct HomeView: View {
     @State private var showsSettings = false
     @State private var microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
 
+    // The engine lives here so both of its `.translationTask` hosts stay attached
+    // to the live view tree for the whole session, not just while the
+    // conversation surface is on screen.
+    @StateObject private var conversation = ConversationEngine()
+
     private var accent: Color {
         IOSTheme.color(model.iOSCaptionAccentColor)
     }
@@ -30,6 +35,28 @@ struct HomeView: View {
         return hasNoMicrophones || microphoneAccessDenied || model.isSessionButtonDisabled
     }
 
+    private var isConversationStartDisabled: Bool {
+        guard conversation.isRunning == false else { return false }
+        return hasNoMicrophones || microphoneAccessDenied
+    }
+
+    private var modeSwitch: some View {
+        ConversationModeSwitch(
+            captionsTitle: model.localized(.conversationCaptionsMode),
+            conversationTitle: model.localized(.conversationMode),
+            accent: accent,
+            isConversationActive: model.isConversationModeActive,
+            select: setConversationMode
+        )
+    }
+
+    private var privacyBadge: some View {
+        PrivacyBadge(
+            title: model.localized(.iosPrivateBadge),
+            accent: accent
+        )
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let usesSideBySideCaptions = geometry.size.width > geometry.size.height
@@ -39,39 +66,67 @@ struct HomeView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    HStack(alignment: .center, spacing: 12) {
-                        BrandWordmark(accent: accent)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .center, spacing: 12) {
+                            BrandWordmark(accent: accent)
 
-                        Spacer(minLength: 8)
+                            Spacer(minLength: 8)
 
-                        PrivacyBadge(
-                            title: model.localized(.iosPrivateBadge),
-                            accent: accent
-                        )
+                            modeSwitch
+
+                            Spacer(minLength: 8)
+
+                            privacyBadge
+                        }
+
+                        // Narrow widths cannot carry wordmark, switch and badge on
+                        // one line without the mode labels collapsing.
+                        VStack(spacing: 8) {
+                            HStack(alignment: .center, spacing: 12) {
+                                BrandWordmark(accent: accent)
+
+                                Spacer(minLength: 8)
+
+                                privacyBadge
+                            }
+
+                            modeSwitch
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .padding(.bottom, 4)
 
-                    ZStack {
-                        CaptionHalves(
+                    if model.isConversationModeActive {
+                        ConversationView(
                             model: model,
-                            isHorizontal: usesSideBySideCaptions
+                            engine: conversation,
+                            isStartDisabled: isConversationStartDisabled,
+                            toggleSession: toggleConversation,
+                            showSettings: { showsSettings = true }
                         )
-
-                        if hasNoMicrophones && microphoneAccessDenied == false {
-                            NoMicrophoneCard(
-                                title: model.localized(.iosNoMicrophonesTitle),
-                                message: model.localized(.iosNoMicrophonesMessage),
-                                refreshTitle: model.localized(.refreshSources),
-                                accent: accent,
-                                refresh: model.refreshSources
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ZStack {
+                            CaptionHalves(
+                                model: model,
+                                isHorizontal: usesSideBySideCaptions
                             )
-                            .padding(24)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+
+                            if hasNoMicrophones && microphoneAccessDenied == false {
+                                NoMicrophoneCard(
+                                    title: model.localized(.iosNoMicrophonesTitle),
+                                    message: model.localized(.iosNoMicrophonesMessage),
+                                    refreshTitle: model.localized(.refreshSources),
+                                    accent: accent,
+                                    refresh: model.refreshSources
+                                )
+                                .padding(24)
+                                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                            }
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     VStack(spacing: 10) {
                         if microphoneAccessDenied {
@@ -85,19 +140,22 @@ struct HomeView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
 
-                        ControlBar(
-                            model: model,
-                            isStartDisabled: isStartDisabled,
-                            toggleSession: toggleSession,
-                            showTranscript: { showsTranscript = true },
-                            showSettings: { showsSettings = true }
-                        )
+                        if model.isConversationModeActive == false {
+                            ControlBar(
+                                model: model,
+                                isStartDisabled: isStartDisabled,
+                                toggleSession: toggleSession,
+                                showTranscript: { showsTranscript = true },
+                                showSettings: { showsSettings = true }
+                            )
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
                 }
             }
         }
+        .v2sConversationTranslationHost(engine: conversation)
         .environment(\.locale, model.interfaceLocale)
         .tint(accent)
         .animation(.easeInOut(duration: 0.24), value: microphoneAccessDenied)
@@ -105,7 +163,7 @@ struct HomeView: View {
         .onAppear {
             refreshMicrophoneAuthorization()
             model.refreshSources()
-            updateIdleTimer(for: model.sessionState)
+            updateIdleTimer()
         }
         .onDisappear {
             #if canImport(UIKit)
@@ -117,9 +175,18 @@ struct HomeView: View {
             refreshMicrophoneAuthorization()
             model.refreshSources()
         }
-        .onChange(of: model.sessionState) { _, state in
-            updateIdleTimer(for: state)
+        .onChange(of: model.sessionState) { _, _ in
+            updateIdleTimer()
             refreshMicrophoneAuthorization()
+        }
+        .onChange(of: conversation.phase) { _, _ in
+            updateIdleTimer()
+        }
+        .onChange(of: model.conversationPrimaryLanguageID) { _, _ in
+            restartConversationIfRunning()
+        }
+        .onChange(of: model.conversationSecondaryLanguageID) { _, _ in
+            restartConversationIfRunning()
         }
         .onChange(of: model.transcriptEntries.count) { oldCount, newCount in
             guard newCount > oldCount, model.sessionState == .running else { return }
@@ -150,6 +217,58 @@ struct HomeView: View {
         }
     }
 
+    /// One microphone cannot serve two capture graphs, so switching modes always
+    /// stops whatever is currently listening.
+    private func setConversationMode(_ isActive: Bool) {
+        guard model.isConversationModeActive != isActive else { return }
+
+        if isActive {
+            if model.sessionState == .running {
+                model.stopSession()
+            }
+        } else if conversation.isRunning {
+            conversation.stop()
+        }
+
+        model.isConversationModeActive = isActive
+    }
+
+    private func toggleConversation() {
+        if conversation.isRunning {
+            conversation.stop()
+            return
+        }
+
+        startConversation()
+    }
+
+    /// A language change mid-conversation has to rebuild both transcriber lanes, so
+    /// restart rather than leaving the new selection silently inert until next time.
+    private func restartConversationIfRunning() {
+        guard conversation.isRunning else { return }
+        conversation.stop()
+        startConversation()
+    }
+
+    private func startConversation() {
+        guard hasNoMicrophones == false else { return }
+
+        if model.sessionState == .running {
+            model.stopSession()
+        }
+
+        Task { @MainActor in
+            guard await ensureMicrophoneAccess() else { return }
+            conversation.interfaceLanguageID = model.resolvedInterfaceLanguageID
+            conversation.configure(
+                primaryLanguageID: model.conversationPrimaryLanguageID,
+                secondaryLanguageID: model.conversationSecondaryLanguageID
+            )
+            await conversation.start()
+            refreshMicrophoneAuthorization()
+        }
+    }
+
     @MainActor
     private func ensureMicrophoneAccess() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -173,9 +292,9 @@ struct HomeView: View {
         microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
     }
 
-    private func updateIdleTimer(for state: SessionState) {
+    private func updateIdleTimer() {
         #if canImport(UIKit)
-        UIApplication.shared.isIdleTimerDisabled = state == .running
+        UIApplication.shared.isIdleTimerDisabled = model.sessionState == .running || conversation.isRunning
         #endif
     }
 

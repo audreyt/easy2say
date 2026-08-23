@@ -156,6 +156,10 @@ final class AppModel: ObservableObject {
             }
         }
     }
+    @Published var conversationPrimaryLanguageID: String { didSet { persistSettings() } }
+    @Published var conversationSecondaryLanguageID: String { didSet { persistSettings() } }
+    @Published var conversationFaceToFace: Bool { didSet { persistSettings() } }
+    @Published var isConversationModeActive: Bool { didSet { persistSettings() } }
 
     @Published var interfaceLanguageID: String {
         didSet {
@@ -211,6 +215,10 @@ final class AppModel: ObservableObject {
         self.sourceOutputLanguageOverrides = settings.sourceOutputLanguageOverrides
         self.inputLanguageID = settings.inputLanguageID
         self.outputLanguageID = settings.outputLanguageID
+        self.conversationPrimaryLanguageID = settings.conversationPrimaryLanguageID
+        self.conversationSecondaryLanguageID = settings.conversationSecondaryLanguageID
+        self.conversationFaceToFace = settings.conversationFaceToFace
+        self.isConversationModeActive = settings.conversationModeActive
         self.usesSystemInterfaceLanguage = settings.interfaceLanguageID == nil
         self.interfaceLanguageID = LanguageCatalog.preferredInterfaceLanguageID(
             storedIdentifier: settings.interfaceLanguageID
@@ -880,6 +888,10 @@ final class AppModel: ObservableObject {
             sourceOutputLanguageOverrides: sourceOutputLanguageOverrides,
             inputLanguageID: inputLanguageID,
             outputLanguageID: outputLanguageID,
+            conversationPrimaryLanguageID: conversationPrimaryLanguageID,
+            conversationSecondaryLanguageID: conversationSecondaryLanguageID,
+            conversationFaceToFace: conversationFaceToFace,
+            conversationModeActive: isConversationModeActive,
             interfaceLanguageID: usesSystemInterfaceLanguage ? nil : interfaceLanguageID,
             overlayStyle: overlayStyle,
             subtitleMode: subtitleMode,

@@ -18,6 +18,7 @@ struct SettingsSheet: View {
                     VStack(spacing: 16) {
                         captionAppearanceSection
                         displaySection
+                        conversationSection
                         interfaceLanguageSection
                     }
                     .padding(.horizontal, 16)
@@ -97,6 +98,109 @@ struct SettingsSheet: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+    }
+
+    private var conversationSection: some View {
+        SettingsSectionCard(
+            title: model.localized(.conversationMode),
+            symbol: "person.2.wave.2.fill",
+            accent: accent
+        ) {
+            VStack(alignment: .leading, spacing: 16) {
+                conversationLanguageMenu(
+                    title: model.localized(.conversationYourLanguage),
+                    selection: $model.conversationPrimaryLanguageID
+                )
+
+                conversationLanguageMenu(
+                    title: model.localized(.conversationTheirLanguage),
+                    selection: $model.conversationSecondaryLanguageID
+                )
+
+                if model.conversationPrimaryLanguageID == model.conversationSecondaryLanguageID {
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.red.opacity(0.90))
+                            .accessibilityHidden(true)
+
+                        Text(model.localized(.conversationSameLanguage))
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(Color.red.opacity(0.88))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Rectangle()
+                    .fill(IOSTheme.hairline)
+                    .frame(height: 0.5)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(isOn: $model.conversationFaceToFace) {
+                        Text(model.localized(.conversationFaceToFace))
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.82))
+                    }
+                    .tint(accent)
+
+                    Text(model.localized(.conversationFaceToFaceHint))
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func conversationLanguageMenu(
+        title: String,
+        selection: Binding<String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.52))
+
+            Menu {
+                ForEach(model.speechLanguageOptions) { option in
+                    Button {
+                        selection.wrappedValue = option.id
+                    } label: {
+                        let name = LanguageCatalog.autonym(for: option.id)
+                        if option.id == selection.wrappedValue {
+                            Label(name, systemImage: "checkmark")
+                        } else {
+                            Text(name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Text(LanguageCatalog.autonym(for: selection.wrappedValue))
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(accent)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.white.opacity(0.055))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color.white.opacity(0.085), lineWidth: 0.5)
+                }
+            }
+            .accessibilityLabel(title)
         }
     }
 

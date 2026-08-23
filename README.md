@@ -18,6 +18,7 @@
 - Uses the iPhone or iPad microphone only.
 - Defaults subtitle output to Traditional Chinese (`zh-Hant`), while keeping both Traditional Chinese (`zh-Hant`) and Simplified Chinese (`zh-Hans`) selectable.
 - Provides in-app transcript and settings views.
+- Runs a two-way conversation mode: both people speak their own language into one microphone, each utterance is transcribed in the speaker's language and shown translated in the listener's, and the other person's half can be flipped to read across a table. Apple exposes no spoken-language identification API, so the mode runs a `SpeechTranscriber` per language over the same capture and picks the lane with the stronger transcription confidence; tapping a half claims the floor when the room is loud enough to fool it.
 
 ## iOS and macOS capabilities
 
