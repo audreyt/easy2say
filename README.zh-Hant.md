@@ -19,6 +19,7 @@
 - 字幕輸出預設為繁體中文（`zh-Hant`），並可選擇繁體中文（`zh-Hant`）或簡體中文（`zh-Hans`）。
 - 提供應用程式內的字幕記錄與設定畫面。
 - 提供雙向對話模式：兩人各說自己的語言、共用一支麥克風，每段話都會以說話者的語言轉寫，並以聽者的語言顯示譯文；對方那一半畫面可上下翻轉，方便隔桌閱讀。Apple 並未提供口語語言辨識 API，因此本模式會為兩種語言各執行一個 `SpeechTranscriber`，共用同一份錄音，再挑選轉寫信賴度較高的那一路；環境吵雜到判斷失準時，輕觸任一半畫面即可指定發言方。
+- iOS 與 macOS 版可使用內建的 4 位元 Breeze-ASR-26 模型，在裝置端產生台語字幕。語言選單明確標示為「`台語（華文轉寫）`」，因為這個模型會將台語語音對應為華文漢字，而非台語正字。模型公布的 30 段政府宣導音檔基準平均字元錯誤率為 30.13%（單段 14.49%–52.78%），應視為輔助轉寫，不宜當成權威紀錄。Core ML 首次特化約 890 MB 權重時可能需要數分鐘，之後會使用 Apple 的快取。台語目前支援字幕模式，不支援自動雙向對話模式。
 
 ## iOS 與 macOS 功能比較
 
@@ -39,7 +40,8 @@ iOS 應用程式無法擷取其他應用程式的音訊，也不提供跨應用�
 - iOS 目標不含更新程式。
 - `v2s-ios` 不會將麥克風音訊或字幕傳送至伺服器。
 - Apple 可能會先下載其 Speech 與 Translation 框架所需的語言資源。之後，應用程式會使用這些資源在裝置端處理。
-- 語音活動偵測透過 Apple 系統內建的 Core ML 框架執行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；`v2s-ios` 不打包任何第三方推論執行環境，且[轉換過程可重現](scripts/convert_silero_vad_coreml.py)。
+- 語音活動偵測透過 Apple 系統內建的 Core ML 框架執行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；`v2s-ios` 不打包 ONNX Runtime，且[轉換過程可重現](scripts/convert_silero_vad_coreml.py)。
+- 台語辨識使用 [WhisperKit 與固定版本的 Breeze-ASR-26 Core ML 轉換模型](THIRD_PARTY_NOTICES.md)。發行版本內含完整模型與 tokenizer，並停用 WhisperKit 的網路下載功能。
 
 ## 系統需求
 
@@ -52,7 +54,8 @@ iOS 應用程式無法擷取其他應用程式的音訊，也不提供跨應用�
 請安裝 XcodeGen、產生 iOS 專案，並從儲存庫根目錄開啟專案：
 
 ```bash
-brew install xcodegen
+brew install xcodegen huggingface-cli
+./scripts/fetch_breeze_asr_26.sh
 cd ios
 xcodegen generate
 open v2s-ios.xcodeproj

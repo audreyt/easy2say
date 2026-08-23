@@ -19,6 +19,7 @@
 - Defaults subtitle output to Traditional Chinese (`zh-Hant`), while keeping both Traditional Chinese (`zh-Hant`) and Simplified Chinese (`zh-Hans`) selectable.
 - Provides in-app transcript and settings views.
 - Runs a two-way conversation mode: both people speak their own language into one microphone, each utterance is transcribed in the speaker's language and shown translated in the listener's, and the other person's half can be flipped to read across a table. Apple exposes no spoken-language identification API, so the mode runs a `SpeechTranscriber` per language over the same capture and picks the lane with the stronger transcription confidence; tapping a half claims the floor when the room is loud enough to fool it.
+- Supports local Taigi captions on iOS and macOS with the bundled 4-bit Breeze-ASR-26 model. The picker labels this `台語（華文轉寫）` because the model maps Taigi speech to Mandarin Chinese characters, not native Taibun orthography. Its published 30-clip government-PSA benchmark averages 30.13% CER (14.49%–52.78% per clip), so treat it as assistive transcription, not an authoritative record. The first model load can take minutes while Core ML specializes about 890 MB of weights; later runs use Apple's cache. Taigi is available in caption mode, not automatic two-way conversation mode.
 
 ## iOS and macOS capabilities
 
@@ -39,7 +40,8 @@ The iOS app cannot capture another app's audio and does not provide a cross-app 
 - No updater in the iOS target.
 - `v2s-ios` does not send microphone audio or captions to a server.
 - Apple may initially download language assets required by its Speech and Translation frameworks. The app then uses those assets for on-device processing.
-- Voice activity detection runs the [Silero VAD](THIRD_PARTY_NOTICES.md) model through Apple's system Core ML framework; `v2s-ios` bundles no third-party inference runtime, and the [conversion is reproducible](scripts/convert_silero_vad_coreml.py).
+- Voice activity detection runs the [Silero VAD](THIRD_PARTY_NOTICES.md) model through Apple's system Core ML framework; `v2s-ios` bundles no ONNX Runtime, and the [conversion is reproducible](scripts/convert_silero_vad_coreml.py).
+- Taigi recognition uses [WhisperKit and a pinned Breeze-ASR-26 Core ML conversion](THIRD_PARTY_NOTICES.md). The release bundle contains the complete model and tokenizer; WhisperKit's network downloader is disabled.
 
 ## Requirements
 
@@ -52,7 +54,8 @@ The iOS app cannot capture another app's audio and does not provide a cross-app 
 Install XcodeGen, generate the iOS project, and open it from the repository root:
 
 ```bash
-brew install xcodegen
+brew install xcodegen huggingface-cli
+./scripts/fetch_breeze_asr_26.sh
 cd ios
 xcodegen generate
 open v2s-ios.xcodeproj

@@ -199,6 +199,10 @@ enum AppTextKey: String, CaseIterable {
     case conversationSameLanguage
     case conversationUnavailableFormat
     case conversationSpeakingFormat
+    case taigiModelMissing
+    case taigiEmptyTranscript
+    case taigiLanguageName
+    case taigiPreparingModel
 }
 
 enum AppLocalization {
@@ -516,6 +520,10 @@ enum AppLocalization {
             "conversationSameLanguage": "Pick two different languages.",
             "conversationUnavailableFormat": "Conversation needs an on-device speech model for %@ on this device.",
             "conversationSpeakingFormat": "%@ speaking",
+            "taigiModelMissing": "The bundled Breeze-ASR-26 model is unavailable.",
+            "taigiEmptyTranscript": "Breeze-ASR-26 could not recognize this Taigi utterance.",
+            "taigiLanguageName": "Taiwanese Hokkien (Mandarin-character transcription)",
+            "taigiPreparingModel": "Preparing Breeze-ASR-26. The first load can take several minutes; later starts are cached.",
         ],
         "zh-Hans": [
             "start": "开始",
@@ -711,6 +719,10 @@ enum AppLocalization {
             "conversationSameLanguage": "请选择两种不同的语言。",
             "conversationUnavailableFormat": "此设备需要%@的设备端语音模型才能使用对话功能。",
             "conversationSpeakingFormat": "%@正在说话",
+            "taigiModelMissing": "内置的 Breeze-ASR-26 模型无法使用。",
+            "taigiEmptyTranscript": "Breeze-ASR-26 无法识别这段台语语音。",
+            "taigiLanguageName": "台语（华文转写）",
+            "taigiPreparingModel": "正在准备 Breeze-ASR-26。首次加载可能需要数分钟，之后启动会使用缓存。",
         ],
         "zh-Hant": [
             "start": "開始",
@@ -906,6 +918,10 @@ enum AppLocalization {
             "conversationSameLanguage": "請選擇兩種不同的語言。",
             "conversationUnavailableFormat": "這台裝置需要%@的裝置端語音模型，才能使用對話功能。",
             "conversationSpeakingFormat": "%@正在說話",
+            "taigiModelMissing": "內建的 Breeze-ASR-26 模型無法使用。",
+            "taigiEmptyTranscript": "Breeze-ASR-26 無法辨識這段台語語音。",
+            "taigiLanguageName": "台語（華文轉寫）",
+            "taigiPreparingModel": "正在準備 Breeze-ASR-26。首次載入可能需要數分鐘，之後啟動會使用快取。",
         ],
         "es": [
             "start": "Iniciar",

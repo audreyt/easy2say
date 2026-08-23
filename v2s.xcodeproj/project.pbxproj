@@ -46,6 +46,11 @@
 		A0000000000000000000008E /* PopoverOutsideClickMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000008F /* PopoverOutsideClickMonitor.swift */; };
 		A00000000000000000000090 /* SentenceBoundaryHeuristics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */; };
 		A00000000000000000000094 /* TranscriptSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000095 /* TranscriptSummarizer.swift */; };
+		A00000000000000000000097 /* TaigiASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000096 /* TaigiASREngine.swift */; };
+		A00000000000000000000099 /* TaiwanChineseNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000098 /* TaiwanChineseNormalizer.swift */; };
+		A0000000000000000000009B /* TWPhrases.txt in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000009A /* TWPhrases.txt */; };
+		A0000000000000000000009D /* BreezeASR26 in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000009C /* BreezeASR26 */; };
+		A000000000000000000000A0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A0000000000000000000009F /* WhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +94,10 @@
 		A0000000000000000000008F /* PopoverOutsideClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverOutsideClickMonitor.swift; sourceTree = "<group>"; };
 		A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceBoundaryHeuristics.swift; sourceTree = "<group>"; };
 		A00000000000000000000095 /* TranscriptSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSummarizer.swift; sourceTree = "<group>"; };
+		A00000000000000000000096 /* TaigiASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaigiASREngine.swift; sourceTree = "<group>"; };
+		A00000000000000000000098 /* TaiwanChineseNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiwanChineseNormalizer.swift; sourceTree = "<group>"; };
+		A0000000000000000000009A /* TWPhrases.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = TWPhrases.txt; sourceTree = "<group>"; };
+		A0000000000000000000009C /* BreezeASR26 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BreezeASR26; path = ../../../ios/Resources/BreezeASR26; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +106,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000000000000000000089 /* Sparkle in Frameworks */,
+				A000000000000000000000A0 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,6 +175,8 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000081 /* SileroVAD.mlpackage */,
+				A0000000000000000000009A /* TWPhrases.txt */,
+				A0000000000000000000009C /* BreezeASR26 */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -200,6 +212,8 @@
 				A0000000000000000000003A /* SourceCatalogService.swift */,
 				A00000000000000000000047 /* SpeedMonitor.swift */,
 				A00000000000000000000085 /* UpdaterService.swift */,
+				A00000000000000000000096 /* TaigiASREngine.swift */,
+				A00000000000000000000098 /* TaiwanChineseNormalizer.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -279,6 +293,7 @@
 			name = v2s;
 			packageProductDependencies = (
 				A00000000000000000000088 /* Sparkle */,
+				A0000000000000000000009F /* WhisperKit */,
 			);
 			productName = v2s;
 			productReference = A0000000000000000000000A /* v2s.app */;
@@ -310,6 +325,7 @@
 			mainGroup = A00000000000000000000002;
 			packageReferences = (
 				A00000000000000000000087 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			productRefGroup = A00000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -329,6 +345,14 @@
 				minimumVersion = 2.6.0;
 			};
 		};
+		A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -337,6 +361,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000000000000000000062 /* Assets.xcassets in Resources */,
+				A0000000000000000000009B /* TWPhrases.txt in Resources */,
+				A0000000000000000000009D /* BreezeASR26 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,6 +410,8 @@
 				A00000000000000000000060 /* StatusBarPopoverView.swift in Sources */,
 				A00000000000000000000061 /* LiveTranscriptionSession.swift in Sources */,
 				A00000000000000000000086 /* UpdaterService.swift in Sources */,
+				A00000000000000000000097 /* TaigiASREngine.swift in Sources */,
+				A00000000000000000000099 /* TaiwanChineseNormalizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -505,6 +533,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000087 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		A0000000000000000000009F /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

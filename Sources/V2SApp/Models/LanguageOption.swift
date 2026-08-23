@@ -70,6 +70,11 @@ enum LanguageCatalog {
         LanguageOption(id: "en", displayName: "English"),
         LanguageOption(id: "zh-Hans", displayName: "Chinese (Simplified)"),
         LanguageOption(id: "zh-Hant", displayName: "Chinese (Traditional)"),
+        LanguageOption(
+            id: "nan",
+            displayName: "Taiwanese (Taigi)",
+            localeIdentifier: "nan-TW"
+        ),
         LanguageOption(id: "yue", displayName: "Cantonese"),
         LanguageOption(id: "es", displayName: "Spanish"),
         LanguageOption(id: "de", displayName: "German"),
@@ -104,16 +109,28 @@ enum LanguageCatalog {
     ]
 
     static func displayName(for identifier: String) -> String {
-        (speechInput + common).first(where: { $0.id == identifier })?.displayName ?? identifier
+        if identifier == "nan" || identifier == "nan-TW" {
+            return AppLocalization.string(.taigiLanguageName, languageID: "en")
+        }
+        return (speechInput + common).first(where: { $0.id == identifier })?.displayName ?? identifier
     }
 
     /// Native name of a language as written by itself.
     static func autonym(for identifier: String) -> String {
-        Locale(identifier: identifier).localizedString(forIdentifier: identifier)
+        if identifier == "nan" || identifier == "nan-TW" {
+            return AppLocalization.string(.taigiLanguageName, languageID: "zh-Hant")
+        }
+        return Locale(identifier: identifier).localizedString(forIdentifier: identifier)
             ?? displayName(for: identifier)
     }
 
     static func displayName(for identifier: String, in interfaceLanguageID: String) -> String {
+        if identifier == "nan" || identifier == "nan-TW" {
+            return AppLocalization.string(
+                .taigiLanguageName,
+                languageID: interfaceLanguageID
+            )
+        }
         let locale = Locale(identifier: interfaceLanguageID)
         return locale.localizedString(forIdentifier: identifier)
             ?? displayName(for: identifier)
@@ -186,7 +203,12 @@ enum LanguageCatalog {
             }
 
             let englishLocale = Locale(identifier: "en")
-            let displayName = englishLocale.localizedString(forIdentifier: id) ?? id
+            let displayName: String
+            if id == "nan" || id == "nan-TW" {
+                displayName = "Taiwanese (Taigi)"
+            } else {
+                displayName = englishLocale.localizedString(forIdentifier: id) ?? id
+            }
             optionsByID[id] = optionsByID[id] ?? LanguageOption(
                 id: id,
                 displayName: displayName,
@@ -245,6 +267,7 @@ enum LanguageCatalog {
         case "en": return "en-US"
         case "zh-Hans": return "zh-CN"
         case "zh-Hant": return "zh-TW"
+        case "nan": return "nan-TW"
         case "yue": return "yue-CN"
         case "es": return "es-ES"
         case "de": return "de-DE"

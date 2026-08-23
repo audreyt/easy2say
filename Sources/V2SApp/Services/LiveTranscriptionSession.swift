@@ -8,6 +8,9 @@ import CoreAudio
 import CoreMedia
 import Foundation
 import Speech
+#if canImport(WhisperKit)
+import WhisperKit
+#endif
 
 struct RecognizedSentence: Equatable, Sendable {
     let text: String
@@ -85,6 +88,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private enum RecognitionBackend {
         case legacy
         case speechAnalyzer
+#if canImport(WhisperKit)
+        case localTaigi
+#endif
     }
 
     enum SessionError: LocalizedError, AppLocalizableError {
@@ -137,6 +143,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    /// Guards async startup (notably multi-minute first-load model specialization)
+    /// against a concurrent Stop. Accessed only on captureQueue.
+    private var lifecycleGeneration = 0
+    private var startupCancelled = false
     /// Incremented on every restart. Handlers capture their generation at creation time
     /// and discard callbacks that arrive after a newer generation has started.
     private var recognitionGeneration: Int = 0
@@ -174,6 +184,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var analyzerInputFormat: AVAudioFormat?
     private var latestModernText = ""
     private var modernCommittedPrefixText = ""
+
+#if canImport(WhisperKit)
+    private var taigiEngine: TaigiASREngine?
+    private var taigiPreRoll: [Float] = []
+    private var taigiSegment: [Float] = []
+    private var taigiSpeechActive = false
+    private var taigiPendingSegments: [[Float]] = []
+    private var taigiTranscriptionTask: Task<Void, Never>?
+    private let taigiPreRollSampleCount = 4_800  // 300 ms at 16 kHz
+    private let taigiMinimumSegmentSampleCount = 4_000
+    private let taigiMaximumSegmentSampleCount = 240_000  // 15 seconds
+#endif
 
     private var microphoneCaptureSession: AVCaptureSession?
 #if os(macOS)
@@ -259,16 +281,51 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         self.interfaceLanguageID = interfaceLanguageID
         self.errorHandler = errorHandler
         self.fatalErrorHandler = fatalErrorHandler
+        let startGeneration: Int = try await runOnCaptureQueue {
+            self.lifecycleGeneration &+= 1
+            self.startupCancelled = false
+            return self.lifecycleGeneration
+        }
         await MainActor.run {
             recentCommittedSentenceHistory.removeAll()
         }
+        try await ensureStartupIsCurrent(startGeneration)
 
-        try await requestRequiredPermissions(for: source)
-        if try await configureModernSpeechRecognizer(localeIdentifier: localeIdentifier) == false {
+        let usesLocalTaigi = localeIdentifier.lowercased().hasPrefix("nan")
+        try await requestRequiredPermissions(
+            for: source,
+            requiresSpeechAuthorization: usesLocalTaigi == false
+        )
+        try await ensureStartupIsCurrent(startGeneration)
+#if canImport(WhisperKit)
+        if usesLocalTaigi {
+            let engine = try await TaigiASREngine.load()
+            try await ensureStartupIsCurrent(startGeneration)
+            try await runOnCaptureQueue {
+                try self.configureLocalTaigiRecognizer(engine)
+            }
+        } else {
+            let configuredModern = try await configureModernSpeechRecognizer(
+                localeIdentifier: localeIdentifier
+            )
+            try await ensureStartupIsCurrent(startGeneration)
+            if configuredModern == false {
+            try await runOnCaptureQueue {
+                try self.configureSpeechRecognizer(localeIdentifier: localeIdentifier)
+                }
+            }
+        }
+#else
+        let configuredModern = try await configureModernSpeechRecognizer(
+            localeIdentifier: localeIdentifier
+        )
+        try await ensureStartupIsCurrent(startGeneration)
+        if configuredModern == false {
             try await runOnCaptureQueue {
                 try self.configureSpeechRecognizer(localeIdentifier: localeIdentifier)
             }
         }
+#endif
 
         switch source.category {
         case .microphone:
@@ -280,12 +337,23 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let captureDescriptor = try await MainActor.run {
                 try self.makeApplicationCaptureDescriptor(for: source)
             }
+            try await ensureStartupIsCurrent(startGeneration)
             try await runOnCaptureQueue {
                 try self.startApplicationAudioCapture(descriptor: captureDescriptor)
             }
 #else
             throw SessionError.missingApplication(source.name)
 #endif
+        }
+        try await ensureStartupIsCurrent(startGeneration)
+    }
+
+    private func ensureStartupIsCurrent(_ generation: Int) async throws {
+        try await runOnCaptureQueue {
+            guard self.startupCancelled == false,
+                  self.lifecycleGeneration == generation else {
+                throw CancellationError()
+            }
         }
     }
 
@@ -309,6 +377,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     private func stopOnCaptureQueue() {
+        startupCancelled = true
+        lifecycleGeneration &+= 1
         cancelSilenceTimer()
         cancelVADSilenceTimer()
 
@@ -341,6 +411,15 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         stopModernSpeechRecognizer()
         resetRecognitionFailureState()
         recognitionGeneration &+= 1
+#if canImport(WhisperKit)
+        taigiTranscriptionTask?.cancel()
+        taigiTranscriptionTask = nil
+        taigiEngine = nil
+        taigiPreRoll.removeAll(keepingCapacity: false)
+        taigiSegment.removeAll(keepingCapacity: false)
+        taigiPendingSegments.removeAll()
+        taigiSpeechActive = false
+#endif
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -361,21 +440,26 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private func requestRequiredPermissions(for source: InputSource) async throws {
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+    private func requestRequiredPermissions(
+        for source: InputSource,
+        requiresSpeechAuthorization: Bool = true
+    ) async throws {
+        if requiresSpeechAuthorization {
+            let speechStatus = SFSpeechRecognizer.authorizationStatus()
 
-        switch speechStatus {
-        case .authorized:
-            break
-        case .notDetermined:
-            let granted = await requestSpeechAuthorization()
-            guard granted else {
+            switch speechStatus {
+            case .authorized:
+                break
+            case .notDetermined:
+                let granted = await requestSpeechAuthorization()
+                guard granted else {
+                    throw SessionError.speechPermissionDenied
+                }
+            case .denied, .restricted:
+                throw SessionError.speechPermissionDenied
+            @unknown default:
                 throw SessionError.speechPermissionDenied
             }
-        case .denied, .restricted:
-            throw SessionError.speechPermissionDenied
-        @unknown default:
-            throw SessionError.speechPermissionDenied
         }
 
         switch source.category {
@@ -399,6 +483,29 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             break
         }
     }
+
+#if canImport(WhisperKit)
+    private func configureLocalTaigiRecognizer(_ engine: TaigiASREngine) throws {
+        stopModernSpeechRecognizer()
+        speechRecognizer = nil
+        recognitionRequest = nil
+        recognitionTask = nil
+        recognitionBackend = .localTaigi
+        taigiEngine = engine
+        taigiPreRoll.removeAll(keepingCapacity: true)
+        taigiSegment.removeAll(keepingCapacity: true)
+        taigiPendingSegments.removeAll()
+        taigiSpeechActive = false
+        resetRecognitionFailureState()
+        resetAudioProcessingState()
+        resetLegacyTranscriptionState()
+        resetModernTranscriptionState()
+        cancelSilenceTimer()
+        cancelVADSilenceTimer()
+        resetDraftState()
+        vadEngine = try SileroVADEngine()
+    }
+#endif
 
     private func configureSpeechRecognizer(localeIdentifier: String) throws {
         stopModernSpeechRecognizer()
@@ -885,17 +992,33 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let audioLevels = cleanUpSpeechBuffer(processingBuffer)
         boostIfQuiet(buffer: processingBuffer, levels: audioLevels)
 
+        var currentVADResult: VADResult?
         if let vadEngine {
             let vadResult = vadEngine.process(buffer: processingBuffer)
+            currentVADResult = vadResult
             lastVADProbability = vadResult.speechProbability
 
-            if vadResult.containsSpeechOffset {
-                scheduleVADSilenceCommit()
-            }
-            if vadResult.containsSpeechOnset {
-                cancelVADSilenceTimer()
+#if canImport(WhisperKit)
+            let usesASRSilenceTimers = recognitionBackend != .localTaigi
+#else
+            let usesASRSilenceTimers = true
+#endif
+            if usesASRSilenceTimers {
+                if vadResult.containsSpeechOffset {
+                    scheduleVADSilenceCommit()
+                }
+                if vadResult.containsSpeechOnset {
+                    cancelVADSilenceTimer()
+                }
             }
         }
+
+#if canImport(WhisperKit)
+        if recognitionBackend == .localTaigi {
+            appendToLocalTaigi(processingBuffer, vadResult: currentVADResult)
+            return
+        }
+#endif
 
         if recognitionBackend == .speechAnalyzer {
             appendToSpeechAnalyzer(processingBuffer)
@@ -928,6 +1051,105 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         continuation.yield(AnalyzerInput(buffer: analyzerBuffer))
     }
+
+#if canImport(WhisperKit)
+    private func appendToLocalTaigi(
+        _ processingBuffer: AVAudioPCMBuffer,
+        vadResult: VADResult?
+    ) {
+        guard let channel = processingBuffer.floatChannelData?[0] else { return }
+        let samples = Array(
+            UnsafeBufferPointer(
+                start: channel,
+                count: Int(processingBuffer.frameLength)
+            )
+        )
+        guard samples.isEmpty == false else { return }
+
+        let startsSpeech = taigiSpeechActive == false
+            && (vadResult?.containsSpeechOnset == true || vadResult?.isSpeech == true)
+        if startsSpeech {
+            taigiSpeechActive = true
+            taigiSegment = taigiPreRoll
+            taigiPreRoll.removeAll(keepingCapacity: true)
+        }
+
+        if taigiSpeechActive {
+            taigiSegment.append(contentsOf: samples)
+        } else {
+            taigiPreRoll.append(contentsOf: samples)
+            if taigiPreRoll.count > taigiPreRollSampleCount {
+                taigiPreRoll.removeFirst(
+                    taigiPreRoll.count - taigiPreRollSampleCount
+                )
+            }
+        }
+
+        let endsSpeech = vadResult?.containsSpeechOffset == true
+        let reachesMaximum = taigiSegment.count >= taigiMaximumSegmentSampleCount
+        guard taigiSpeechActive, endsSpeech || reachesMaximum else { return }
+
+        enqueueTaigiSegment(taigiSegment)
+        taigiSegment.removeAll(keepingCapacity: true)
+        if endsSpeech, vadResult?.isSpeech == true {
+            // One capture buffer can contain offset then a new onset. Preserve the
+            // ambiguous buffer as pre-roll for the new segment rather than dropping
+            // the newly-started utterance.
+            taigiSpeechActive = true
+            taigiSegment = samples
+        } else {
+            taigiSpeechActive = endsSpeech == false
+        }
+        if taigiSpeechActive == false {
+            taigiPreRoll.removeAll(keepingCapacity: true)
+        }
+    }
+
+    private func enqueueTaigiSegment(_ audio: [Float]) {
+        guard audio.count >= taigiMinimumSegmentSampleCount else { return }
+        taigiPendingSegments.append(audio)
+        startNextTaigiTranscriptionIfNeeded()
+    }
+
+    private func startNextTaigiTranscriptionIfNeeded() {
+        guard taigiTranscriptionTask == nil,
+              let engine = taigiEngine,
+              taigiPendingSegments.isEmpty == false else {
+            return
+        }
+
+        let audio = taigiPendingSegments.removeFirst()
+        let generation = recognitionGeneration
+        taigiTranscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.captureQueue.async { [weak self] in
+                    guard let self, self.recognitionGeneration == generation else {
+                        return
+                    }
+                    self.taigiTranscriptionTask = nil
+                    self.startNextTaigiTranscriptionIfNeeded()
+                }
+            }
+
+            do {
+                let text = try await engine.transcribe(audio)
+                guard Task.isCancelled == false else { return }
+                if let prepared = await self.prepareCommittedSentenceForEmission(text) {
+                    await self.emitRecognizedText(prepared)
+                }
+            } catch TaigiASREngine.EngineError.emptyTranscript {
+                // False VAD onset or breath/noise: skip this slice and keep listening.
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                let message = self.localizedErrorDescription(error)
+                await self.emitFatalError(message)
+            }
+        }
+    }
+#endif
 
     private func prepareProcessingBuffer(from audioBuffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         if audioBuffer.format.matches(processingFormat) {

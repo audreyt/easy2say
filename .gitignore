@@ -27,6 +27,9 @@ xcuserdata/
 tmp/
 dist/
 reports/
+
+# Downloaded on-device ASR assets (fetched reproducibly by script)
+/ios/Resources/BreezeASR26/
 .claude/worktrees/
 
 

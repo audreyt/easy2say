@@ -163,7 +163,7 @@ struct SettingsSheet: View {
                 .foregroundStyle(Color.white.opacity(0.52))
 
             Menu {
-                ForEach(model.speechLanguageOptions) { option in
+                ForEach(model.speechLanguageOptions.filter { $0.id != "nan" }) { option in
                     Button {
                         selection.wrappedValue = option.id
                     } label: {

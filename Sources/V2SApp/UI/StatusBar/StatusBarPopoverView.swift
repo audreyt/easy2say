@@ -125,7 +125,10 @@ struct StatusBarPopoverView: View {
                     options: model.translationLanguageOptions,
                     selection: model.outputLanguageSelectionBinding
                 )
-                .disabled(model.isLanguagePairLocked)
+                .disabled(
+                    model.isLanguagePairLocked
+                        || model.inputLanguageID == "nan"
+                )
             }
             SettingsControlRow(label: model.localized(.modeShort)) {
                 SubtitleModeMenuPicker(

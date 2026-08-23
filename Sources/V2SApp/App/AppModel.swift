@@ -43,6 +43,11 @@ final class AppModel: ObservableObject {
     private let speedMonitor = SpeedMonitor()
     private var liveTranscriptionSession: LiveTranscriptionSession?
     private var liveTranscriptionSessions: [LiveTranscriptionSession] = []
+    /// Sessions whose async model/resource setup has begun but whose capture has not
+    /// yet been published. Stop must reach these too — Taigi's first Core ML
+    /// specialization can take minutes.
+    private var startingTranscriptionSessions: [LiveTranscriptionSession] = []
+    private var sessionStartGeneration = 0
     // Sources whose capture actually started. A multi-source session tolerates inputs
     // that fail to open, so this can be a subset of `selectedSources` while running.
     private var activeSources: [InputSource] = []
@@ -331,7 +336,10 @@ final class AppModel: ObservableObject {
     }
 
     func outputLanguageIDForSource(_ source: InputSource) -> String {
-        sourceOutputLanguageOverrides[source.id] ?? outputLanguageID
+        if languageID(for: source) == "nan" {
+            return "zh-Hant"
+        }
+        return sourceOutputLanguageOverrides[source.id] ?? outputLanguageID
     }
 
     func outputLanguageOverrideID(for source: InputSource) -> String? {
@@ -340,7 +348,13 @@ final class AppModel: ObservableObject {
 
     func setOutputLanguageID(_ languageID: String, for source: InputSource) {
         var overrides = sourceOutputLanguageOverrides
-        if languageID == outputLanguageID {
+        if self.languageID(for: source) == "nan" {
+            if outputLanguageID == "zh-Hant" {
+                overrides.removeValue(forKey: source.id)
+            } else {
+                overrides[source.id] = "zh-Hant"
+            }
+        } else if languageID == outputLanguageID {
             overrides.removeValue(forKey: source.id)
         } else {
             overrides[source.id] = languageID
@@ -359,8 +373,12 @@ final class AppModel: ObservableObject {
         setOutputLanguageID(languageID, for: source)
     }
 
+    var isSessionStarting: Bool {
+        startingTranscriptionSessions.isEmpty == false
+    }
+
     var sessionButtonTitle: String {
-        if sessionState == .running {
+        if sessionState == .running || isSessionStarting {
             return localized(.stop)
         }
 
@@ -376,15 +394,16 @@ final class AppModel: ObservableObject {
     }
 
     var sessionButtonSymbolName: String {
-        sessionState == .running ? "stop.fill" : "play.fill"
+        sessionState == .running || isSessionStarting ? "stop.fill" : "play.fill"
     }
 
     var showsSessionWaitIndicator: Bool {
-        sessionState != .running && isPreparingSelectedLanguageResources
+        sessionState != .running
+            && (isSessionStarting || isPreparingSelectedLanguageResources)
     }
 
     var isSessionButtonDisabled: Bool {
-        if sessionState == .running {
+        if sessionState == .running || isSessionStarting {
             return false
         }
 
@@ -398,7 +417,7 @@ final class AppModel: ObservableObject {
     }
 
     var isLanguagePairLocked: Bool {
-        sessionState == .running
+        sessionState == .running || isSessionStarting
     }
 
     var resolvedInterfaceLanguageID: String {
@@ -565,7 +584,7 @@ final class AppModel: ObservableObject {
     }
 
     func toggleSession() {
-        if sessionState == .running {
+        if sessionState == .running || isSessionStarting {
             stopSession()
         } else {
             Task {
@@ -575,8 +594,11 @@ final class AppModel: ObservableObject {
     }
 
     func startSession() async {
+        sessionStartGeneration &+= 1
+        let startGeneration = sessionStartGeneration
         // Finish releasing any earlier capture resources before opening replacements.
         await stopLiveTranscriptionSessionsAndWait()
+        guard startGeneration == sessionStartGeneration else { return }
         refreshSources()
 
         let selectedSources = self.selectedSources
@@ -590,6 +612,7 @@ final class AppModel: ObservableObject {
         resetLiveTextPipeline()
         setStatus(.checkingLanguageResources)
         await awaitSelectedLanguageResourcePreparationIfNeeded()
+        guard startGeneration == sessionStartGeneration else { return }
         guard hasBlockingLanguageResourceStatuses == false else {
             setStatus(.downloadLanguageResourcesInSystemSettings)
             return
@@ -626,11 +649,21 @@ final class AppModel: ObservableObject {
         for source in selectedSources {
             let sourceLanguageID = languageID(for: source)
             let targetLanguageID = outputLanguageIDForSource(source)
+            // Breeze-ASR-26 hears Taigi but deliberately emits Mandarin Chinese
+            // characters rather than native Taibun. Apple Translation must therefore
+            // consume that transcript as zh-Hant, while the UI still labels the input
+            // language as Taigi.
+            let translationSourceLanguageID =
+                translationSourceLanguageID(for: sourceLanguageID)
             let session = LiveTranscriptionSession()
             // Identity only. Capturing the session in the handler it is about to own
             // would retain it for the session's own lifetime.
             let sessionID = ObjectIdentifier(session)
+            startingTranscriptionSessions.append(session)
 
+            if sourceLanguageID == "nan" {
+                setStatus(.custom(localized(.taigiPreparingModel)))
+            }
             do {
                 try await session.start(
                     source: source,
@@ -642,7 +675,7 @@ final class AppModel: ObservableObject {
                         self?.enqueueRecognizedSentence(
                             sentence,
                             source: source,
-                            sourceLanguageID: sourceLanguageID,
+                            sourceLanguageID: translationSourceLanguageID,
                             targetLanguageID: targetLanguageID
                         )
                     },
@@ -650,7 +683,7 @@ final class AppModel: ObservableObject {
                         self?.handlePartialDraft(
                             draft,
                             source: source,
-                            sourceLanguageID: sourceLanguageID,
+                            sourceLanguageID: translationSourceLanguageID,
                             targetLanguageID: targetLanguageID
                         )
                     },
@@ -677,14 +710,37 @@ final class AppModel: ObservableObject {
                         fatalSessionErrors.append((message, sessionID, source.name))
                     }
                 )
+                startingTranscriptionSessions.removeAll {
+                    ObjectIdentifier($0) == sessionID
+                }
+                guard startGeneration == sessionStartGeneration else {
+                    await session.stopAndWait()
+                    isStartingSession = false
+                    restoreTranscript(
+                        entries: previousTranscriptEntries,
+                        sourceLanguageID: previousTranscriptInputLanguageID,
+                        targetLanguageID: previousTranscriptOutputLanguageID
+                    )
+                    return
+                }
 
                 startedSessions.append(session)
                 startedSources.append(source)
             } catch {
+                startingTranscriptionSessions.removeAll {
+                    ObjectIdentifier($0) == sessionID
+                }
+                if error is CancellationError
+                    || startGeneration != sessionStartGeneration {
+                    isStartingSession = false
+                    restoreTranscript(
+                        entries: previousTranscriptEntries,
+                        sourceLanguageID: previousTranscriptInputLanguageID,
+                        targetLanguageID: previousTranscriptOutputLanguageID
+                    )
+                    return
+                }
                 // A multi-source session is usable as long as at least one input starts.
-                // Release any resources staged by this source and continue trying the
-                // remaining selections instead of turning a partial failure into a
-                // global "Unable to start" state.
                 await session.stopAndWait()
                 startupFailures.append(error)
             }
@@ -718,6 +774,17 @@ final class AppModel: ObservableObject {
         }
 
         isStartingSession = false
+        guard startGeneration == sessionStartGeneration else {
+            for session in startedSessions {
+                await session.stopAndWait()
+            }
+            restoreTranscript(
+                entries: previousTranscriptEntries,
+                sourceLanguageID: previousTranscriptInputLanguageID,
+                targetLanguageID: previousTranscriptOutputLanguageID
+            )
+            return
+        }
 
         if startedSessions.isEmpty == false {
             liveTranscriptionSessions = startedSessions
@@ -792,6 +859,7 @@ final class AppModel: ObservableObject {
     }
 
     func stopSession() {
+        sessionStartGeneration &+= 1
         resetLiveTextPipeline()
         stopLiveTranscriptionSessions()
         sessionState = .idle
@@ -817,15 +885,22 @@ final class AppModel: ObservableObject {
     /// Detaches the current sessions atomically on the main actor. The returned strong
     /// references keep them alive until their callers have scheduled or completed stop.
     private func takeLiveTranscriptionSessions() -> [LiveTranscriptionSession] {
-        let sessions: [LiveTranscriptionSession]
+        var candidates = startingTranscriptionSessions
         if liveTranscriptionSessions.isEmpty {
-            sessions = liveTranscriptionSession.map { [$0] } ?? []
+            if let liveTranscriptionSession {
+                candidates.append(liveTranscriptionSession)
+            }
         } else {
-            sessions = liveTranscriptionSessions
+            candidates.append(contentsOf: liveTranscriptionSessions)
+        }
+        var seen = Set<ObjectIdentifier>()
+        let sessions = candidates.filter {
+            seen.insert(ObjectIdentifier($0)).inserted
         }
 
         liveTranscriptionSessions.removeAll()
         liveTranscriptionSession = nil
+        startingTranscriptionSessions.removeAll()
         activeSources.removeAll()
         return sessions
     }
@@ -958,6 +1033,10 @@ final class AppModel: ObservableObject {
             ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
     }
 
+    private func translationSourceLanguageID(for speechLanguageID: String) -> String {
+        speechLanguageID == "nan" ? "zh-Hant" : speechLanguageID
+    }
+
     private func refreshSupportedLanguageOptions() {
         languageCatalogRefreshTask?.cancel()
         languageCatalogRefreshTask = Task { @MainActor [weak self] in
@@ -1012,13 +1091,31 @@ final class AppModel: ObservableObject {
             onDeviceLocaleIdentifiers.formUnion(modernLocales.map(\.identifier))
         }
 
-        // The modern Speech stack is unavailable on some Macs (notably Intel models),
-        // but the legacy recognizer can still support additional locales through
-        // Apple's speech service. Keep those locales selectable and let the session
-        // prefer on-device recognition whenever the legacy recognizer offers it.
+#if canImport(WhisperKit)
+        // Breeze-ASR-26 is a bundled, local Whisper model. Expose Taigi only when the
+        // complete model folder is present, so a checkout that has not run the
+        // deterministic fetch script never advertises a non-working language.
+        if Bundle.main.url(forResource: "BreezeASR26", withExtension: nil) != nil {
+            let taigiLocale = Locale(identifier: "nan-TW")
+            locales.append(taigiLocale)
+            onDeviceLocaleIdentifiers.insert(taigiLocale.identifier)
+        }
+#endif
+
+        // Keep server-capable legacy locales available on macOS, where upstream
+        // deliberately discloses that tradeoff. The iOS fork promises local-only
+        // transcription: on iOS a legacy locale is selectable only when the device
+        // confirms an on-device model for that exact locale.
         for locale in SFSpeechRecognizer.supportedLocales() {
+            let supportsOnDeviceRecognition =
+                SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true
+#if os(iOS)
+            guard supportsOnDeviceRecognition else {
+                continue
+            }
+#endif
             locales.append(locale)
-            if SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true {
+            if supportsOnDeviceRecognition {
                 onDeviceLocaleIdentifiers.insert(locale.identifier)
             }
         }
@@ -1056,16 +1153,31 @@ final class AppModel: ObservableObject {
     ) {
         let selectedSources = self.selectedSources
         guard selectedSources.isEmpty == false else {
-            let translationPairs = inputLanguageID == outputLanguageID
+            let translationSource = translationSourceLanguageID(for: inputLanguageID)
+            let effectiveOutputLanguageID =
+                inputLanguageID == "nan" ? "zh-Hant" : outputLanguageID
+            let translationPairs = translationSource == effectiveOutputLanguageID
                 ? []
-                : [LanguagePairRequirement(sourceLanguageID: inputLanguageID, targetLanguageID: outputLanguageID)]
-            return ([inputLanguageID], translationPairs)
+                : [
+                    LanguagePairRequirement(
+                        sourceLanguageID: translationSource,
+                        targetLanguageID: effectiveOutputLanguageID
+                    ),
+                ]
+            let speechLanguages = inputLanguageID == "nan" ? [] : [inputLanguageID]
+            return (speechLanguages, translationPairs)
         }
 
-        let speechLanguageIDs = Set(selectedSources.map { languageID(for: $0) }).sorted()
+        let speechLanguageIDs = Set(
+            selectedSources
+                .map { languageID(for: $0) }
+                .filter { $0 != "nan" }
+        ).sorted()
         let translationPairs = Set(
             selectedSources.compactMap { source -> LanguagePairRequirement? in
-                let sourceLanguageID = languageID(for: source)
+                let sourceLanguageID = translationSourceLanguageID(
+                    for: languageID(for: source)
+                )
                 let targetLanguageID = outputLanguageIDForSource(source)
                 guard sourceLanguageID != targetLanguageID else {
                     return nil

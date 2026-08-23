@@ -9,17 +9,23 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+        .package(
+            url: "https://github.com/argmaxinc/argmax-oss-swift",
+            exact: "1.1.0"
+        ),
     ],
     targets: [
         .executableTarget(
             name: "v2s",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
             ],
             path: "Sources/V2SApp",
             resources: [
                 .copy("Resources/AppIcon/AppIcon-512.png"),
                 .copy("Resources/SileroVAD.mlpackage"),
+                .copy("Resources/TWPhrases.txt"),
             ]
         ),
         .testTarget(

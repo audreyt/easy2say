@@ -267,7 +267,10 @@ struct ControlBar: View {
                 symbol: "character.bubble"
             )
         }
-        .disabled(model.isLanguagePairLocked)
+        .disabled(
+            model.isLanguagePairLocked
+                || model.iOSEffectiveInputLanguageID == "nan"
+        )
         .accessibilityLabel(model.localized(.subtitleLanguage))
     }
 

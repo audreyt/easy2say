@@ -203,7 +203,7 @@ struct HomeView: View {
     }
 
     private func toggleSession() {
-        if model.sessionState == .running {
+        if model.sessionState == .running || model.isSessionStarting {
             model.stopSession()
             return
         }
@@ -223,7 +223,7 @@ struct HomeView: View {
         guard model.isConversationModeActive != isActive else { return }
 
         if isActive {
-            if model.sessionState == .running {
+            if model.sessionState == .running || model.isSessionStarting {
                 model.stopSession()
             }
         } else if conversation.isRunning {
@@ -253,7 +253,7 @@ struct HomeView: View {
     private func startConversation() {
         guard hasNoMicrophones == false else { return }
 
-        if model.sessionState == .running {
+        if model.sessionState == .running || model.isSessionStarting {
             model.stopSession()
         }
 
@@ -294,7 +294,10 @@ struct HomeView: View {
 
     private func updateIdleTimer() {
         #if canImport(UIKit)
-        UIApplication.shared.isIdleTimerDisabled = model.sessionState == .running || conversation.isRunning
+        UIApplication.shared.isIdleTimerDisabled =
+            model.sessionState == .running
+            || model.isSessionStarting
+            || conversation.isRunning
         #endif
     }
 

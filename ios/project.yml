@@ -8,6 +8,10 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  argmax-oss-swift:
+    url: https://github.com/argmaxinc/argmax-oss-swift
+    exactVersion: 1.1.0
 targets:
   v2s-ios:
     type: application
@@ -25,17 +29,29 @@ targets:
           - "UI/Settings/**"
       - path: Sources
       - path: Resources
+        excludes:
+          - "BreezeASR26/**"
         buildPhase: resources
+      - path: Resources/BreezeASR26
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: argmax-oss-swift
+        product: WhisperKit
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: org.audreyt.v2s.ios
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: v2s-ios
+        MARKETING_VERSION: "0.3.37"
+        CURRENT_PROJECT_VERSION: "42"
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: v2s-ios
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark

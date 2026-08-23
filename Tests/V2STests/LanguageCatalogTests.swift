@@ -29,6 +29,7 @@ final class LanguageCatalogTests: XCTestCase {
             "en": "en-US",
             "zh-Hans": "zh-CN",
             "zh-Hant": "zh-TW",
+            "nan": "nan-TW",
             "yue": "yue-CN",
             "es": "es-ES",
             "de": "de-DE",
@@ -161,5 +162,24 @@ final class LanguageCatalogTests: XCTestCase {
 
     func testForkDefaultsSubtitleOutputToTraditionalChinese() {
         XCTAssertEqual(AppSettings.default.outputLanguageID, "zh-Hant")
+    }
+    func testTaigiLanguageDisplayNameAndAutonymDiscloseMandarinOutput() {
+        XCTAssertEqual(
+            LanguageCatalog.displayName(for: "nan", in: "zh-Hant"),
+            "台語（華文轉寫）"
+        )
+        XCTAssertEqual(
+            LanguageCatalog.displayName(for: "nan", in: "zh-Hans"),
+            "台语（华文转写）"
+        )
+        XCTAssertEqual(
+            LanguageCatalog.displayName(for: "nan", in: "en"),
+            "Taiwanese Hokkien (Mandarin-character transcription)"
+        )
+        XCTAssertEqual(LanguageCatalog.autonym(for: "nan"), "台語（華文轉寫）")
+        XCTAssertEqual(
+            LanguageCatalog.displayName(for: "nan"),
+            "Taiwanese Hokkien (Mandarin-character transcription)"
+        )
     }
 }

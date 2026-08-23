@@ -153,7 +153,10 @@ struct SettingsView: View {
                             options: model.translationLanguageOptions,
                             selection: model.outputLanguageSelectionBinding
                         )
-                        .disabled(model.isLanguagePairLocked)
+                        .disabled(
+                            model.isLanguagePairLocked
+                                || model.inputLanguageID == "nan"
+                        )
                     }
                     Divider()
                     SettingsControlRow(label: model.localized(.subtitleMode)) {
@@ -525,7 +528,10 @@ struct SettingsView: View {
                             ),
                             selection: sourceOutputLanguageBinding(for: source)
                         )
-                        .disabled(model.isLanguagePairLocked)
+                        .disabled(
+                            model.isLanguagePairLocked
+                                || model.languageID(for: source) == "nan"
+                        )
                     }
                 }
             }
