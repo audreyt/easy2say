@@ -1,9 +1,14 @@
 import Combine
 import Foundation
 import AppKit
+import os.log
 import Speech
 import SwiftUI
 import Translation
+
+private extension Logger {
+    static let session = Logger(subsystem: "com.franklioxygen.v2s", category: "session")
+}
 
 private enum AppBuildInfo {
     static let marketingVersion = "0.3.36"
@@ -21,6 +26,9 @@ final class AppModel: ObservableObject {
     private let speedMonitor = SpeedMonitor()
     private var liveTranscriptionSession: LiveTranscriptionSession?
     private var liveTranscriptionSessions: [LiveTranscriptionSession] = []
+    // Sources whose capture actually started. A multi-source session tolerates inputs
+    // that fail to open, so this can be a subset of `selectedSources` while running.
+    private var activeSources: [InputSource] = []
     private var captionDisplayTask: Task<Void, Never>?
     private var captionTranslationTasks: [UUID: Task<Void, Never>] = [:]
     private var pendingCaptions: [QueuedCaption] = []
@@ -240,18 +248,28 @@ final class AppModel: ObservableObject {
     }
 
     var selectedSourceDisplayName: String {
-        let names = selectedSources.map(\.name)
-        switch names.count {
+        sourceDisplayName(for: selectedSources)
+    }
+
+    /// Name for the sources that are actually capturing, falling back to the selection
+    /// while no session is running. Status text uses this so a session that started
+    /// with only some of the selected inputs does not claim to be using all of them.
+    private var activeSourceDisplayName: String {
+        activeSources.isEmpty ? selectedSourceDisplayName : sourceDisplayName(for: activeSources)
+    }
+
+    private func sourceDisplayName(for sources: [InputSource]) -> String {
+        switch sources.count {
         case 0:
             return localized(.selectedSource)
         case 1:
-            return names[0]
+            return sources[0].name
         default:
-            if selectedSources.count == allSources.count, allSources.isEmpty == false {
+            if sources.count == allSources.count, allSources.isEmpty == false {
                 return localized(.allSources)
             }
             return AppLocalization.multipleSourcesText(
-                count: names.count,
+                count: sources.count,
                 languageID: resolvedInterfaceLanguageID
             )
         }
@@ -511,7 +529,7 @@ final class AppModel: ObservableObject {
         }
 
         if sessionState == .running {
-            setStatus(.running(sourceName: selectedSourceDisplayName))
+            setStatus(.running(sourceName: activeSourceDisplayName))
         } else {
             setStatus(availableSources.isEmpty ? .noInputSourcesDetected : .ready)
         }
@@ -570,16 +588,16 @@ final class AppModel: ObservableObject {
         let config = ModeConfig.config(for: subtitleMode)
         let recognitionHints = recognitionContextualStrings()
         var startedSessions: [LiveTranscriptionSession] = []
+        var startedSources: [InputSource] = []
+        var startupFailures: [Error] = []
         var fatalSessionError: String?
 
-        do {
-            for source in selectedSources {
-                let sourceLanguageID = languageID(for: source)
-                let targetLanguageID = outputLanguageIDForSource(source)
-                let session = LiveTranscriptionSession()
-                // Include the session in cleanup even if start() fails after partially
-                // configuring recognition or capture resources.
-                startedSessions.append(session)
+        for source in selectedSources {
+            let sourceLanguageID = languageID(for: source)
+            let targetLanguageID = outputLanguageIDForSource(source)
+            let session = LiveTranscriptionSession()
+
+            do {
                 try await session.start(
                     source: source,
                     localeIdentifier: speechLocaleIdentifier(for: sourceLanguageID),
@@ -627,43 +645,76 @@ final class AppModel: ObservableObject {
                     }
                 )
 
-                // A recognition task can fail while start() is suspended. Its callback
-                // runs on the main actor, so do not overwrite that error with .running.
-                guard fatalSessionError == nil else {
-                    for startedSession in startedSessions {
-                        startedSession.stop()
-                    }
-                    return
-                }
+                startedSessions.append(session)
+                startedSources.append(source)
+            } catch {
+                // A multi-source session is usable as long as at least one input starts.
+                // Release any resources staged by this source and continue trying the
+                // remaining selections instead of turning a partial failure into a
+                // global "Unable to start" state.
+                await session.stopAndWait()
+                startupFailures.append(error)
             }
 
+            // A recognition task can fail fatally while this iteration is suspended, on
+            // either the success or the failure path. Its handler runs on the main actor
+            // but cannot reach sessions startSession() has not published yet, so stop
+            // them here rather than overwriting its error state with .running below.
+            guard fatalSessionError == nil else {
+                for startedSession in startedSessions {
+                    startedSession.stop()
+                }
+                return
+            }
+        }
+
+        if startedSessions.isEmpty == false {
             liveTranscriptionSessions = startedSessions
             liveTranscriptionSession = startedSessions.first
+            activeSources = startedSources
 
             sessionState = .running
-            setStatus(.running(sourceName: selectedSourceName))
-        } catch {
-            for session in startedSessions {
-                session.stop()
+            let activeSourceName = activeSourceDisplayName
+            setStatus(.running(sourceName: activeSourceName))
+
+            // Inputs that never opened are tolerated, but not hidden: log every failure
+            // and show the first one in the overlay so a partially started session is
+            // recognizable. Leave the overlay alone once real audio has replaced the
+            // placeholder, which can happen while a later source is still starting.
+            for failure in startupFailures {
+                Logger.session.error("Input source failed to start: \(self.localizedErrorDescription(failure))")
             }
-            resetLiveTextPipeline()
-            liveTranscriptionSession = nil
-            liveTranscriptionSessions.removeAll()
-            restoreTranscript(
-                entries: previousTranscriptEntries,
-                sourceLanguageID: previousTranscriptInputLanguageID,
-                targetLanguageID: previousTranscriptOutputLanguageID
-            )
-            sessionState = .error
-            let localizedError = localizedErrorDescription(error)
-            setStatus(.custom(localizedError))
-            overlayState = OverlayPreviewState(
-                translatedText: unableToStartText,
-                sourceText: localizedError,
-                sourceName: selectedSourceName
-            )
-            overlayHistoryScrollOffset = 0
+            if let failure = startupFailures.first,
+               overlayState?.translatedText == listeningPlaceholderText {
+                overlayState = OverlayPreviewState(
+                    translatedText: listeningPlaceholderText,
+                    sourceText: localizedErrorDescription(failure),
+                    sourceName: activeSourceName
+                )
+                overlayHistoryScrollOffset = 0
+            }
+            return
         }
+
+        resetLiveTextPipeline()
+        liveTranscriptionSession = nil
+        liveTranscriptionSessions.removeAll()
+        activeSources.removeAll()
+        restoreTranscript(
+            entries: previousTranscriptEntries,
+            sourceLanguageID: previousTranscriptInputLanguageID,
+            targetLanguageID: previousTranscriptOutputLanguageID
+        )
+        sessionState = .error
+        let localizedError = startupFailures.first.map(localizedErrorDescription)
+            ?? unableToStartText
+        setStatus(.custom(localizedError))
+        overlayState = OverlayPreviewState(
+            translatedText: unableToStartText,
+            sourceText: localizedError,
+            sourceName: selectedSourceName
+        )
+        overlayHistoryScrollOffset = 0
     }
 
     func stopSession() {
@@ -701,6 +752,7 @@ final class AppModel: ObservableObject {
 
         liveTranscriptionSessions.removeAll()
         liveTranscriptionSession = nil
+        activeSources.removeAll()
         return sessions
     }
 
@@ -1942,7 +1994,7 @@ final class AppModel: ObservableObject {
             sessionState = .running
         }
 
-        setStatus(.running(sourceName: selectedSourceDisplayName))
+        setStatus(.running(sourceName: activeSourceDisplayName))
     }
 
     private func refreshCaptionTranslations() {
