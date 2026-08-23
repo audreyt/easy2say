@@ -63,6 +63,10 @@ struct ConversationFloorArbiter: Equatable, Sendable {
         self.requiredWins = max(1, requiredWins)
     }
 
+    var hasPinnedFloor: Bool {
+        pinnedSide != nil
+    }
+
     /// Forces the floor to `side` and holds it there until the next commit.
     ///
     /// Used by the two "I'm speaking" targets: in a loud room the fastest way to fix a
@@ -145,6 +149,29 @@ struct ConversationFloorArbiter: Equatable, Sendable {
         }
 
         return moveFloor()
+    }
+
+    /// Resolves the floor when one lane finalizes the utterance. A final decision uses
+    /// one confidence comparison instead of waiting for three volatile updates, then
+    /// stays sticky until the engine commits the turn.
+    @discardableResult
+    mutating func resolveFinal(
+        primary: Observation,
+        secondary: Observation
+    ) -> Bool {
+        if let pinnedSide {
+            floor = pinnedSide
+            return false
+        }
+
+        let incumbent = floor == .primary ? primary : secondary
+        let contender = floor == .primary ? secondary : primary
+        let shouldMove = contender.hasSpeech
+            && (incumbent.hasSpeech == false
+                || contender.confidence >= incumbent.confidence + margin)
+        let moved = shouldMove ? moveFloor() : false
+        isFloorSticky = true
+        return moved
     }
 
     private mutating func moveFloor() -> Bool {

@@ -1,40 +1,82 @@
-import AVFoundation
 import CoreMedia
 import Foundation
 import Speech
 
-/// One locale-pinned transcriber inside a conversation session.
+/// One locale-pinned result lane inside a shared conversation `SpeechAnalyzer`.
 ///
-/// A lane owns a `SpeechTranscriber` and the `SpeechAnalyzer` feeding it, and nothing
-/// else — the microphone, the format conversion and the arbitration all live one level
-/// up in `ConversationEngine`, because both lanes must see byte-identical audio for a
-/// confidence comparison between them to mean anything.
+/// Both transcribers are modules of the same analyzer and therefore consume the exact
+/// same `AnalyzerInput` stream. This class only consumes one transcriber's results; the
+/// engine owns capture, the analyzer, input buffering, arbitration, and translation.
 @available(macOS 26.0, *)
 final class ConversationLane: @unchecked Sendable {
+    struct TimedSpan: Equatable, Sendable {
+        let text: String
+        let confidence: Double
+        let startSeconds: Double
+        let endSeconds: Double
+    }
+
     struct Update: Sendable {
         let side: ConversationSide
         let text: String
         /// Mean `transcriptionConfidence` over the result's runs, in `0...1`.
         let confidence: Double
         let isFinal: Bool
-        /// Position of this result in the capture timeline. Both lanes are fed the
-        /// same buffers from the same instant, so their timelines are comparable —
-        /// which is what lets the engine recognise a result describing audio it has
-        /// already turned into a turn.
+        /// Position of this result in the shared capture timeline.
         let startSeconds: Double
         let endSeconds: Double
+        /// Attributed-string runs retain their own audio identity. The engine uses
+        /// these to trim audio already committed by the other lane without dropping
+        /// new words from a result that spans both old and new speech.
+        let spans: [TimedSpan]
+
+        /// Removes text at or before the committed audio boundary.
+        func trimmingAudio(beforeOrAt boundary: Double, tolerance: Double) -> Update? {
+            guard boundary > 0 else { return self }
+
+            if spans.isEmpty == false {
+                let pending = spans.filter {
+                    $0.endSeconds > boundary + tolerance
+                }
+                guard pending.isEmpty == false else { return nil }
+
+                let pendingText = Self.normalizedText(
+                    pending.map(\.text).joined()
+                )
+                guard pendingText.isEmpty == false else { return nil }
+
+                return Update(
+                    side: side,
+                    text: pendingText,
+                    confidence: pending.map(\.confidence).reduce(0, +) / Double(pending.count),
+                    isFinal: isFinal,
+                    startSeconds: pending.map(\.startSeconds).min() ?? startSeconds,
+                    endSeconds: pending.map(\.endSeconds).max() ?? endSeconds,
+                    spans: pending
+                )
+            }
+
+            // `audioTimeRange` was requested, but preserve a wholly-new result if an
+            // OS build omits run-level attributes. An overlapping result cannot be
+            // safely split and is dropped instead of duplicating committed speech.
+            guard startSeconds + tolerance >= boundary else { return nil }
+            return self
+        }
+
+        private static func normalizedText(_ text: String) -> String {
+            text
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
     }
 
-    /// Confidence assumed when a result carries no `transcriptionConfidence` runs.
+    /// Confidence assumed when a run carries no `transcriptionConfidence`.
     /// Neutral by construction: an absent score must not decide the floor.
     private static let assumedConfidence: Double = 0.82
 
     let side: ConversationSide
+    let transcriber: SpeechTranscriber
 
-    private let transcriber: SpeechTranscriber
-    private var analyzer: SpeechAnalyzer?
-    private var continuation: AsyncStream<AnalyzerInput>.Continuation?
-    private var analyzerTask: Task<Void, Never>?
     private var resultsTask: Task<Void, Never>?
     /// Guards against re-emitting a finalized result, which `SpeechTranscriber` can
     /// redeliver when a later volatile result refines the same range.
@@ -67,19 +109,9 @@ final class ConversationLane: @unchecked Sendable {
     }
 
     func start(
-        analyzerFormat: AVAudioFormat,
-        onUpdate: @escaping @Sendable (Update) -> Void
-    ) async throws {
-        let analyzer = SpeechAnalyzer(
-            modules: [transcriber],
-            options: SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .whileInUse)
-        )
-        try await analyzer.prepareToAnalyze(in: analyzerFormat)
-
-        let stream = AsyncStream<AnalyzerInput>(bufferingPolicy: .bufferingNewest(12)) { continuation in
-            self.continuation = continuation
-        }
-
+        onUpdate: @escaping @Sendable (Update) -> Void,
+        onFailure: @escaping @Sendable (Error) -> Void
+    ) {
         let side = side
         let transcriber = transcriber
         resultsTask = Task { [weak self] in
@@ -89,46 +121,23 @@ final class ConversationLane: @unchecked Sendable {
                     guard let update = self.update(from: result, side: side) else { continue }
                     onUpdate(update)
                 }
-            } catch {
-                // A lane that dies takes its language with it; the surviving lane keeps
-                // transcribing, and the arbiter simply never hands it the floor.
+            } catch is CancellationError {
                 return
+            } catch {
+                onFailure(error)
             }
         }
-
-        analyzerTask = Task {
-            try? await analyzer.start(inputSequence: stream)
-        }
-
-        self.analyzer = analyzer
-    }
-
-    func append(_ buffer: AVAudioPCMBuffer) {
-        continuation?.yield(AnalyzerInput(buffer: buffer))
     }
 
     func finish() {
-        continuation?.finish()
-        continuation = nil
         resultsTask?.cancel()
         resultsTask = nil
-        analyzerTask?.cancel()
-        analyzerTask = nil
-
-        if let analyzer {
-            self.analyzer = nil
-            Task {
-                await analyzer.cancelAndFinishNow()
-            }
-        }
     }
 
     // MARK: - Private
 
     private func update(from result: SpeechTranscriber.Result, side: ConversationSide) -> Update? {
-        let text = String(result.text.characters)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = normalizedText(result.text)
 
         if result.isFinal {
             let identity = "\(result.range.start.value):\(result.range.duration.value):\(text)"
@@ -136,35 +145,60 @@ final class ConversationLane: @unchecked Sendable {
             lastFinalIdentity = identity
         }
 
-        let start = CMTimeGetSeconds(result.range.start)
-        let end = CMTimeGetSeconds(result.range.end)
+        let resultStart = seconds(result.range.start, fallback: 0)
+        let resultEnd = seconds(result.range.end, fallback: .greatestFiniteMagnitude)
+        let spans = timedSpans(in: result.text)
 
         return Update(
             side: side,
             text: text,
             confidence: averageConfidence(of: result.text),
             isFinal: result.isFinal,
-            // A malformed range must not silence a lane, so fall back to a window that
-            // never reads as already-committed.
-            startSeconds: start.isFinite ? start : 0,
-            endSeconds: end.isFinite ? end : .greatestFiniteMagnitude
+            startSeconds: spans.map(\.startSeconds).min() ?? resultStart,
+            endSeconds: spans.map(\.endSeconds).max() ?? resultEnd,
+            spans: spans
         )
     }
 
-    private func averageConfidence(of text: AttributedString) -> Double {
-        var total: Double = 0
-        var count = 0
-
+    private func timedSpans(in text: AttributedString) -> [TimedSpan] {
+        var spans: [TimedSpan] = []
         for run in text.runs {
-            if let confidence = run.transcriptionConfidence {
-                total += confidence
-                count += 1
-            }
+            let fragment = String(text[run.range].characters)
+            guard fragment.isEmpty == false else { continue }
+            // One untimed fragment makes the result unsplittable. Return no spans so
+            // `trimmingAudio` takes its conservative whole-result overlap fallback.
+            guard let timeRange = run.audioTimeRange else { return [] }
+            let start = CMTimeGetSeconds(timeRange.start)
+            let end = CMTimeGetSeconds(timeRange.end)
+            guard start.isFinite, end.isFinite else { return [] }
+            spans.append(
+                TimedSpan(
+                    text: fragment,
+                    confidence: run.transcriptionConfidence ?? Self.assumedConfidence,
+                    startSeconds: start,
+                    endSeconds: end
+                )
+            )
         }
+        return spans
+    }
 
-        guard count > 0 else {
+    private func averageConfidence(of text: AttributedString) -> Double {
+        let values = text.runs.compactMap { $0.transcriptionConfidence }
+        guard values.isEmpty == false else {
             return Self.assumedConfidence
         }
-        return total / Double(count)
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func normalizedText(_ text: AttributedString) -> String {
+        String(text.characters)
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func seconds(_ time: CMTime, fallback: Double) -> Double {
+        let value = CMTimeGetSeconds(time)
+        return value.isFinite ? value : fallback
     }
 }

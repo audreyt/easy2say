@@ -66,6 +66,41 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.glossary, ["CEO": "Chief Executive Officer"])
     }
 
+    func testConversationSettingsDefaultForLegacyFiles() throws {
+        let data = try JSONEncoder().encode(AppSettings.default)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object.removeValue(forKey: "conversationPrimaryLanguageID")
+        object.removeValue(forKey: "conversationSecondaryLanguageID")
+        object.removeValue(forKey: "conversationFaceToFace")
+        object.removeValue(forKey: "conversationModeActive")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: legacyData)
+
+        XCTAssertEqual(decoded.conversationPrimaryLanguageID, "zh-Hant")
+        XCTAssertEqual(decoded.conversationSecondaryLanguageID, "en")
+        XCTAssertTrue(decoded.conversationFaceToFace)
+        XCTAssertFalse(decoded.conversationModeActive)
+    }
+
+    func testConversationSettingsSurviveRoundTrip() throws {
+        var settings = AppSettings.default
+        settings.conversationPrimaryLanguageID = "ja"
+        settings.conversationSecondaryLanguageID = "fr"
+        settings.conversationFaceToFace = false
+        settings.conversationModeActive = true
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.conversationPrimaryLanguageID, "ja")
+        XCTAssertEqual(decoded.conversationSecondaryLanguageID, "fr")
+        XCTAssertFalse(decoded.conversationFaceToFace)
+        XCTAssertTrue(decoded.conversationModeActive)
+    }
+
     func testInvisibleInRecordingDefaultsToOffForSettingsSavedBeforeTheToggleExisted() throws {
         let json = """
         {

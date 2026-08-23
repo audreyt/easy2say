@@ -81,8 +81,14 @@ final class ConversationEngine: ObservableObject {
     private var arbiter = ConversationFloorArbiter()
     private var lanes: [ConversationSide: ConversationLane] = [:]
     private var hypotheses: [ConversationSide: LaneHypothesis] = [:]
+    private var lastArbitratedEndSeconds: [ConversationSide: Double] = [:]
     private var audioTap: ConversationAudioTap?
+    private var speechAnalyzer: SpeechAnalyzer?
+    private var analyzerInputContinuation: AsyncStream<AnalyzerInput>.Continuation?
+    private var analyzerTask: Task<Void, Never>?
     private var startTask: Task<Void, Never>?
+    /// Invalidates callbacks and asynchronous startup work from earlier runs.
+    private var runGeneration = 0
     private var draftTranslationTasks: [ConversationSide: Task<Void, Never>] = [:]
     private var turnTranslationTasks: [UUID: Task<Void, Never>] = [:]
     /// Identifies the utterance currently being drafted, so a late draft translation
@@ -95,7 +101,8 @@ final class ConversationEngine: ObservableObject {
         var volatileText = ""
         var confidence: Double = 0
         var finalizedText: String?
-        /// End of the audio this hypothesis describes, in capture-timeline seconds.
+        /// Range of the pending, already-trimmed audio in the shared timeline.
+        var startSeconds: Double = 0
         var endSeconds: Double = 0
 
         var arbiterObservation: ConversationFloorArbiter.Observation {
@@ -165,7 +172,8 @@ final class ConversationEngine: ObservableObject {
         if isRunning {
             stop()
         }
-        translators.values.forEach { $0.reset() }
+        // Coordinators support queued pair switches. Do not reset them here: the last
+        // committed turn from the prior run may still need its listener translation.
     }
 
     func start() async {
@@ -179,21 +187,25 @@ final class ConversationEngine: ObservableObject {
         }
 
         phase = .preparing
+        runGeneration &+= 1
+        let generation = runGeneration
         arbiter = ConversationFloorArbiter()
         floor = arbiter.floor
         hypotheses = [.primary: LaneHypothesis(), .secondary: LaneHypothesis()]
+        lastArbitratedEndSeconds = [:]
         committedAudioEndSeconds = 0
         clearDrafts()
 
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.performStart()
+            await self.performStart(generation: generation)
         }
         startTask = task
         await task.value
     }
 
     func stop() {
+        runGeneration &+= 1
         startTask?.cancel()
         startTask = nil
 
@@ -204,13 +216,25 @@ final class ConversationEngine: ObservableObject {
 
         audioTap?.stop()
         audioTap = nil
+        analyzerInputContinuation?.finish()
+        analyzerInputContinuation = nil
+        analyzerTask?.cancel()
+        analyzerTask = nil
 
         for lane in lanes.values {
             lane.finish()
         }
         lanes.removeAll()
 
+        if let analyzer = speechAnalyzer {
+            speechAnalyzer = nil
+            Task {
+                await analyzer.cancelAndFinishNow()
+            }
+        }
+
         hypotheses = [:]
+        lastArbitratedEndSeconds = [:]
         clearDrafts()
         if case .failed = phase {} else {
             phase = .idle
@@ -226,14 +250,21 @@ final class ConversationEngine: ObservableObject {
         guard isRunning else {
             return
         }
-        guard side != floor else {
-            return
-        }
 
-        let carried = draft(for: floor)
+        let previousFloor = floor
+        let carried = draft(for: previousFloor)
         arbiter.pin(side)
         floor = side
-        migrateDraft(carried, to: side)
+        if previousFloor != side {
+            migrateDraft(carried, to: side)
+        }
+        if phase == .listening,
+           let finalized = hypotheses[side]?.finalizedText,
+           finalized.isEmpty == false {
+            // An explicit tap is the human resolution when automatic evidence never
+            // aligns (for example, one recognizer emits no hypothesis at all).
+            commitTurn(text: finalized, side: side)
+        }
     }
 
     func clearTurns() {
@@ -256,13 +287,19 @@ final class ConversationEngine: ObservableObject {
 
     // MARK: - Startup
 
-    private func performStart() async {
+    private func performStart(generation: Int) async {
+        guard generation == runGeneration else { return }
         guard SpeechTranscriber.isAvailable else {
-            phase = .failed(localized(.conversationUnavailableFormat, autonym(for: primaryLanguageID)))
+            failRun(
+                localized(.conversationUnavailableFormat, autonym(for: primaryLanguageID)),
+                generation: generation
+            )
             return
         }
 
-        guard await requestRequiredPermissions() else {
+        guard await requestRequiredPermissions(generation: generation),
+              generation == runGeneration,
+              Task.isCancelled == false else {
             return
         }
 
@@ -270,11 +307,19 @@ final class ConversationEngine: ObservableObject {
         var resolvedLocales: [ConversationSide: Locale] = [:]
         for side in ConversationSide.allCases {
             let languageID = languageID(for: side)
-            let requested = Locale(identifier: LanguageCatalog.speechLocaleIdentifier(for: languageID))
-            guard let resolved = await LiveTranscriptionSession.modernSpeechLocale(equivalentTo: requested) else {
-                phase = .failed(localized(.conversationUnavailableFormat, autonym(for: languageID)))
+            let requested = Locale(
+                identifier: LanguageCatalog.speechLocaleIdentifier(for: languageID)
+            )
+            guard let resolved = await LiveTranscriptionSession.modernSpeechLocale(
+                equivalentTo: requested
+            ) else {
+                failRun(
+                    localized(.conversationUnavailableFormat, autonym(for: languageID)),
+                    generation: generation
+                )
                 return
             }
+            guard generation == runGeneration, Task.isCancelled == false else { return }
 
             resolvedLocales[side] = resolved
             transcribers[side] = SpeechTranscriber(
@@ -285,93 +330,149 @@ final class ConversationEngine: ObservableObject {
             )
         }
 
-        guard Task.isCancelled == false else {
-            return
-        }
-
         let modules = ConversationSide.allCases.compactMap { transcribers[$0] }
         do {
             try await ConversationLane.installAssetsIfNeeded(
                 for: ConversationSide.allCases.compactMap { side in
-                    guard let transcriber = transcribers[side], let locale = resolvedLocales[side] else {
+                    guard let transcriber = transcribers[side],
+                          let locale = resolvedLocales[side] else {
                         return nil
                     }
                     return (transcriber: transcriber, locale: locale)
                 }
             )
+        } catch is CancellationError {
+            return
         } catch {
-            phase = .failed(localizedErrorDescription(error))
+            handleRunFailure(error, generation: generation)
             return
         }
+        guard generation == runGeneration, Task.isCancelled == false else { return }
 
-        guard Task.isCancelled == false else {
-            return
-        }
-
-        // One format both lanes accept, so the capture is converted once and the same
-        // buffer object is handed to both analyzers.
         let captureFormat = ConversationAudioTap.captureFormat
         let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: modules,
             considering: captureFormat
         ) ?? captureFormat
+        guard generation == runGeneration, Task.isCancelled == false else { return }
+
+        let analyzer = SpeechAnalyzer(
+            modules: modules,
+            options: SpeechAnalyzer.Options(
+                priority: .userInitiated,
+                modelRetention: .whileInUse
+            )
+        )
+        do {
+            try await analyzer.prepareToAnalyze(in: analyzerFormat)
+        } catch is CancellationError {
+            return
+        } catch {
+            handleRunFailure(error, generation: generation)
+            return
+        }
+        guard generation == runGeneration, Task.isCancelled == false else {
+            await analyzer.cancelAndFinishNow()
+            return
+        }
+
+        // Validate and prepare both translation directions before opening the mic.
+        // A conversation with one unavailable direction would otherwise look healthy
+        // while one reader's half stays empty.
+        do {
+            async let primaryPreparation: Void = translators[.primary]!.prepareIfNeeded(
+                from: primaryLanguageID,
+                to: secondaryLanguageID
+            )
+            async let secondaryPreparation: Void = translators[.secondary]!.prepareIfNeeded(
+                from: secondaryLanguageID,
+                to: primaryLanguageID
+            )
+            _ = try await (primaryPreparation, secondaryPreparation)
+        } catch is CancellationError {
+            await analyzer.cancelAndFinishNow()
+            return
+        } catch {
+            await analyzer.cancelAndFinishNow()
+            handleRunFailure(error, generation: generation)
+            return
+        }
+        guard generation == runGeneration, Task.isCancelled == false else {
+            await analyzer.cancelAndFinishNow()
+            return
+        }
+
+        var continuation: AsyncStream<AnalyzerInput>.Continuation!
+        let inputStream = AsyncStream<AnalyzerInput>(
+            bufferingPolicy: .bufferingNewest(12)
+        ) {
+            continuation = $0
+        }
 
         var startedLanes: [ConversationSide: ConversationLane] = [:]
         for side in ConversationSide.allCases {
             guard let transcriber = transcribers[side] else { continue }
             let lane = ConversationLane(side: side, transcriber: transcriber)
-            do {
-                try await lane.start(analyzerFormat: analyzerFormat) { [weak self] update in
+            lane.start(
+                onUpdate: { [weak self] update in
                     Task { @MainActor [weak self] in
-                        self?.apply(update)
+                        guard let self, self.runGeneration == generation else { return }
+                        self.apply(update, generation: generation)
+                    }
+                },
+                onFailure: { [weak self] error in
+                    Task { @MainActor [weak self] in
+                        self?.handleRunFailure(error, generation: generation)
                     }
                 }
-            } catch {
-                startedLanes.values.forEach { $0.finish() }
-                lane.finish()
-                phase = .failed(localizedErrorDescription(error))
-                return
-            }
+            )
             startedLanes[side] = lane
         }
 
-        guard Task.isCancelled == false else {
-            startedLanes.values.forEach { $0.finish() }
-            return
-        }
-
         lanes = startedLanes
+        speechAnalyzer = analyzer
+        analyzerInputContinuation = continuation
+        analyzerTask = Task { [weak self] in
+            do {
+                try await analyzer.start(inputSequence: inputStream)
+            } catch is CancellationError {
+                return
+            } catch {
+                Task { @MainActor [weak self] in
+                    self?.handleRunFailure(error, generation: generation)
+                }
+            }
+        }
 
         let tap = ConversationAudioTap(outputFormat: analyzerFormat)
-        // Hand the lanes to the closure directly rather than reading `self.lanes` on
-        // the main actor: an actor hop per 10 ms buffer would cost a Task allocation
-        // 100 times a second and add jitter to the one signal the arbiter depends on.
-        let laneFanout = ConversationSide.allCases.compactMap { startedLanes[$0] }
         tap.onBuffer = { buffer in
-            for lane in laneFanout {
-                lane.append(buffer)
-            }
+            _ = continuation.yield(AnalyzerInput(buffer: buffer))
         }
+        // Own the pending tap before `start()` suspends. `stop()` can then serialize
+        // behind capture startup instead of letting a new run overlap it.
+        audioTap = tap
 
         do {
-            try tap.start()
+            try await tap.start()
+        } catch is CancellationError {
+            return
         } catch {
-            startedLanes.values.forEach { $0.finish() }
-            lanes.removeAll()
-            phase = .failed(localizedErrorDescription(error))
+            tap.stop()
+            if audioTap === tap {
+                audioTap = nil
+            }
+            handleRunFailure(error, generation: generation)
             return
         }
 
-        audioTap = tap
-
-        // Warm both directions before the first utterance so the opening sentence is
-        // not the one that pays for model loading.
-        for side in ConversationSide.allCases {
-            let source = languageID(for: side)
-            let target = languageID(for: side.opposite)
-            Task { [weak self] in
-                try? await self?.translators[side]?.prepareIfNeeded(from: source, to: target)
+        guard generation == runGeneration,
+              Task.isCancelled == false,
+              phase == .preparing else {
+            tap.stop()
+            if audioTap === tap {
+                audioTap = nil
             }
+            return
         }
 
         phase = .listening
@@ -379,70 +480,146 @@ final class ConversationEngine: ObservableObject {
 
     // MARK: - Lane results
 
-    private func apply(_ update: ConversationLane.Update) {
-        guard case .listening = phase else {
+    private func failRun(_ message: String, generation: Int) {
+        guard generation == runGeneration else { return }
+        phase = .failed(message)
+        stop()
+    }
+
+    private func handleRunFailure(_ error: Error, generation: Int) {
+        guard generation == runGeneration,
+              phase == .preparing || phase == .listening else {
+            return
+        }
+        phase = .failed(localizedErrorDescription(error))
+        stop()
+    }
+
+
+    private func apply(_ rawUpdate: ConversationLane.Update, generation: Int) {
+        guard generation == runGeneration, phase == .listening else {
             return
         }
 
-        // Both lanes hear every utterance, so the lane that lost the floor keeps
-        // working and finalizes the same audio a beat later. Without this guard that
-        // late result would land as a second turn, attributed to the wrong side and
-        // written in the wrong language.
-        guard isStale(update) == false else {
+        // A slower lane can emit a result spanning both the prior turn and new
+        // speech. Trim by attributed run identity instead of dropping the whole
+        // result; otherwise either the old turn duplicates or the new words vanish.
+        guard let update = rawUpdate.trimmingAudio(
+            beforeOrAt: committedAudioEndSeconds,
+            tolerance: Self.audioTimelineTolerance
+        ), update.text.isEmpty == false else {
             return
         }
 
         var hypothesis = hypotheses[update.side] ?? LaneHypothesis()
         hypothesis.confidence = update.confidence
-        if update.isFinal {
-            hypothesis.finalizedText = update.text
-            hypothesis.volatileText = update.text
-            hypothesis.endSeconds = update.endSeconds
-        } else {
-            hypothesis.volatileText = update.text
-            hypothesis.endSeconds = update.endSeconds
-        }
+        hypothesis.startSeconds = update.startSeconds
+        hypothesis.endSeconds = update.endSeconds
+        hypothesis.volatileText = update.text
+        hypothesis.finalizedText = update.isFinal ? update.text : nil
         hypotheses[update.side] = hypothesis
 
-        let didMoveFloor = arbiter.observe(
-            primary: hypotheses[.primary]?.arbiterObservation ?? .silent,
-            secondary: hypotheses[.secondary]?.arbiterObservation ?? .silent
-        )
-
+        let pendingFinalSide: ConversationSide? = {
+            if update.isFinal { return update.side }
+            if hypotheses[.primary]?.finalizedText != nil { return .primary }
+            if hypotheses[.secondary]?.finalizedText != nil { return .secondary }
+            return nil
+        }()
+        let didMoveFloor = updateFloor(finalSide: pendingFinalSide)
         if didMoveFloor {
             let carried = draft(for: floor)
             floor = arbiter.floor
             migrateDraft(carried, to: floor)
         }
 
-        if let finalized = hypotheses[floor]?.finalizedText, finalized.isEmpty == false {
+        if let finalized = finalizedFloorReadyToCommit() {
             commitTurn(text: finalized, side: floor)
             return
         }
 
-        publishDraft(for: floor)
+        publishDraft(for: floor, generation: generation)
     }
 
-    /// Tolerance absorbing the small timeline differences between the two analyzers.
-    private static let audioTimelineTolerance: Double = 0.05
+    private func finalizedFloorReadyToCommit() -> String? {
+        guard let finalized = hypotheses[floor]?.finalizedText,
+              finalized.isEmpty == false else {
+            return nil
+        }
+        if arbiter.hasPinnedFloor {
+            return finalized
+        }
+        guard let primary = hypotheses[.primary],
+              let secondary = hypotheses[.secondary],
+              rangesAlign(primary, secondary) else {
+            return nil
+        }
+        return finalized
+    }
 
-    /// True when `update` describes audio already committed as a turn.
-    private func isStale(_ update: ConversationLane.Update) -> Bool {
-        guard committedAudioEndSeconds > 0 else {
+    /// Tolerance absorbing small timeline differences between the two modules.
+    private static let audioTimelineTolerance: Double = 0.05
+    private static let arbitrationAdvanceTolerance: Double = 0.005
+
+    /// Compares only hypotheses that describe overlapping audio and, for volatile
+    /// updates, only after both lanes have advanced since the prior comparison.
+    /// This prevents three fast updates from one lane defeating one stale observation
+    /// from the other and satisfying `requiredWins` without three paired comparisons.
+    private func updateFloor(finalSide: ConversationSide?) -> Bool {
+        let primary = hypotheses[.primary]
+        let secondary = hypotheses[.secondary]
+
+        if finalSide != nil {
+            // A fast wrong-language lane can finalize before the correct lane has
+            // aligned evidence. Keep the established floor until both modules have
+            // described the same audio; never award a turn merely for finishing first.
+            guard let primary, let secondary,
+                  rangesAlign(primary, secondary) else {
+                return false
+            }
+            lastArbitratedEndSeconds[.primary] = primary.endSeconds
+            lastArbitratedEndSeconds[.secondary] = secondary.endSeconds
+            return arbiter.resolveFinal(
+                primary: primary.arbiterObservation,
+                secondary: secondary.arbiterObservation
+            )
+        }
+
+        guard let primary, let secondary,
+              rangesAlign(primary, secondary),
+              primary.endSeconds
+                > (lastArbitratedEndSeconds[.primary] ?? 0)
+                    + Self.arbitrationAdvanceTolerance,
+              secondary.endSeconds
+                > (lastArbitratedEndSeconds[.secondary] ?? 0)
+                    + Self.arbitrationAdvanceTolerance else {
             return false
         }
 
-        if update.endSeconds <= committedAudioEndSeconds + Self.audioTimelineTolerance {
-            return true
-        }
-
-        // A finalized result that reaches back into committed audio is the other lane
-        // describing the turn that already shipped, not a new one.
-        return update.isFinal
-            && update.startSeconds + Self.audioTimelineTolerance < committedAudioEndSeconds
+        lastArbitratedEndSeconds[.primary] = primary.endSeconds
+        lastArbitratedEndSeconds[.secondary] = secondary.endSeconds
+        return arbiter.observe(
+            primary: primary.arbiterObservation,
+            secondary: secondary.arbiterObservation
+        )
     }
 
-    private func publishDraft(for side: ConversationSide) {
+    private func rangesAlign(_ lhs: LaneHypothesis, _ rhs: LaneHypothesis) -> Bool {
+        let overlap = max(
+            0,
+            min(lhs.endSeconds, rhs.endSeconds)
+                - max(lhs.startSeconds, rhs.startSeconds)
+        )
+        let shorterDuration = max(
+            0.001,
+            min(
+                lhs.endSeconds - lhs.startSeconds,
+                rhs.endSeconds - rhs.startSeconds
+            )
+        )
+        return overlap / shorterDuration >= 0.5
+    }
+
+    private func publishDraft(for side: ConversationSide, generation: Int) {
         guard let text = hypotheses[side]?.volatileText, text.isEmpty == false else {
             return
         }
@@ -453,7 +630,12 @@ final class ConversationEngine: ObservableObject {
         }
         updated.sourceText = text
         setDraft(updated, for: side)
-        scheduleDraftTranslation(text: text, side: side, draftID: draftID)
+        scheduleDraftTranslation(
+            text: text,
+            side: side,
+            draftID: draftID,
+            generation: generation
+        )
     }
 
     /// Moves the in-flight hypothesis to the side that just won the floor, so the words
@@ -472,35 +654,62 @@ final class ConversationEngine: ObservableObject {
         }
 
         setDraft(ConversationDraft(id: draftID, sourceText: text), for: side)
-        scheduleDraftTranslation(text: text, side: side, draftID: draftID)
+        scheduleDraftTranslation(
+            text: text,
+            side: side,
+            draftID: draftID,
+            generation: runGeneration
+        )
     }
 
-    private func scheduleDraftTranslation(text: String, side: ConversationSide, draftID: UUID) {
+    private func scheduleDraftTranslation(
+        text: String,
+        side: ConversationSide,
+        draftID: UUID,
+        generation: Int
+    ) {
         draftTranslationTasks[side]?.cancel()
 
         let source = languageID(for: side)
         let target = languageID(for: side.opposite)
         draftTranslationTasks[side] = Task { [weak self] in
-            try? await Task.sleep(for: Self.draftTranslationDelay)
-            guard Task.isCancelled == false, let self else { return }
-            guard let translated = try? await self.translators[side]?.translate(
-                text,
-                from: source,
-                to: target
-            ) else {
-                return
-            }
+            do {
+                try await Task.sleep(for: Self.draftTranslationDelay)
+                guard Task.isCancelled == false, let self,
+                      generation == self.runGeneration,
+                      self.draftID == draftID,
+                      self.floor == side,
+                      self.draft(for: side).sourceText == text else {
+                    return
+                }
 
-            guard Task.isCancelled == false,
-                  self.draftID == draftID,
-                  self.floor == side,
-                  self.draft(for: side).sourceText == text else {
-                return
-            }
+                let translated = try await self.translators[side]!.translate(
+                    text,
+                    from: source,
+                    to: target
+                )
+                guard Task.isCancelled == false,
+                      generation == self.runGeneration,
+                      self.draftID == draftID,
+                      self.floor == side,
+                      self.draft(for: side).sourceText == text else {
+                    return
+                }
 
-            var updated = self.draft(for: side)
-            updated.translatedText = translated
-            self.setDraft(updated, for: side)
+                var updated = self.draft(for: side)
+                updated.translatedText = translated
+                self.setDraft(updated, for: side)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard let self,
+                      generation == self.runGeneration,
+                      self.draftID == draftID,
+                      self.floor == side else {
+                    return
+                }
+                self.handleRunFailure(error, generation: generation)
+            }
         }
     }
 
@@ -533,6 +742,7 @@ final class ConversationEngine: ObservableObject {
             hypotheses[side]?.endSeconds ?? committedAudioEndSeconds
         )
         hypotheses = [.primary: LaneHypothesis(), .secondary: LaneHypothesis()]
+        lastArbitratedEndSeconds = [:]
         arbiter.commitUtterance()
         draftID = UUID()
         for task in draftTranslationTasks.values {
@@ -546,21 +756,32 @@ final class ConversationEngine: ObservableObject {
         }
 
         let turnID = turn.id
+        let generation = runGeneration
         turnTranslationTasks[turnID] = Task { [weak self] in
             guard let self else { return }
             defer { self.turnTranslationTasks[turnID] = nil }
-            guard let translated = try? await self.translators[side]?.translate(
-                text,
-                from: sourceLanguageID,
-                to: targetLanguageID
-            ) else {
+            do {
+                let translated = try await self.translators[side]!.translate(
+                    text,
+                    from: sourceLanguageID,
+                    to: targetLanguageID
+                )
+                guard Task.isCancelled == false,
+                      let index = self.turns.firstIndex(where: { $0.id == turnID }) else {
+                    return
+                }
+                // A stopped run retains its turns, so a pending listener translation
+                // is still valuable and safe to backfill by immutable turn ID.
+                self.turns[index].translatedText = translated
+            } catch is CancellationError {
                 return
+            } catch {
+                guard generation == self.runGeneration,
+                      self.turns.contains(where: { $0.id == turnID }) else {
+                    return
+                }
+                self.handleRunFailure(error, generation: generation)
             }
-            guard Task.isCancelled == false,
-                  let index = self.turns.firstIndex(where: { $0.id == turnID }) else {
-                return
-            }
-            self.turns[index].translatedText = translated
         }
     }
 
@@ -568,7 +789,7 @@ final class ConversationEngine: ObservableObject {
 
     /// Both permissions are required before either lane can produce a word, so ask
     /// once here rather than letting a lane fail opaquely.
-    private func requestRequiredPermissions() async -> Bool {
+    private func requestRequiredPermissions(generation: Int) async -> Bool {
         let speechAuthorized: Bool
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized:
@@ -585,13 +806,16 @@ final class ConversationEngine: ObservableObject {
             speechAuthorized = false
         }
 
+        guard generation == runGeneration else { return false }
         guard speechAuthorized else {
-            phase = .failed(localized(.speechPermissionDenied))
+            failRun(localized(.speechPermissionDenied), generation: generation)
             return false
         }
 
-        guard await ConversationAudioTap.requestMicrophoneAccess() else {
-            phase = .failed(localized(.microphonePermissionDenied))
+        let microphoneAuthorized = await ConversationAudioTap.requestMicrophoneAccess()
+        guard generation == runGeneration else { return false }
+        guard microphoneAuthorized else {
+            failRun(localized(.microphonePermissionDenied), generation: generation)
             return false
         }
 

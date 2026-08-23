@@ -72,7 +72,20 @@ final class ConversationAudioTap: NSObject, AVCaptureAudioDataOutputSampleBuffer
         }
     }
 
-    func start() throws {
+    func start() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            captureQueue.async { [self] in
+                do {
+                    try startOnCaptureQueue()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func startOnCaptureQueue() throws {
         guard let device = AVCaptureDevice.default(for: .audio) else {
             throw TapError.missingMicrophone
         }
@@ -101,26 +114,24 @@ final class ConversationAudioTap: NSObject, AVCaptureAudioDataOutputSampleBuffer
         session.startRunning()
     }
 
-    /// Stops delivery and waits out any buffer already in flight.
-    ///
-    /// The barrier matters: the caller tears down the lanes right after this returns,
-    /// and a delegate callback still running on the capture queue would be handing
-    /// buffers to a continuation that is being finished.
+    /// Stops capture and tears down every queue-owned field in arrival order behind
+    /// the last sample callback. `stop()` is called from the main actor, never from
+    /// `captureQueue`, so the synchronous barrier cannot self-deadlock.
     func stop() {
-        session?.stopRunning()
-        session = nil
         captureQueue.sync {
+            self.session?.stopRunning()
+            self.session = nil
             self.onBuffer = nil
             self.converter = nil
             self.converterInputFormat = nil
-        }
 
 #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(
-            false,
-            options: .notifyOthersOnDeactivation
-        )
+            try? AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
 #endif
+        }
     }
 
     // MARK: - AVCaptureAudioDataOutputSampleBufferDelegate

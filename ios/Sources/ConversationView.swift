@@ -229,7 +229,9 @@ private struct ConversationHalf: View {
     }
 
     private var holdsFloor: Bool {
-        engine.phase == .listening && engine.floor == side
+        engine.phase == .listening
+            && engine.floor == side
+            && engine.draft(for: side).sourceText.isEmpty == false
     }
 
     private var failureMessage: String? {

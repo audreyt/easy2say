@@ -104,6 +104,43 @@ final class ConversationFloorArbiterTests: XCTestCase {
         XCTAssertEqual(arbiter.floor, .primary, "a finalized turn must not be reassigned")
     }
 
+    func testFinalResolutionMovesToClearlyStrongerChallenger() {
+        var arbiter = ConversationFloorArbiter(margin: 0.08, requiredWins: 3)
+
+        XCTAssertTrue(
+            arbiter.resolveFinal(
+                primary: observation(0.54, "wrong"),
+                secondary: observation(0.81, "correct", isFinal: true)
+            )
+        )
+        XCTAssertEqual(arbiter.floor, .secondary)
+    }
+
+    func testFinalResolutionHoldsWhenScoresAreInsideMargin() {
+        var arbiter = ConversationFloorArbiter(margin: 0.08, requiredWins: 3)
+
+        XCTAssertFalse(
+            arbiter.resolveFinal(
+                primary: observation(0.70, "primary"),
+                secondary: observation(0.76, "secondary", isFinal: true)
+            )
+        )
+        XCTAssertEqual(arbiter.floor, .primary)
+    }
+
+    func testPinnedFloorOverridesFinalResolution() {
+        var arbiter = ConversationFloorArbiter(margin: 0.01, requiredWins: 1)
+        arbiter.pin(.primary)
+
+        XCTAssertFalse(
+            arbiter.resolveFinal(
+                primary: observation(0.01, "primary"),
+                secondary: observation(0.99, "secondary", isFinal: true)
+            )
+        )
+        XCTAssertEqual(arbiter.floor, .primary)
+    }
+
     func testCommitUtteranceReleasesStickinessForTheNextUtterance() {
         var arbiter = ConversationFloorArbiter(margin: 0.05, requiredWins: 1)
         _ = arbiter.observe(
