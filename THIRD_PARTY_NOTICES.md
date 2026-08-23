@@ -12,13 +12,14 @@ This repository includes a converted model derived from [Silero VAD](https://git
 
 ## Breeze-ASR-26 / BreezeASR-Taigi
 
-The iOS build can include a 4-bit Core ML conversion of [MediaTek Research's Breeze-ASR-26](https://huggingface.co/MediaTek-Research/Breeze-ASR-26), a Whisper-large-v2-derived model for Taiwanese Hokkien speech.
+The iOS and macOS builds can include a 4-bit Core ML conversion of [MediaTek Research's Breeze-ASR-26](https://huggingface.co/MediaTek-Research/Breeze-ASR-26), a Whisper-large-v2-derived model for Taiwanese Hokkien speech.
 
 - Converted model: [`weiren119/Breeze-ASR-26-coreml-4bit-palette`](https://huggingface.co/weiren119/Breeze-ASR-26-coreml-4bit-palette/tree/ccce05d878df112eece85c13827a8fb16c790843)
 - Pinned converted-model revision: `ccce05d878df112eece85c13827a8fb16c790843`
 - Base model: [`MediaTek-Research/Breeze-ASR-26`](https://huggingface.co/MediaTek-Research/Breeze-ASR-26)
 - License declared by both model cards: [Apache-2.0](LICENSES/Breeze-ASR-26.txt)
 - Local asset size: about 890 MB; the three weight files are verified by SHA-256 in [`scripts/fetch_breeze_asr_26.sh`](scripts/fetch_breeze_asr_26.sh)
+- `BreezeASR26Tokenizer.json` was generated locally with Transformers 5.12.1 from the pinned model's vocabulary, merges, added tokens, and tokenizer configuration; SHA-256: `7b469ff15eb7816315aa45eec391f5943d639b9d73d110f5c003df5192fd54e3`
 
 Breeze-ASR-26 intentionally maps Taigi speech to Mandarin Chinese-character transcriptions rather than native Taibun orthography. The app labels this explicitly as `台語（華文轉寫）`; it must not be described as native Taibun recognition.
 

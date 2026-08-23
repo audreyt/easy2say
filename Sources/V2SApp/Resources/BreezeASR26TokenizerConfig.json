@@ -1,0 +1,19 @@
+{
+  "add_prefix_space": false,
+  "backend": "tokenizers",
+  "bos_token": "<|endoftext|>",
+  "clean_up_tokenization_spaces": true,
+  "eos_token": "<|endoftext|>",
+  "errors": "replace",
+  "is_local": true,
+  "language": null,
+  "local_files_only": true,
+  "model_max_length": 1024,
+  "pad_token": "<|endoftext|>",
+  "predict_timestamps": false,
+  "processor_class": "WhisperProcessor",
+  "return_attention_mask": false,
+  "task": null,
+  "tokenizer_class": "WhisperTokenizer",
+  "unk_token": "<|endoftext|>"
+}

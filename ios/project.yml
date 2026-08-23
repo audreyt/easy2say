@@ -45,7 +45,7 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: v2s-ios
         MARKETING_VERSION: "0.3.37"
-        CURRENT_PROJECT_VERSION: "44"
+        CURRENT_PROJECT_VERSION: "45"
     info:
       path: Info.plist
       properties:

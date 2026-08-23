@@ -51,6 +51,8 @@
 		A0000000000000000000009B /* TWPhrases.txt in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000009A /* TWPhrases.txt */; };
 		A0000000000000000000009D /* BreezeASR26 in Resources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000009C /* BreezeASR26 */; };
 		A000000000000000000000A0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A0000000000000000000009F /* WhisperKit */; };
+		A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A1 /* BreezeASR26Tokenizer.json */; };
+		A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +100,8 @@
 		A00000000000000000000098 /* TaiwanChineseNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaiwanChineseNormalizer.swift; sourceTree = "<group>"; };
 		A0000000000000000000009A /* TWPhrases.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = TWPhrases.txt; sourceTree = "<group>"; };
 		A0000000000000000000009C /* BreezeASR26 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BreezeASR26; path = ../../../ios/Resources/BreezeASR26; sourceTree = "<group>"; };
+		A000000000000000000000A1 /* BreezeASR26Tokenizer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26Tokenizer.json; sourceTree = "<group>"; };
+		A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26TokenizerConfig.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -177,6 +181,8 @@
 				A00000000000000000000081 /* SileroVAD.mlpackage */,
 				A0000000000000000000009A /* TWPhrases.txt */,
 				A0000000000000000000009C /* BreezeASR26 */,
+				A000000000000000000000A1 /* BreezeASR26Tokenizer.json */,
+				A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -363,6 +369,8 @@
 				A00000000000000000000062 /* Assets.xcassets in Resources */,
 				A0000000000000000000009B /* TWPhrases.txt in Resources */,
 				A0000000000000000000009D /* BreezeASR26 in Resources */,
+				A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */,
+				A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

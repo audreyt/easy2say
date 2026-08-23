@@ -47,16 +47,28 @@ actor TaigiASREngine {
             ) else {
                 throw EngineError.modelNotFound
             }
+            let tokenizerFolder = try stageTokenizer()
 
+            // Keep the 851 MB compiled models read-only in the bundle. Only the
+            // generated 3.8 MB tokenizer/config pair is staged into writable
+            // Application Support. Setting `load: false` lets us install the local
+            // tokenizer before model loading, so WhisperKit never enters its Hub
+            // fallback and never tries to write under the app bundle.
             let config = WhisperKitConfig(
                 modelFolder: modelFolder.path,
-                tokenizerFolder: modelFolder,
+                tokenizerFolder: tokenizerFolder,
                 verbose: false,
                 prewarm: false,
-                load: true,
+                load: false,
                 download: false
             )
             let whisperKit = try await WhisperKit(config)
+            whisperKit.tokenizer = try await ModelUtilities.loadTokenizer(
+                for: .largev2,
+                tokenizerFolder: tokenizerFolder,
+                additionalSearchPaths: [tokenizerFolder]
+            )
+            try await whisperKit.loadModels()
             return TaigiASREngine(whisperKit: whisperKit)
         }
         loadTask = task
@@ -69,6 +81,45 @@ actor TaigiASREngine {
             loadTask = nil
             throw error
         }
+    }
+
+    private static func stageTokenizer() throws -> URL {
+        guard let tokenizerSource = Bundle.main.url(
+            forResource: "BreezeASR26Tokenizer",
+            withExtension: "json"
+        ), let configSource = Bundle.main.url(
+            forResource: "BreezeASR26TokenizerConfig",
+            withExtension: "json"
+        ) else {
+            throw EngineError.modelNotFound
+        }
+
+        let fileManager = FileManager.default
+        let root = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let folder = root
+            .appendingPathComponent("v2s", isDirectory: true)
+            .appendingPathComponent(
+                "BreezeASR26Tokenizer-ccce05d8",
+                isDirectory: true
+            )
+        try fileManager.createDirectory(
+            at: folder,
+            withIntermediateDirectories: true
+        )
+        try Data(contentsOf: tokenizerSource).write(
+            to: folder.appendingPathComponent("tokenizer.json"),
+            options: .atomic
+        )
+        try Data(contentsOf: configSource).write(
+            to: folder.appendingPathComponent("tokenizer_config.json"),
+            options: .atomic
+        )
+        return folder
     }
 
     private init(whisperKit: WhisperKit) {

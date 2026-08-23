@@ -26,6 +26,8 @@ let package = Package(
                 .copy("Resources/AppIcon/AppIcon-512.png"),
                 .copy("Resources/SileroVAD.mlpackage"),
                 .copy("Resources/TWPhrases.txt"),
+                .copy("Resources/BreezeASR26Tokenizer.json"),
+                .copy("Resources/BreezeASR26TokenizerConfig.json"),
             ]
         ),
         .testTarget(
