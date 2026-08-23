@@ -125,7 +125,6 @@ enum AppTextKey: String {
     case translationResourceDownloadTimedOut
     case translationRequiresMacOS15OrNewer
     case translationUnsupportedFromToFormat
-    case sileroVadUnavailableWithoutOnnx
     case speechPermissionDenied
     case microphonePermissionDenied
     case appAudioCapturePermissionDenied
@@ -410,7 +409,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "Automatic translation resource download timed out.",
             "translationRequiresMacOS15OrNewer": "Translation requires macOS 15 or newer.",
             "translationUnsupportedFromToFormat": "Translation is not supported from %@ to %@.",
-            "sileroVadUnavailableWithoutOnnx": "Silero VAD is unavailable because this build does not include the ONNX runtime dependency.",
             "speechPermissionDenied": "Speech recognition permission was denied.",
             "microphonePermissionDenied": "Microphone permission was denied.",
             "appAudioCapturePermissionDenied": "App audio capture permission was denied. Allow v2s to capture audio from other apps, then reopen the app.",
@@ -575,7 +573,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "自动下载翻译资源超时。",
             "translationRequiresMacOS15OrNewer": "翻译功能需要 macOS 15 或更高版本。",
             "translationUnsupportedFromToFormat": "当前不支持从 %@ 翻译到 %@。",
-            "sileroVadUnavailableWithoutOnnx": "当前构建未包含 ONNX Runtime 依赖，因此 Silero VAD 不可用。",
             "speechPermissionDenied": "语音识别权限被拒绝。",
             "microphonePermissionDenied": "麦克风权限被拒绝。",
             "appAudioCapturePermissionDenied": "应用音频采集权限被拒绝。请允许 v2s 采集其他应用的音频，然后重新打开应用。",
@@ -740,7 +737,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "Se agotó el tiempo de descarga automática del recurso de traducción.",
             "translationRequiresMacOS15OrNewer": "La traducción requiere macOS 15 o superior.",
             "translationUnsupportedFromToFormat": "La traducción no es compatible de %@ a %@.",
-            "sileroVadUnavailableWithoutOnnx": "Silero VAD no está disponible porque esta compilación no incluye la dependencia ONNX Runtime.",
             "speechPermissionDenied": "Se denegó el permiso de reconocimiento de voz.",
             "microphonePermissionDenied": "Se denegó el permiso del micrófono.",
             "appAudioCapturePermissionDenied": "Se denegó el permiso para capturar el audio de aplicaciones. Permite que v2s capture audio de otras apps y vuelve a abrir la app.",
@@ -905,7 +901,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "Der automatische Download der Übersetzungsressource hat das Zeitlimit überschritten.",
             "translationRequiresMacOS15OrNewer": "Übersetzung erfordert macOS 15 oder neuer.",
             "translationUnsupportedFromToFormat": "Übersetzung von %@ nach %@ wird nicht unterstützt.",
-            "sileroVadUnavailableWithoutOnnx": "Silero VAD ist nicht verfügbar, weil dieser Build die ONNX-Runtime-Abhängigkeit nicht enthält.",
             "speechPermissionDenied": "Die Berechtigung für Spracherkennung wurde verweigert.",
             "microphonePermissionDenied": "Die Mikrofonberechtigung wurde verweigert.",
             "appAudioCapturePermissionDenied": "Die Berechtigung zur App-Audioaufnahme wurde verweigert. Erlaube v2s, Audio aus anderen Apps aufzunehmen, und öffne die App dann erneut.",
@@ -1070,7 +1065,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "翻訳リソースの自動ダウンロードがタイムアウトしました。",
             "translationRequiresMacOS15OrNewer": "翻訳には macOS 15 以降が必要です。",
             "translationUnsupportedFromToFormat": "%@ から %@ への翻訳はサポートされていません。",
-            "sileroVadUnavailableWithoutOnnx": "このビルドには ONNX Runtime 依存関係が含まれていないため、Silero VAD は利用できません。",
             "speechPermissionDenied": "音声認識の権限が拒否されました。",
             "microphonePermissionDenied": "マイクの権限が拒否されました。",
             "appAudioCapturePermissionDenied": "アプリ音声の収集権限が拒否されました。v2s が他のアプリの音声を取得できるようにした後、アプリを再度開いてください。",
@@ -1235,7 +1229,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "Le téléchargement automatique de la ressource de traduction a expiré.",
             "translationRequiresMacOS15OrNewer": "La traduction nécessite macOS 15 ou une version ultérieure.",
             "translationUnsupportedFromToFormat": "La traduction de %@ vers %@ n'est pas prise en charge.",
-            "sileroVadUnavailableWithoutOnnx": "Silero VAD n'est pas disponible, car cette compilation n'inclut pas la dépendance ONNX Runtime.",
             "speechPermissionDenied": "L'autorisation de reconnaissance vocale a été refusée.",
             "microphonePermissionDenied": "L'autorisation du microphone a été refusée.",
             "appAudioCapturePermissionDenied": "L'autorisation de capture audio des apps a été refusée. Autorisez v2s à capturer l'audio des autres apps, puis rouvrez l'app.",
@@ -1400,7 +1393,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "자동 번역 리소스 다운로드 시간이 초과되었습니다.",
             "translationRequiresMacOS15OrNewer": "번역 기능은 macOS 15 이상이 필요합니다.",
             "translationUnsupportedFromToFormat": "%@ 에서 %@ 로의 번역은 지원되지 않습니다.",
-            "sileroVadUnavailableWithoutOnnx": "이 빌드에는 ONNX Runtime 의존성이 포함되어 있지 않아 Silero VAD 를 사용할 수 없습니다.",
             "speechPermissionDenied": "음성 인식 권한이 거부되었습니다.",
             "microphonePermissionDenied": "마이크 권한이 거부되었습니다.",
             "appAudioCapturePermissionDenied": "앱 오디오 캡처 권한이 거부되었습니다. v2s 가 다른 앱의 오디오를 캡처할 수 있도록 허용한 뒤 앱을 다시 여세요.",
@@ -1565,7 +1557,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "انتهت مهلة تنزيل مورد الترجمة تلقائيًا.",
             "translationRequiresMacOS15OrNewer": "الترجمة تتطلب macOS 15 أو أحدث.",
             "translationUnsupportedFromToFormat": "الترجمة من %@ إلى %@ غير مدعومة.",
-            "sileroVadUnavailableWithoutOnnx": "\u{200F}Silero VAD غير متاح لأن هذا البناء لا يتضمن اعتماد ONNX Runtime.",
             "speechPermissionDenied": "تم رفض إذن التعرّف على الكلام.",
             "microphonePermissionDenied": "تم رفض إذن الميكروفون.",
             "appAudioCapturePermissionDenied": "تم رفض إذن التقاط صوت التطبيقات. اسمح لـ v2s بالتقاط الصوت من التطبيقات الأخرى ثم أعد فتح التطبيق.",
@@ -1730,7 +1721,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "O download automático do recurso de tradução expirou.",
             "translationRequiresMacOS15OrNewer": "A tradução requer macOS 15 ou mais recente.",
             "translationUnsupportedFromToFormat": "A tradução de %@ para %@ não é compatível.",
-            "sileroVadUnavailableWithoutOnnx": "O Silero VAD não está disponível porque esta compilação não inclui a dependência do ONNX Runtime.",
             "speechPermissionDenied": "A permissão de reconhecimento de fala foi negada.",
             "microphonePermissionDenied": "A permissão do microfone foi negada.",
             "appAudioCapturePermissionDenied": "A permissão de captura de áudio de apps foi negada. Permita que o v2s capture áudio de outros apps e reabra o app.",
@@ -1895,7 +1885,6 @@ enum AppLocalization {
             "translationResourceDownloadTimedOut": "Время автоматической загрузки ресурса перевода истекло.",
             "translationRequiresMacOS15OrNewer": "Перевод требует macOS 15 или новее.",
             "translationUnsupportedFromToFormat": "Перевод с %@ на %@ не поддерживается.",
-            "sileroVadUnavailableWithoutOnnx": "Silero VAD недоступен, потому что эта сборка не включает зависимость ONNX Runtime.",
             "speechPermissionDenied": "Доступ к распознаванию речи запрещен.",
             "microphonePermissionDenied": "Доступ к микрофону запрещен.",
             "appAudioCapturePermissionDenied": "Доступ к захвату звука приложений запрещен. Разрешите v2s захватывать звук из других приложений и снова откройте приложение.",

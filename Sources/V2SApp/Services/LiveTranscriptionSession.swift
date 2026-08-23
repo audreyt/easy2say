@@ -5,48 +5,6 @@ import CoreMedia
 import Foundation
 import Speech
 
-#if canImport(OnnxRuntimeBindings)
-private typealias SessionVADEngine = SileroVADEngine
-private typealias SessionVADResult = VADResult
-#else
-private struct SessionVADResult: Sendable {
-    let speechProbability: Float
-    let isSpeech: Bool
-    let containsSpeechOnset: Bool
-    let containsSpeechOffset: Bool
-}
-
-private enum SessionVADError: LocalizedError, AppLocalizableError {
-    case unavailable
-
-    func localizedDescription(languageID: String) -> String {
-        AppLocalization.string(.sileroVadUnavailableWithoutOnnx, languageID: languageID)
-    }
-
-    var errorDescription: String? {
-        localizedDescription(languageID: "en")
-    }
-}
-
-private final class SessionVADEngine {
-    init() throws {
-        throw SessionVADError.unavailable
-    }
-
-    func process(buffer: AVAudioPCMBuffer) -> SessionVADResult {
-        _ = buffer
-        return SessionVADResult(
-            speechProbability: 0,
-            isSpeech: false,
-            containsSpeechOnset: false,
-            containsSpeechOffset: false
-        )
-    }
-
-    func reset() {}
-}
-#endif
-
 struct RecognizedSentence: Equatable, Sendable {
     let text: String
     let promotionSegmentID: UUID?
@@ -250,7 +208,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var latestFormattedText: NSString = ""
 
     // MARK: Silero VAD (captureQueue)
-    private var vadEngine: SessionVADEngine?
+    private var vadEngine: SileroVADEngine?
     private var lastVADProbability: Float = 0.0
     private var vadSilenceCommitTimer: DispatchSourceTimer?
     private var noiseFloorRMS: Float = 0.0012
@@ -440,7 +398,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         // Initialize Silero VAD engine.
         do {
-            vadEngine = try SessionVADEngine()
+            vadEngine = try SileroVADEngine()
         } catch {
             // VAD is optional — fall back to implicit ASR-based silence detection.
             vadEngine = nil
@@ -564,7 +522,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         // Initialize Silero VAD engine for draft confidence / silence scoring only.
         do {
-            vadEngine = try SessionVADEngine()
+            vadEngine = try SileroVADEngine()
         } catch {
             vadEngine = nil
         }

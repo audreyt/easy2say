@@ -54,6 +54,7 @@ v2s asks Apple's Speech and Translation frameworks which languages the current M
 - Translation uses Apple's on-device Translation framework. Some language packs may need to be downloaded first through System Settings.
 - Speech recognition prefers Apple's on-device models, and v2s picks a language variant that has a local model whenever one exists.
 - Some languages have no on-device model on a given Mac — this is common on Intel Macs, and for languages outside the modern Speech stack. Those run through Apple's server-based recognition, which needs a network connection, is subject to Apple's service quotas, and sends captured speech to Apple under Apple's privacy terms.
+- Voice activity detection runs the [Silero VAD](THIRD_PARTY_NOTICES.md) model through Apple's system Core ML framework; v2s bundles no third-party inference runtime, and the [conversion is reproducible](scripts/convert_silero_vad_coreml.py).
 
 ## Getting Started
 
