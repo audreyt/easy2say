@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/assets/app-icon-512.png" width="96" alt="v2s-ios app icon">
+  <img src="docs/assets/app-icon-512.png" width="96" alt="Easy2say app icon">
 </p>
 
-<h1 align="center">v2s-ios</h1>
+<h1 align="center">Easy2say</h1>
 
 <p align="center">
   <strong>Two languages. One shared moment.</strong><br>
@@ -14,13 +14,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/audreyt/v2s/releases/latest/download/v2s-universal.pkg"><strong>Download macOS</strong></a><br>
+  <a href="https://github.com/audreyt/easy2say/releases/latest/download/v2s-universal.pkg"><strong>Download macOS</strong></a><br>
   <sub>macOS 26 or later · Apple silicon and Intel</sub>
 </p>
 
 <p align="center">
-  <a href="https://audreyt.github.io/v2s/">
-    <img src="docs/assets/v2s-hero.png" alt="v2s-ios showing English and Traditional Chinese captions together on an iPhone">
+  <a href="https://easy2say.ai/">
+    <img src="docs/assets/v2s-hero.png" alt="Easy2say showing English and Traditional Chinese captions together on an iPhone">
   </a>
 </p>
 
@@ -107,8 +107,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 Install the project tools, fetch the pinned Taigi model, generate the iOS project, and open it from the repository root:
 
 ```bash
-git clone https://github.com/audreyt/v2s.git
-cd v2s
+git clone https://github.com/audreyt/easy2say.git
+cd easy2say
 brew install xcodegen huggingface-cli
 ./scripts/fetch_breeze_asr_26.sh
 (cd ios && xcodegen generate)

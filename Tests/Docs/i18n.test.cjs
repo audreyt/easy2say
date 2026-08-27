@@ -95,7 +95,7 @@ for (const language of ["zh-TW", "zh-HK", "zh-MO", "zh-CN", "zh-SG", "zh-Hans"])
     assert.equal(i18n.t("inputLangs.chipZhHant"), "繁體中文");
     assert.equal(
       i18n.t("inputLangs.readmeHref"),
-      "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md"
+      "https://github.com/audreyt/easy2say/blob/main/README.zh-Hant.md"
     );
   });
 }
