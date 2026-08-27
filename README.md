@@ -14,13 +14,18 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/audreyt/v2s/releases/latest/download/v2s-universal.pkg"><strong>Download the Universal 2 package for macOS</strong></a><br>
+  <sub>macOS 26 or later · Apple silicon and Intel</sub>
+</p>
+
+<p align="center">
   <a href="https://audreyt.github.io/v2s/">
     <img src="docs/assets/v2s-hero.png" alt="v2s-ios showing English and Traditional Chinese captions together on an iPhone">
   </a>
 </p>
 
 > [!IMPORTANT]
-> **This is the iOS-first fork of [`franklioxygen/v2s`](https://github.com/franklioxygen/v2s), not a replacement for its macOS app.** It begins with [upstream pull request #20](https://github.com/franklioxygen/v2s/pull/20), preserves the expanded runtime language catalog contributed there by [@oToToT](https://github.com/oToToT), and keeps the original macOS target buildable for shared-engine development and regression coverage.
+> **This is the iOS-first fork of [`franklioxygen/v2s`](https://github.com/franklioxygen/v2s).** It begins with [upstream pull request #20](https://github.com/franklioxygen/v2s/pull/20), preserves the expanded runtime language catalog contributed there by [@oToToT](https://github.com/oToToT), and publishes a Universal 2 package of the macOS target alongside the iPhone and iPad work.
 
 ## The conversation, not the chrome
 
@@ -66,9 +71,9 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 - The app bundles no ONNX Runtime, and the [Silero conversion is reproducible](scripts/convert_silero_vad_coreml.py).
 - Taigi recognition uses [WhisperKit and a pinned Breeze-ASR-26 Core ML conversion](THIRD_PARTY_NOTICES.md).
 
-## iOS and upstream macOS at a glance
+## iOS and macOS at a glance
 
-| Capability | `v2s-ios` on iPhone/iPad | Upstream `v2s` on macOS |
+| Capability | `v2s-ios` on iPhone/iPad | `v2s` on macOS |
 | --- | --- | --- |
 | Live microphone captions | Yes | Yes |
 | On-device speech recognition and translation | Yes | Yes |
@@ -76,14 +81,26 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 | Capture another app’s audio | No; iOS is microphone-only | Yes |
 | Float captions over other apps | No; captions stay inside `v2s-ios` | Yes |
 
-The iOS app cannot capture another app’s audio and does not provide a cross-app floating overlay. For the macOS product, releases, and documentation, use the [upstream project](https://github.com/franklioxygen/v2s).
+The iOS app cannot capture another app’s audio and does not provide a cross-app floating overlay. The macOS package preserves that desktop workflow in this fork; the [upstream project](https://github.com/franklioxygen/v2s) remains the original macOS source and release line.
 
 ## Requirements
 
 - iPhone or iPad running iOS or iPadOS 26.0 or later
+- Mac running macOS 26.0 or later for the Universal 2 package
 - Xcode 26 or later
 - Microphone and Speech Recognition permissions
 - A local Apple development team when installing on a physical device
+
+### Universal macOS package
+
+The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. The app is ad-hoc signed and the installer is currently unsigned, so macOS may require **Control-click → Open** or approval under **System Settings → Privacy & Security**.
+
+To rebuild the same package locally:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  ./scripts/build_universal_pkg.sh
+```
 
 ## Build and run
 

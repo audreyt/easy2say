@@ -41,7 +41,7 @@ test("switches explicitly between English and native zh-TW copy", () => {
   assert.equal(document.documentElement.lang, "en");
 
   i18n.applyLang("zh");
-  assert.equal(i18n.t("nav.build"), "建置應用程式");
+  assert.equal(i18n.t("nav.download"), "下載 macOS 版");
   assert.match(i18n.t("hero.title"), /兩種語言/);
   assert.doesNotMatch(i18n.t("hero.title"), /两种语言/);
   assert.equal(document.documentElement.lang, "zh-TW");
@@ -63,24 +63,24 @@ test("defaults to zh immediately without user interaction when navigator.languag
   const { i18n, document } = createI18n("zh-TW", null);
   assert.equal(i18n.getLang(), "zh");
   assert.equal(document.documentElement.lang, "zh-TW");
-  assert.equal(i18n.t("nav.build"), "建置應用程式");
+  assert.equal(i18n.t("nav.download"), "下載 macOS 版");
   assert.match(i18n.t("hero.title"), /兩種語言/);
 });
 
 test("honors valid stored language preferences", () => {
-  assert.equal(createI18n("en-US", "zh").i18n.t("nav.build"), "建置應用程式");
-  assert.equal(createI18n("zh-TW", "en").i18n.t("nav.build"), "Build the app");
+  assert.equal(createI18n("en-US", "zh").i18n.t("nav.download"), "下載 macOS 版");
+  assert.equal(createI18n("zh-TW", "en").i18n.t("nav.download"), "Download macOS");
 });
 
 for (const language of ["__proto__", "constructor", "toString", "fr"]) {
   test(`does not select a dictionary for unsupported stored language ${language}`, () => {
     const { i18n, storage } = createI18n("zh-CN", language);
     assert.equal(i18n.getLang(), "zh");
-    assert.equal(i18n.t("nav.build"), "建置應用程式");
+    assert.equal(i18n.t("nav.download"), "下載 macOS 版");
 
     i18n.applyLang(language);
     assert.equal(i18n.getLang(), "en");
-    assert.equal(i18n.t("nav.build"), "Build the app");
+    assert.equal(i18n.t("nav.download"), "Download macOS");
     assert.equal(storage.get("v2s-home-lang"), "en");
   });
 }
