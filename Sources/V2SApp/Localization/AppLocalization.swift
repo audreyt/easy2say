@@ -206,6 +206,9 @@ enum AppTextKey: String, CaseIterable {
     case taigiPreparingModel
     case translateGemmaModelMissing
     case translateGemmaEmptyTranslation
+    case foundationModelsTranslationUnavailable
+    case foundationModelsTranslationEmpty
+    case foundationModelsTranslationRefused
     case tibetanModelMissing
     case tibetanEmptyTranscript
     case tibetanPreparingModel
@@ -533,6 +536,9 @@ enum AppLocalization {
             "taigiPreparingModel": "Preparing Breeze-ASR-26. The first load can take several minutes; later starts are cached.",
             "translateGemmaModelMissing": "The local TranslateGemma fallback model is unavailable.",
             "translateGemmaEmptyTranslation": "TranslateGemma returned an empty translation.",
+            "foundationModelsTranslationUnavailable": "Apple Intelligence is not available for translation.",
+            "foundationModelsTranslationEmpty": "Apple Intelligence returned an empty translation.",
+            "foundationModelsTranslationRefused": "Apple Intelligence declined to translate this caption.",
             "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
             "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
             "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
@@ -738,6 +744,9 @@ enum AppLocalization {
             "taigiPreparingModel": "正在准备 Breeze-ASR-26。首次加载可能需要数分钟，之后启动会使用缓存。",
             "translateGemmaModelMissing": "本机 TranslateGemma 备用模型无法使用。",
             "translateGemmaEmptyTranslation": "TranslateGemma 未生成翻译内容。",
+            "foundationModelsTranslationUnavailable": "目前无法使用 Apple Intelligence 翻译。",
+            "foundationModelsTranslationEmpty": "Apple Intelligence 未生成翻译内容。",
+            "foundationModelsTranslationRefused": "Apple Intelligence 拒绝翻译这句字幕。",
             "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
             "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
             "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
@@ -943,6 +952,9 @@ enum AppLocalization {
             "taigiPreparingModel": "正在準備 Breeze-ASR-26。首次載入可能需要數分鐘，之後啟動會使用快取。",
             "translateGemmaModelMissing": "本機 TranslateGemma 備援模型無法使用。",
             "translateGemmaEmptyTranslation": "TranslateGemma 未產生翻譯內容。",
+            "foundationModelsTranslationUnavailable": "目前無法使用 Apple Intelligence 翻譯。",
+            "foundationModelsTranslationEmpty": "Apple Intelligence 未產生翻譯內容。",
+            "foundationModelsTranslationRefused": "Apple Intelligence 拒絕翻譯這句字幕。",
             "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
             "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
             "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",

@@ -26,6 +26,8 @@ xcuserdata/
 *.log
 tmp/
 dist/
+dist-dmg/
+*.dmg
 reports/
 
 # Downloaded or locally converted model assets

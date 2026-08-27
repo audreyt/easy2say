@@ -59,6 +59,13 @@
 		A000000000000000000000B8 /* SentencepieceTokenizer in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B7 /* SentencepieceTokenizer */; };
 		A000000000000000000000B9 /* TibetanASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BA /* TibetanASREngine.swift */; };
 		A000000000000000000000BC /* MonlamWhisperTibetan in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BB /* MonlamWhisperTibetan */; };
+		A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C1 /* FoundationModelsTranslationService.swift */; };
+		A000000000000000000000C2 /* MelongOmlxTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C3 /* MelongOmlxTranslationService.swift */; };
+		A000000000000000000000C4 /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C5 /* ConversationEngine.swift */; };
+		A000000000000000000000C6 /* ConversationFloorArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C7 /* ConversationFloorArbiter.swift */; };
+		A000000000000000000000C8 /* ConversationLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C9 /* ConversationLane.swift */; };
+		A000000000000000000000CA /* ConversationAudioTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CB /* ConversationAudioTap.swift */; };
+		A000000000000000000000CC /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CD /* ConversationTurn.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -112,6 +119,13 @@
 		A000000000000000000000B1 /* TranslateGemma */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TranslateGemma; path = ../../../macOS/Resources/TranslateGemma; sourceTree = "<group>"; };
 		A000000000000000000000BA /* TibetanASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TibetanASREngine.swift; sourceTree = "<group>"; };
 		A000000000000000000000BB /* MonlamWhisperTibetan */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonlamWhisperTibetan; path = ../../../macOS/Resources/MonlamWhisperTibetan; sourceTree = "<group>"; };
+		A000000000000000000000C1 /* FoundationModelsTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsTranslationService.swift; sourceTree = "<group>"; };
+		A000000000000000000000C3 /* MelongOmlxTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MelongOmlxTranslationService.swift; sourceTree = "<group>"; };
+		A000000000000000000000C5 /* ConversationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationEngine.swift; sourceTree = "<group>"; };
+		A000000000000000000000C7 /* ConversationFloorArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationFloorArbiter.swift; sourceTree = "<group>"; };
+		A000000000000000000000C9 /* ConversationLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationLane.swift; sourceTree = "<group>"; };
+		A000000000000000000000CB /* ConversationAudioTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAudioTap.swift; sourceTree = "<group>"; };
+		A000000000000000000000CD /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -214,6 +228,7 @@
 				A00000000000000000000038 /* SessionState.swift */,
 				A00000000000000000000084 /* SubtitleDisplayMode.swift */,
 				A00000000000000000000044 /* SubtitleSegment.swift */,
+				A000000000000000000000CD /* ConversationTurn.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -235,6 +250,12 @@
 				A00000000000000000000096 /* TaigiASREngine.swift */,
 				A00000000000000000000098 /* TaiwanChineseNormalizer.swift */,
 				A000000000000000000000AF /* TranslateGemmaTranslationService.swift */,
+				A000000000000000000000C1 /* FoundationModelsTranslationService.swift */,
+				A000000000000000000000C3 /* MelongOmlxTranslationService.swift */,
+				A000000000000000000000C5 /* ConversationEngine.swift */,
+				A000000000000000000000C7 /* ConversationFloorArbiter.swift */,
+				A000000000000000000000C9 /* ConversationLane.swift */,
+				A000000000000000000000CB /* ConversationAudioTap.swift */,
 				A000000000000000000000BA /* TibetanASREngine.swift */,
 			);
 			path = Services;
@@ -459,6 +480,13 @@
 				A00000000000000000000097 /* TaigiASREngine.swift in Sources */,
 				A00000000000000000000099 /* TaiwanChineseNormalizer.swift in Sources */,
 				A000000000000000000000B0 /* TranslateGemmaTranslationService.swift in Sources */,
+				A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */,
+				A000000000000000000000C2 /* MelongOmlxTranslationService.swift in Sources */,
+				A000000000000000000000C4 /* ConversationEngine.swift in Sources */,
+				A000000000000000000000C6 /* ConversationFloorArbiter.swift in Sources */,
+				A000000000000000000000C8 /* ConversationLane.swift in Sources */,
+				A000000000000000000000CA /* ConversationAudioTap.swift in Sources */,
+				A000000000000000000000CC /* ConversationTurn.swift in Sources */,
 				A000000000000000000000B9 /* TibetanASREngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

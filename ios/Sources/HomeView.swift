@@ -163,6 +163,7 @@ struct HomeView: View {
         .onAppear {
             refreshMicrophoneAuthorization()
             model.refreshSources()
+            model.installTranslationFallbacks(on: conversation)
             updateIdleTimer()
         }
         .onDisappear {

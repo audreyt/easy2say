@@ -7,7 +7,7 @@ import Speech
 /// Both transcribers are modules of the same analyzer and therefore consume the exact
 /// same `AnalyzerInput` stream. This class only consumes one transcriber's results; the
 /// engine owns capture, the analyzer, input buffering, arbitration, and translation.
-@available(macOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, *)
 final class ConversationLane: @unchecked Sendable {
     struct TimedSpan: Equatable, Sendable {
         let text: String

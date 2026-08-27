@@ -24,6 +24,9 @@ targets:
           - "App/DockVisibilityController.swift"
           - "App/V2SApp.swift"
           - "Services/UpdaterService.swift"
+          - "Services/MelongOmlxTranslationService.swift"
+          - "Services/TranslateGemmaTranslationService.swift"
+          - "Services/TibetanASREngine.swift"
           - "UI/StatusBar/**"
           - "UI/Overlay/**"
           - "UI/Settings/**"
@@ -45,7 +48,9 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: v2s-ios
         MARKETING_VERSION: "0.3.37"
-        CURRENT_PROJECT_VERSION: "45"
+        CURRENT_PROJECT_VERSION: "46"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        SUPPORTS_MACCATALYST: NO
     info:
       path: Info.plist
       properties:

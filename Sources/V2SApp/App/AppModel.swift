@@ -42,6 +42,9 @@ final class AppModel: ObservableObject {
 #if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
     private let translateGemmaService = TranslateGemmaTranslationService()
 #endif
+#if os(macOS)
+    private let melongOmlxService = MelongOmlxTranslationService()
+#endif
     private let glossaryService = GlossaryService()
     private let speedMonitor = SpeedMonitor()
     private var liveTranscriptionSession: LiveTranscriptionSession?
@@ -246,21 +249,7 @@ final class AppModel: ObservableObject {
             self?.translationLocaleIdentifier(for: languageID)
                 ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
         }
-#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-        let fallback = translateGemmaService
-        translationCoordinator.fallbackPrepare = { source, target in
-            guard #available(macOS 27.0, *) else {
-                throw TranslationCoordinator.ServiceError.unavailableOnSystem
-            }
-            try await fallback.prepare(from: source, to: target)
-        }
-        translationCoordinator.fallbackTranslate = { text, source, target in
-            guard #available(macOS 27.0, *) else {
-                throw TranslationCoordinator.ServiceError.unavailableOnSystem
-            }
-            return try await fallback.translate(text, from: source, to: target)
-        }
-#endif
+        installTranslationFallbacks(on: translationCoordinator)
 
         isBootstrapping = false
         applyStatusMessage()
@@ -269,6 +258,125 @@ final class AppModel: ObservableObject {
         }
         refreshSources()
         refreshSupportedLanguageOptions()
+    }
+
+    func installTranslationFallbacks(on coordinator: TranslationCoordinator) {
+        coordinator.fallbackPrepare = { [weak self] source, target in
+            guard let self else {
+                throw TranslationCoordinator.ServiceError.unavailableOnSystem
+            }
+            try await self.prepareTranslationFallback(from: source, to: target)
+        }
+        coordinator.fallbackTranslate = { [weak self] text, source, target in
+            guard let self else {
+                throw TranslationCoordinator.ServiceError.unavailableOnSystem
+            }
+            return try await self.translateWithFallback(text, from: source, to: target)
+        }
+    }
+
+    @available(iOS 26.0, macOS 26.0, *)
+    func installTranslationFallbacks(on engine: ConversationEngine) {
+        engine.installTranslationFallbacks(
+            prepare: { [weak self] source, target in
+                guard let self else {
+                    throw TranslationCoordinator.ServiceError.unavailableOnSystem
+                }
+                try await self.prepareTranslationFallback(from: source, to: target)
+            },
+            translate: { [weak self] text, source, target in
+                guard let self else {
+                    throw TranslationCoordinator.ServiceError.unavailableOnSystem
+                }
+                return try await self.translateWithFallback(text, from: source, to: target)
+            }
+        )
+    }
+
+    private func prepareTranslationFallback(from source: String, to target: String) async throws {
+#if os(macOS)
+        if MelongCaption.isTibetanLanguageID(source)
+            || MelongCaption.isTibetanLanguageID(target)
+        {
+            do {
+                try await melongOmlxService.prepare(from: source, to: target)
+                return
+            } catch {
+                // Sidecar down. Skip AFM: it hallucinates Tibetan.
+            }
+#if canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+            if #available(macOS 27.0, *) {
+                try await translateGemmaService.prepare(from: source, to: target)
+                return
+            }
+#endif
+            throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
+        }
+#endif
+#if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            do {
+                try await FoundationModelsTranslationService().prepare(from: source, to: target)
+                return
+            } catch {
+                // Fall through to TranslateGemma when AFM is off or not ready.
+            }
+        }
+#endif
+#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+        if #available(macOS 27.0, *) {
+            try await translateGemmaService.prepare(from: source, to: target)
+            return
+        }
+#endif
+        throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
+    }
+
+    private func translateWithFallback(
+        _ text: String,
+        from source: String,
+        to target: String
+    ) async throws -> String {
+#if os(macOS)
+        if MelongCaption.isTibetanLanguageID(source)
+            || MelongCaption.isTibetanLanguageID(target)
+        {
+            do {
+                return try await melongOmlxService.translate(text, from: source, to: target)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Sidecar miss. Skip AFM: it hallucinates Tibetan.
+            }
+#if canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+            if #available(macOS 27.0, *) {
+                return try await translateGemmaService.translate(text, from: source, to: target)
+            }
+#endif
+            throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
+        }
+#endif
+#if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            do {
+                return try await FoundationModelsTranslationService().translate(
+                    text,
+                    from: source,
+                    to: target
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Refusal / empty / unavailable → Gemma when present.
+            }
+        }
+#endif
+#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+        if #available(macOS 27.0, *) {
+            return try await translateGemmaService.translate(text, from: source, to: target)
+        }
+#endif
+        throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
     }
 
     convenience init() {
@@ -1165,6 +1273,9 @@ final class AppModel: ObservableObject {
             for: await LanguageAvailability().supportedLanguages
         )
 #if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
+        // Apple Translation reports bo as .unsupported. AFM (SystemLanguageModel)
+        // hallucinates on Tibetan script, so do not advertise bo from AFM availability.
+        // TranslateGemma is the only working local bo translator on this desk.
         if Bundle.main.url(forResource: "TranslateGemma", withExtension: nil) != nil,
            options.contains(where: { $0.id == "bo" }) == false {
             options.append(

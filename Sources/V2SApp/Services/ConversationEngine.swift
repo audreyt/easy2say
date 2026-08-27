@@ -24,7 +24,7 @@ import Translation
 /// Translation runs in both directions at once through two `TranslationCoordinator`s.
 /// One coordinator can anchor only one `TranslationSession`, so a single coordinator
 /// would re-anchor — and reload translation models — on every speaker change.
-@available(macOS 26.0, *)
+@available(iOS 26.0, macOS 26.0, *)
 @MainActor
 final class ConversationEngine: ObservableObject {
     enum Phase: Equatable, Sendable {
@@ -276,6 +276,16 @@ final class ConversationEngine: ObservableObject {
     }
 
     // MARK: - Translation hosts
+
+    func installTranslationFallbacks(
+        prepare: @escaping (String, String) async throws -> Void,
+        translate: @escaping (String, String, String) async throws -> String
+    ) {
+        for coordinator in translators.values {
+            coordinator.fallbackPrepare = prepare
+            coordinator.fallbackTranslate = translate
+        }
+    }
 
     func runPrimaryTranslationHost(using session: TranslationSession) async {
         await translators[.primary]?.run(using: session)
