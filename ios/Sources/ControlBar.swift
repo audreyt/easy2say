@@ -116,7 +116,9 @@ struct ControlBar: View {
                 .shadow(color: .black.opacity(0.28), radius: 4, y: 2)
                 .offset(x: restingOffset + languageSwapDragOffset)
         }
-        .contentShape(Capsule(style: .continuous))
+        // The track reads at 34pt tall; the drag/tap area stays at the 44pt minimum.
+        .frame(width: 64, height: 44)
+        .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 3)
                 .onChanged { value in

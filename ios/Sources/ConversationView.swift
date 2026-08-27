@@ -162,7 +162,9 @@ struct ConversationModeSwitch: View {
                     Circle()
                         .stroke(accent.opacity(0.20), lineWidth: 0.5)
                 }
-                .contentShape(Circle())
+                // The disc reads at 32pt; the hit area stays at the 44pt minimum.
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(destinationTitle)
