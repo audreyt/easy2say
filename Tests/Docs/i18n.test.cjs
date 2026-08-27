@@ -37,13 +37,15 @@ test("switches explicitly between English and native zh-TW copy", () => {
   const { i18n, document } = createI18n("en-US");
   const englishTitle = i18n.t("meta.title");
 
-  assert.equal(englishTitle, "v2s-ios — Private bilingual captions for iPhone and iPad");
+  assert.equal(englishTitle, "Easy2say — Private bilingual captions for iPhone and iPad");
+  assert.equal(i18n.t("brand.name"), "Easy2say");
   assert.equal(document.documentElement.lang, "en");
 
   i18n.applyLang("zh");
   assert.equal(i18n.t("nav.download"), "下載 macOS 版");
   assert.match(i18n.t("hero.title"), /兩種語言/);
   assert.doesNotMatch(i18n.t("hero.title"), /两种语言/);
+  assert.equal(i18n.t("brand.name"), "好說");
   assert.equal(document.documentElement.lang, "zh-TW");
   assert.equal(document.title, i18n.t("meta.title"));
   assert.match(i18n.t("quickStart.lead"), /本分支建置/);

@@ -4,19 +4,23 @@
   const strings = {
     en: {
       meta: {
-        title: "v2s-ios — Private bilingual captions for iPhone and iPad",
+        title: "Easy2say — Private bilingual captions for iPhone and iPad",
         description:
-          "Private, on-device bilingual captions for iPhone and iPad. v2s-ios gives source speech and translation equal space, with no accounts, cloud transcription, analytics, or telemetry.",
-        ogTitle: "v2s-ios — Two languages. One shared moment.",
-        imageAlt: "v2s-ios showing English and Traditional Chinese captions together on an iPhone",
+          "Private, on-device bilingual captions and assisted conversation for iPhone and iPad. Easy2say gives two people and two languages equal space, with no account, cloud transcription, analytics, or telemetry.",
+        ogTitle: "Easy2say — Two people. Two languages.",
+        imageAlt: "Easy2say showing English and Traditional Chinese captions together on an iPhone",
       },
       a11y: {
         skip: "Skip to content",
-        brand: "v2s-ios home",
+        brand: "Easy2say home",
         nav: "Primary navigation",
         menuOpen: "Open menu",
         menuClose: "Close menu",
         langSwitch: "Language",
+      },
+      brand: {
+        name: "Easy2say",
+        platform: "好說 · iOS + iPadOS",
       },
       nav: {
         features: "Experience",
@@ -30,16 +34,16 @@
       hero: {
         badgeOnDevice: "On-device by default",
         badgePlatform: "iOS · iPadOS · macOS 26+",
-        title: "Two languages.<br><em>One shared moment.</em>",
+        title: "Two people.<br><em>Two languages.</em>",
         lead:
-          "v2s-ios listens through the microphone, transcribes and translates on device, and gives both languages equal space — without accounts, cloud transcription, or telemetry.",
+          "Easy2say listens through one microphone, keeps both people visible, and drafts bilingual captions on device — without accounts, cloud transcription, or telemetry.",
         ctaDownload: "Download macOS",
         ctaSource: "Explore the source",
         artListen: "Listen",
         artUnderstand: "Understand",
         demoSource: "I understand.",
         demoTranslation: "我明白了。",
-        imgAlt: "v2s-ios showing English and Traditional Chinese captions together on an iPhone",
+        imgAlt: "Easy2say showing English and Traditional Chinese captions together on an iPhone",
         figureKicker: "Caption 01",
         figureCaption: "Original speech and translation share the screen. Neither is treated as a footnote.",
       },
@@ -89,13 +93,13 @@
           "Use portrait, landscape, or flip one half for an across-the-table conversation.",
         step3Title: "Speak naturally",
         step3Body:
-          "Tap Start. Speech and translation arrive together, entirely inside v2s-ios.",
+          "Tap Start. Speech and translation arrive together, entirely inside Easy2say.",
       },
       inputLangs: {
         eyebrow: "03 · Language coverage",
         title: "The list follows what your device can actually do.",
         lead:
-          "v2s-ios asks Apple Speech and Translation for the languages available on the current device. Choices can vary with iOS, hardware, and installed language assets.",
+          "Easy2say asks Apple Speech and Translation for the languages available on the current device. When a pair has no Apple Translation model, on-device Apple Intelligence may provide an experimental draft.",
         inputExamples: "Speech and conversation examples",
         outputExamples: "Additional translation examples",
         noteBefore:
@@ -127,9 +131,9 @@
       privacy: {
         eyebrow: "04 · Privacy, literally",
         title: "No account. No network client. No tiny print.",
-        li1: "Microphone audio and captions are never sent to a v2s server — there is no v2s server.",
-        li2: "Speech recognition and translation run on device with Apple’s frameworks and local language assets.",
-        li3: "Apple may download a required language asset once; processing then stays on the device.",
+        li1: "Microphone audio and captions are never sent to an Easy2say server — there is no Easy2say server.",
+        li2: "Speech recognition and Apple Translation run on device with local language assets.",
+        li3: "For unsupported translation pairs, Apple Intelligence may draft an experimental translation on this device.",
         li4: "Voice activity detection and the optional bundled Taigi model run through Apple’s Core ML stack.",
       },
       quickStart: {
@@ -162,7 +166,7 @@
         eyebrow: "Lineage",
         title: "An iOS-first fork, in the open.",
         body:
-          "v2s-ios begins with pull request #20 on franklioxygen/v2s, keeps the original macOS target buildable, and publishes this fork’s Universal 2 package. The iPhone and iPad experience remains the fork’s focus.",
+          "Easy2say grows from pull request #20 on franklioxygen/v2s, keeps the original macOS target buildable, and publishes this fork’s Universal 2 package. The iPhone and iPad experience remains the fork’s focus.",
         upstream: "See the upstream macOS project",
       },
       cta: {
@@ -176,25 +180,31 @@
         notice: "Fork attribution · ",
         docLink: "繁體中文 README",
         docHref: "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md",
+        privacy: "Privacy",
+        support: "Support",
         upstream: "Upstream macOS project ↗",
       },
     },
 
     zh: {
       meta: {
-        title: "v2s-ios — iPhone 與 iPad 私密雙語字幕",
+        title: "好說 — iPhone 與 iPad 私密雙語字幕",
         description:
-          "iPhone 與 iPad 上私密、於裝置端處理的雙語字幕。v2s-ios 讓原文與譯文平分畫面，不設帳號、不使用雲端轉寫，也沒有分析或遙測。",
-        ogTitle: "v2s-ios — 兩種語言，同一個當下。",
-        imageAlt: "v2s-ios 在 iPhone 上並列顯示英文原文與繁體中文字幕",
+          "iPhone 與 iPad 上私密、於裝置端處理的雙語字幕與輔助式對話。好說讓兩個人與兩種語言共享畫面，不設帳號、不使用雲端轉寫，也沒有分析或遙測。",
+        ogTitle: "好說 — 兩個人，兩種語言。",
+        imageAlt: "好說在 iPhone 上並列顯示英文原文與繁體中文字幕",
       },
       a11y: {
         skip: "跳至主要內容",
-        brand: "v2s-ios 首頁",
+        brand: "好說首頁",
         nav: "主要導覽",
         menuOpen: "開啟選單",
         menuClose: "關閉選單",
         langSwitch: "語言",
+      },
+      brand: {
+        name: "好說",
+        platform: "Easy2say · iOS + iPadOS",
       },
       nav: {
         features: "體驗",
@@ -208,16 +218,16 @@
       hero: {
         badgeOnDevice: "預設於裝置端處理",
         badgePlatform: "iOS · iPadOS · macOS 26+",
-        title: "兩種語言，<br><em>同一個當下。</em>",
+        title: "兩個人，<br><em>兩種語言，好說。</em>",
         lead:
-          "v2s-ios 透過麥克風聆聽，在裝置端辨識語音並翻譯，讓原文與譯文各佔一半畫面。沒有帳號、雲端轉寫，也不追蹤你。",
+          "好說透過同一支麥克風聆聽，讓對話的兩個人都留在畫面上，並於裝置端起草雙語字幕；沒有帳號、雲端轉寫，也不追蹤你。",
         ctaDownload: "下載 macOS 版",
         ctaSource: "查看原始碼",
         artListen: "聽見",
         artUnderstand: "理解",
         demoSource: "I understand.",
         demoTranslation: "我明白了。",
-        imgAlt: "v2s-ios 在 iPhone 上並列顯示英文原文與繁體中文字幕",
+        imgAlt: "好說在 iPhone 上並列顯示英文原文與繁體中文字幕",
         figureKicker: "字幕 01",
         figureCaption: "原文與譯文共享同一面畫面；任何一種語言，都不是註腳。",
       },
@@ -267,13 +277,13 @@
           "使用直向、橫向，或翻轉其中一半，配合當下的對話位置。",
         step3Title: "自然開口",
         step3Body:
-          "點一下「開始」，原文與譯文便會一起出現在 v2s-ios 裡。",
+          "點一下「開始」，原文與譯文便會一起出現在好說裡。",
       },
       inputLangs: {
         eyebrow: "03 · 語言支援",
         title: "可用語言，以這台裝置當下的能力為準。",
         lead:
-          "v2s-ios 會向 Apple Speech 與 Translation 查詢目前裝置可用的語言。選項可能隨 iOS 版本、硬體與已安裝的語言資源而異。",
+          "好說會向 Apple Speech 與 Translation 查詢目前裝置可用的語言；若 Apple Translation 沒有該語言對的模型，裝置端 Apple Intelligence 可能提供實驗性譯稿。",
         inputExamples: "語音與雙向對話語言（舉例）",
         outputExamples: "其他翻譯語言（舉例）",
         noteBefore:
@@ -305,9 +315,9 @@
       privacy: {
         eyebrow: "04 · 隱私，照字面理解",
         title: "沒有帳號。沒有網路用戶端。也沒有小字條款。",
-        li1: "麥克風音訊與字幕不會送到 v2s 伺服器——因為根本沒有這種伺服器。",
-        li2: "語音辨識與翻譯透過 Apple 框架與本機語言資源，在裝置端執行。",
-        li3: "Apple 可能會先下載一次必要的語言資源；之後的處理留在裝置上。",
+        li1: "麥克風音訊與字幕不會送到好說伺服器——因為根本沒有這種伺服器。",
+        li2: "語音辨識與 Apple Translation 透過本機語言資源，在裝置端執行。",
+        li3: "不支援的語言對，可能由裝置端 Apple Intelligence 起草實驗性譯文。",
         li4: "語音活動偵測與選用的內建台語模型，皆透過 Apple Core ML 執行。",
       },
       quickStart: {
@@ -340,11 +350,11 @@
         eyebrow: "專案脈絡",
         title: "一個把 iOS 放在第一順位的公開分支。",
         body:
-          "v2s-ios 以 franklioxygen/v2s 的 pull request #20 為起點，保留原始 macOS 目標，並發佈此分支的 Universal 2 安裝套件；iPhone 與 iPad 體驗仍是這個分支的重心。",
+          "好說以 franklioxygen/v2s 的 pull request #20 為起點，保留原始 macOS 目標，並發佈此分支的 Universal 2 安裝套件；iPhone 與 iPad 體驗仍是這個分支的重心。",
         upstream: "查看上游 macOS 專案",
       },
       cta: {
-        title: "讓對話的兩邊，都留在眼前。",
+        title: "兩個人，兩種語言，都好說。",
         body: "原始碼公開、於裝置端處理，現在也可直接安裝於 Mac。",
         download: "下載 macOS 版",
         readme: "閱讀建置說明",
@@ -354,6 +364,8 @@
         notice: "分支歸屬說明 · ",
         docLink: "English README",
         docHref: "https://github.com/audreyt/v2s/blob/main/README.md",
+        privacy: "隱私",
+        support: "支援",
         upstream: "上游 macOS 專案 ↗",
       },
     },
