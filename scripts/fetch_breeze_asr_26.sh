@@ -2,21 +2,37 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+mode="download"
+if [[ "${1:-}" == "--verify-only" ]]; then
+  mode="verify"
+  shift
+fi
+if [[ $# -gt 1 ]]; then
+  echo "Usage: $0 [--verify-only] [destination]" >&2
+  exit 2
+fi
+
 target="${1:-$repo_root/ios/Resources/BreezeASR26}"
 model="weiren119/Breeze-ASR-26-coreml-4bit-palette"
 revision="ccce05d878df112eece85c13827a8fb16c790843"
 
-if ! command -v hf >/dev/null 2>&1; then
-  echo "Missing Hugging Face CLI. Install it with: brew install huggingface-cli" >&2
-  exit 1
-fi
+if [[ "$mode" == "download" ]]; then
+  if ! command -v hf >/dev/null 2>&1; then
+    echo "Missing Hugging Face CLI. Install it with: brew install huggingface-cli" >&2
+    exit 1
+  fi
 
-hf download "$model" --revision "$revision" --local-dir "$target"
-rm -rf "$target/.cache"
+  hf download "$model" --revision "$revision" --local-dir "$target"
+  rm -rf "$target/.cache"
+fi
 
 verify() {
   local expected="$1"
   local file="$2"
+  if [[ ! -f "$target/$file" ]]; then
+    echo "Missing Breeze-ASR-26 asset: $target/$file" >&2
+    exit 1
+  fi
   local actual
   actual="$(shasum -a 256 "$target/$file" | cut -d ' ' -f 1)"
   if [[ "$actual" != "$expected" ]]; then

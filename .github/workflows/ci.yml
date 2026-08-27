@@ -9,13 +9,31 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  apple:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
       - name: Swift test
         run: swift test
+
+      - name: Cache Breeze-ASR-26
+        id: breeze-cache
+        uses: actions/cache@v4
+        with:
+          path: ios/Resources/BreezeASR26
+          key: breeze-asr-26-${{ runner.os }}-${{ hashFiles('scripts/fetch_breeze_asr_26.sh') }}
+
+      - name: Install Hugging Face CLI
+        if: steps.breeze-cache.outputs.cache-hit != 'true'
+        run: brew install huggingface-cli
+
+      - name: Fetch Breeze-ASR-26
+        if: steps.breeze-cache.outputs.cache-hit != 'true'
+        run: ./scripts/fetch_breeze_asr_26.sh
+
+      - name: Verify Breeze-ASR-26
+        run: ./scripts/fetch_breeze_asr_26.sh --verify-only
 
       - name: Build macOS app (Release)
         run: |
@@ -48,3 +66,35 @@ jobs:
             -derivedDataPath .build/sim \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Test, lint, and build Android app
+        working-directory: android
+        run: ./gradlew --no-daemon test lint assembleDebug
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Test documentation localization
+        run: node --test Tests/Docs/i18n.test.cjs
