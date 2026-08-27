@@ -797,9 +797,11 @@ final class AppModel: ObservableObject {
             if sourceLanguageID == "nan" {
                 setStatus(.custom(localized(.taigiPreparingModel)))
             }
+#if os(macOS)
             if sourceLanguageID == "bo" {
                 setStatus(.custom(localized(.tibetanPreparingModel)))
             }
+#endif
             do {
                 try await session.start(
                     source: source,

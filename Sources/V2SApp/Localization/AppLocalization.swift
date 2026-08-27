@@ -207,8 +207,10 @@ enum AppTextKey: String, CaseIterable {
     case taigiEmptyTranscript
     case taigiLanguageName
     case taigiPreparingModel
+#if os(macOS)
     case translateGemmaModelMissing
     case translateGemmaEmptyTranslation
+#endif
     case foundationModelsTranslationUnavailable
     case foundationModelsTranslationEmpty
     case foundationModelsTranslationRefused
@@ -216,9 +218,11 @@ enum AppTextKey: String, CaseIterable {
     case conversationAssistedHint
     case acknowledgments
     case acknowledgmentsHint
+#if os(macOS)
     case tibetanModelMissing
     case tibetanEmptyTranscript
     case tibetanPreparingModel
+#endif
 }
 
 enum AppLocalization {
@@ -252,9 +256,10 @@ enum AppLocalization {
         arguments: [CVarArg]
     ) -> String {
         let resolvedLanguageID = resolvedInterfaceLanguageID(storedIdentifier: languageID)
-        let template = tables[resolvedLanguageID]?[key.rawValue]
-            ?? tables["en"]?[key.rawValue]
-            ?? key.rawValue
+        let template = localizedTemplate(
+            key.rawValue,
+            languageID: resolvedLanguageID
+        )
 
         guard arguments.isEmpty == false else {
             return template
@@ -341,7 +346,7 @@ enum AppLocalization {
         }
     }
 
-    static let tables: [String: [String: String]] = [
+    private static let baseTables: [String: [String: String]] = [
         "en": [
             "start": "Start",
             "stop": "Stop",
@@ -544,8 +549,6 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 could not recognize this Taigi utterance.",
             "taigiLanguageName": "Taiwanese Hokkien (Mandarin-character transcription)",
             "taigiPreparingModel": "Preparing Breeze-ASR-26. The first load can take several minutes; later starts are cached.",
-            "translateGemmaModelMissing": "The local TranslateGemma fallback model is unavailable.",
-            "translateGemmaEmptyTranslation": "TranslateGemma returned an empty translation.",
             "foundationModelsTranslationUnavailable": "Apple Intelligence is not available for translation.",
             "foundationModelsTranslationEmpty": "Apple Intelligence returned an empty translation.",
             "foundationModelsTranslationRefused": "Apple Intelligence declined to translate this caption.",
@@ -553,9 +556,6 @@ enum AppLocalization {
             "conversationAssistedHint": "Conversation guesses who is speaking from two on-device transcribers. Tap a half to claim the floor when it guesses wrong.",
             "acknowledgments": "Acknowledgments",
             "acknowledgmentsHint": "Open-source licenses and model notices included with Easy2say.",
-            "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
-            "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
-            "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
         ],
         "zh-Hans": [
             "start": "开始",
@@ -759,8 +759,6 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 无法识别这段台语语音。",
             "taigiLanguageName": "台语（华文转写）",
             "taigiPreparingModel": "正在准备 Breeze-ASR-26。首次加载可能需要数分钟，之后启动会使用缓存。",
-            "translateGemmaModelMissing": "本机 TranslateGemma 备用模型无法使用。",
-            "translateGemmaEmptyTranslation": "TranslateGemma 未生成翻译内容。",
             "foundationModelsTranslationUnavailable": "目前无法使用 Apple Intelligence 翻译。",
             "foundationModelsTranslationEmpty": "Apple Intelligence 未生成翻译内容。",
             "foundationModelsTranslationRefused": "Apple Intelligence 拒绝翻译这句字幕。",
@@ -768,9 +766,6 @@ enum AppLocalization {
             "conversationAssistedHint": "对话模式用两个装置端转写器猜测谁在说话。猜错时点该半边即可取得发言权。",
             "acknowledgments": "开源许可",
             "acknowledgmentsHint": "好说内含的开源许可与模型声明。",
-            "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
-            "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
-            "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
         ],
         "zh-Hant": [
             "start": "開始",
@@ -974,8 +969,6 @@ enum AppLocalization {
             "taigiEmptyTranscript": "Breeze-ASR-26 無法辨識這段台語語音。",
             "taigiLanguageName": "台語（華文轉寫）",
             "taigiPreparingModel": "正在準備 Breeze-ASR-26。首次載入可能需要數分鐘，之後啟動會使用快取。",
-            "translateGemmaModelMissing": "本機 TranslateGemma 備援模型無法使用。",
-            "translateGemmaEmptyTranslation": "TranslateGemma 未產生翻譯內容。",
             "foundationModelsTranslationUnavailable": "目前無法使用 Apple Intelligence 翻譯。",
             "foundationModelsTranslationEmpty": "Apple Intelligence 未產生翻譯內容。",
             "foundationModelsTranslationRefused": "Apple Intelligence 拒絕翻譯這句字幕。",
@@ -983,9 +976,6 @@ enum AppLocalization {
             "conversationAssistedHint": "對話模式用兩個裝置端轉寫器猜測誰在說話。猜錯時點該半邊即可取得發言權。",
             "acknowledgments": "開源授權",
             "acknowledgmentsHint": "好說內含的開源授權與模型聲明。",
-            "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
-            "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
-            "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",
         ],
         "es": [
             "start": "Iniciar",
@@ -2300,6 +2290,49 @@ enum AppLocalization {
             "checkForUpdates": "Проверить обновления",
         ],
     ]
+    static let tables: [String: [String: String]] = {
+        var merged = baseTables
+#if os(macOS)
+        for (languageID, entries) in macOnlyTables {
+            var table = merged[languageID, default: [:]]
+            table.merge(entries) { _, new in new }
+            merged[languageID] = table
+        }
+#endif
+        return merged
+    }()
+
+    private static func localizedTemplate(_ key: String, languageID: String) -> String {
+        tables[languageID]?[key]
+            ?? tables["en"]?[key]
+            ?? key
+    }
+
+#if os(macOS)
+    private static let macOnlyTables: [String: [String: String]] = [
+        "en": [
+            "translateGemmaModelMissing": "The local TranslateGemma fallback model is unavailable.",
+            "translateGemmaEmptyTranslation": "TranslateGemma returned an empty translation.",
+            "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
+            "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
+            "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
+        ],
+        "zh-Hans": [
+            "translateGemmaModelMissing": "本机 TranslateGemma 备用模型无法使用。",
+            "translateGemmaEmptyTranslation": "TranslateGemma 未生成翻译内容。",
+            "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
+            "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
+            "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
+        ],
+        "zh-Hant": [
+            "translateGemmaModelMissing": "本機 TranslateGemma 備援模型無法使用。",
+            "translateGemmaEmptyTranslation": "TranslateGemma 未產生翻譯內容。",
+            "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
+            "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
+            "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",
+        ],
+    ]
+#endif
 }
 
 private enum EmbeddedBundleLocalizationBridge {
