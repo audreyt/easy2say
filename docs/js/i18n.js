@@ -380,7 +380,8 @@
   }
 
   function t(key) {
-    const value = getNested(strings[currentLang], key) ?? getNested(strings.en, key) ?? "";
+    const localizedStrings = currentLang === "zh" ? strings.zh : strings.en;
+    const value = getNested(localizedStrings, key) ?? getNested(strings.en, key) ?? "";
     // All translated output (title, meta, text, attrs, hrefs) passes through here,
     // so converting at this single point covers everything uniformly.
     return converter && currentLang === "zh" ? converter(value) : value;
