@@ -7,39 +7,179 @@ struct ControlBar: View {
     let toggleSession: () -> Void
     let showTranscript: () -> Void
     let showSettings: () -> Void
+    let selectConversationMode: (Bool) -> Void
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var languageSwapDragOffset: CGFloat = 0
+    @State private var languageSwapIsOnRight = false
 
     private var accent: Color {
         IOSTheme.color(model.iOSCaptionAccentColor)
     }
 
-    var body: some View {
-        VStack(spacing: 10) {
-            statusLine
+    private var canSwapLanguages: Bool {
+        let inputID = model.iOSEffectiveInputLanguageID
+        let outputID = model.iOSEffectiveOutputLanguageID
+        return model.isLanguagePairLocked == false
+            && inputID != outputID
+            && model.speechLanguageOptions.contains(where: { $0.id == outputID })
+            && model.translationLanguageOptions.contains(where: { $0.id == inputID })
+    }
 
-            ViewThatFits(in: .horizontal) {
-                wideControls
-                    .fixedSize(horizontal: true, vertical: false)
-                stackedControls
+    private var modeFlip: some View {
+        ConversationModeSwitch(
+            captionsTitle: model.localized(.conversationCaptionsMode),
+            conversationTitle: model.localized(.conversationMode),
+            accent: accent,
+            isConversationActive: model.isConversationModeActive,
+            select: selectConversationMode
+        )
+    }
+
+    var body: some View {
+        Group {
+            if verticalSizeClass == .compact {
+                HStack(spacing: 16) {
+                    VStack(spacing: 8) {
+                        statusLine
+                        languageRail
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    recordingDock
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .padding(10)
+            } else {
+                VStack(spacing: 11) {
+                    statusLine
+                    languageRail
+                    recordingDock
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(12)
             }
         }
-        .padding(12)
-        .premiumPanel(cornerRadius: 28)
+        .premiumPanel(cornerRadius: 30)
         .tint(accent)
     }
 
-    private var wideControls: some View {
+    private var languageRail: some View {
         HStack(spacing: 8) {
-            sourceMenu
-                .frame(minWidth: 106)
             inputLanguageMenu
-                .frame(minWidth: 96)
-            outputLanguageMenu
-                .frame(minWidth: 96)
+                .frame(maxWidth: .infinity)
 
+            directionMedallion
+
+            outputLanguageMenu
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var directionMedallion: some View {
+        let restingOffset: CGFloat = languageSwapIsOnRight ? 15 : -15
+
+        return ZStack {
+            Capsule(style: .continuous)
+                .fill(accent.opacity(0.075))
+                .frame(width: 64, height: 34)
+                .overlay {
+                    Capsule(style: .continuous)
+                        .stroke(accent.opacity(0.18), lineWidth: 0.75)
+                }
+
+            HStack {
+                Circle()
+                    .fill(Color.white.opacity(languageSwapIsOnRight ? 0.16 : 0.34))
+                    .frame(width: 3, height: 3)
+
+                Spacer()
+
+                Circle()
+                    .fill(Color.white.opacity(languageSwapIsOnRight ? 0.34 : 0.16))
+                    .frame(width: 3, height: 3)
+            }
+            .frame(width: 50)
+            .accessibilityHidden(true)
+
+            Circle()
+                .fill(accent.opacity(0.20))
+                .frame(width: 28, height: 28)
+                .overlay {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(accent.opacity(0.96))
+                }
+                .overlay {
+                    Circle()
+                        .stroke(accent.opacity(0.32), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 4, y: 2)
+                .offset(x: restingOffset + languageSwapDragOffset)
+        }
+        .contentShape(Capsule(style: .continuous))
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { value in
+                    guard canSwapLanguages else { return }
+                    let proposedOffset = restingOffset + value.translation.width
+                    let clampedOffset = min(max(proposedOffset, -15), 15)
+                    languageSwapDragOffset = clampedOffset - restingOffset
+                }
+                .onEnded { value in
+                    guard canSwapLanguages else { return }
+                    let crossedThreshold = languageSwapIsOnRight
+                        ? value.translation.width <= -14
+                        : value.translation.width >= 14
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+                        if crossedThreshold {
+                            swapLanguages()
+                            languageSwapIsOnRight.toggle()
+                        }
+                        languageSwapDragOffset = 0
+                    }
+                }
+                .exclusively(
+                    before: TapGesture()
+                        .onEnded {
+                            toggleLanguagesFromSlider()
+                        }
+                )
+        )
+        .allowsHitTesting(canSwapLanguages)
+        .opacity(canSwapLanguages ? 1.0 : 0.42)
+        .accessibilityElement()
+        .accessibilityLabel(
+            "\(model.localized(.inputLanguage)) ↔ \(model.localized(.subtitleLanguage))"
+        )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            toggleLanguagesFromSlider()
+        }
+    }
+
+    private func toggleLanguagesFromSlider() {
+        guard canSwapLanguages else { return }
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+            swapLanguages()
+            languageSwapIsOnRight.toggle()
+            languageSwapDragOffset = 0
+        }
+    }
+
+    private func swapLanguages() {
+        guard canSwapLanguages else { return }
+        let inputID = model.iOSEffectiveInputLanguageID
+        let outputID = model.iOSEffectiveOutputLanguageID
+        model.setIOSInputLanguageID(outputID)
+        model.setIOSOutputLanguageID(inputID)
+    }
+
+    private var recordingDock: some View {
+        HStack(alignment: .center, spacing: 28) {
             ControlIconButton(
-                symbol: "doc.text",
-                title: model.localized(.transcript),
-                action: showTranscript
+                symbol: "gearshape.fill",
+                title: model.localized(.iosSettings),
+                action: showSettings
             )
 
             SessionCapsuleButton(
@@ -50,67 +190,26 @@ struct ControlBar: View {
                 accent: accent,
                 action: toggleSession
             )
-            .frame(minWidth: 126)
 
             ControlIconButton(
-                symbol: "gearshape.fill",
-                title: model.localized(.iosSettings),
-                action: showSettings
+                symbol: "doc.text",
+                title: model.localized(.transcript),
+                action: showTranscript
             )
-        }
-    }
-
-    private var stackedControls: some View {
-        VStack(spacing: 9) {
-            // Compact width cannot fit three menus side by side without the
-            // microphone value collapsing, so the source gets its own full-width
-            // row and the two language menus keep equal halves below it.
-            sourceMenu
-                .frame(minWidth: 160, maxWidth: .infinity)
-
-            HStack(spacing: 8) {
-                inputLanguageMenu
-                    .frame(minWidth: 92, maxWidth: .infinity)
-                    .layoutPriority(1)
-                outputLanguageMenu
-                    .frame(minWidth: 92, maxWidth: .infinity)
-                    .layoutPriority(1)
-            }
-
-            HStack(spacing: 12) {
-                ControlIconButton(
-                    symbol: "doc.text",
-                    title: model.localized(.transcript),
-                    action: showTranscript
-                )
-
-                SessionCapsuleButton(
-                    title: model.sessionButtonTitle,
-                    isLive: model.sessionState == .running,
-                    showsActivity: model.showsSessionWaitIndicator,
-                    isDisabled: isStartDisabled,
-                    accent: accent,
-                    action: toggleSession
-                )
-                .frame(maxWidth: 210)
-
-                ControlIconButton(
-                    symbol: "gearshape.fill",
-                    title: model.localized(.iosSettings),
-                    action: showSettings
-                )
-            }
-            .frame(maxWidth: .infinity)
         }
     }
 
     @ViewBuilder
     private var statusLine: some View {
         if let resourceStatus = prioritizedResourceStatus {
-            HStack(spacing: 8) {
-                Image(systemName: resourceStatus.isError ? "exclamationmark.triangle.fill" : "arrow.down.circle.fill")
-                    .foregroundStyle(resourceStatus.isError ? Color.red.opacity(0.92) : accent)
-                    .accessibilityHidden(true)
+            HStack(spacing: 9) {
+                Image(
+                    systemName: resourceStatus.isError
+                        ? "exclamationmark.triangle.fill"
+                        : "arrow.down.circle.fill"
+                )
+                .foregroundStyle(resourceStatus.isError ? Color.red.opacity(0.92) : accent)
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(resourceStatus.title)
@@ -118,41 +217,57 @@ struct ControlBar: View {
                         .foregroundStyle(Color.white.opacity(0.88))
                         .lineLimit(1)
 
-                    if resourceStatus.detail.isEmpty == false {
-                        Text(resourceStatus.detail)
-                            .font(.system(.caption2, design: .rounded))
-                            .foregroundStyle(resourceStatus.isError ? Color.red.opacity(0.88) : IOSTheme.secondaryText)
-                            .lineLimit(2)
-                    }
+                    Text(resourceStatus.detail)
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(
+                            resourceStatus.isError
+                                ? Color.red.opacity(0.88)
+                                : IOSTheme.secondaryText
+                        )
+                        .lineLimit(2)
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
 
                 if let progress = resourceStatus.progress, resourceStatus.isError == false {
                     ProgressView(value: progress)
                         .progressViewStyle(.circular)
                         .controlSize(.small)
-                        .accessibilityValue("\(Int((progress * 100).rounded()))%")
+                        .tint(accent)
                 } else if resourceStatus.isError == false {
                     ProgressView()
                         .controlSize(.small)
+                        .tint(accent)
                 }
+
+                modeFlip
+                sourceMenu
             }
             .transition(.opacity)
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: statusColor.opacity(0.8), radius: model.sessionState == .running ? 5 : 0)
+                    .frame(width: 7, height: 7)
+                    .shadow(
+                        color: statusColor.opacity(0.8),
+                        radius: model.sessionState == .running ? 5 : 0
+                    )
                     .accessibilityHidden(true)
 
-                Text(model.statusMessage.isEmpty ? model.sessionBadgeText : model.statusMessage)
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .lineLimit(2)
+                Text(
+                    model.statusMessage.isEmpty
+                        ? model.sessionBadgeText
+                        : model.statusMessage
+                )
+                .font(.system(.caption, design: .rounded, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.72))
+                .lineLimit(2)
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
+
+                modeFlip
+                sourceMenu
             }
             .transition(.opacity)
         }
@@ -209,13 +324,7 @@ struct ControlBar: View {
                 Label(model.localized(.refreshSources), systemImage: "arrow.clockwise")
             }
         } label: {
-            ControlMenuLabel(
-                // Static, width-stable caption: localized "Microphone" strings
-                // vary enough in length to squeeze the device name out of view.
-                title: "MIC",
-                value: selectedSourceDisplay,
-                symbol: "mic"
-            )
+            MicrophoneChip(value: selectedSourceDisplay, accent: accent)
         }
         .disabled(model.sessionState == .running)
         .accessibilityLabel(model.localized(.inputSource))
@@ -236,10 +345,11 @@ struct ControlBar: View {
                 }
             }
         } label: {
-            ControlMenuLabel(
-                title: model.localized(.inputShort),
+            LanguagePill(
+                role: model.localized(.inputShort),
                 value: LanguageCatalog.autonym(for: model.iOSEffectiveInputLanguageID),
-                symbol: "waveform"
+                symbol: "waveform",
+                accent: accent
             )
         }
         .disabled(model.isLanguagePairLocked)
@@ -261,73 +371,100 @@ struct ControlBar: View {
                 }
             }
         } label: {
-            ControlMenuLabel(
-                title: model.localized(.subtitleShort),
+            LanguagePill(
+                role: model.localized(.subtitleShort),
                 value: LanguageCatalog.autonym(for: model.iOSEffectiveOutputLanguageID),
-                symbol: "character.bubble"
+                symbol: "character.bubble",
+                accent: accent
             )
         }
-        .disabled(
-            model.isLanguagePairLocked
-                || model.iOSEffectiveInputLanguageID == "nan"
-        )
+        .disabled(model.isLanguagePairLocked)
         .accessibilityLabel(model.localized(.subtitleLanguage))
     }
-
 }
 
-private struct ControlMenuLabel: View {
-    let title: String
+private struct LanguagePill: View {
+    let role: String
     let value: String
     let symbol: String
+    let accent: Color
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.tint)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.92))
                 .frame(width: 14)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(title.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(0.6)
-                    .foregroundStyle(Color.white.opacity(0.46))
+                Text(role.uppercased())
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .tracking(0.7)
+                    .foregroundStyle(Color.white.opacity(0.42))
                     .lineLimit(1)
-                    .fixedSize()
 
                 Text(value)
-                    .font(.system(.caption2, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.90))
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.72)
             }
-            // Floor on the text column: without it the surrounding HStack can
-            // squeeze the VStack to zero, leaving only icon + chevron visible.
-            .frame(minWidth: 52, alignment: .leading)
-            .layoutPriority(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 4)
-
-            Image(systemName: "chevron.up.chevron.down")
+            Image(systemName: "chevron.down")
                 .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.34))
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(accent.opacity(0.075))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(accent.opacity(0.17), lineWidth: 0.5)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct MicrophoneChip: View {
+    let value: String
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.90))
+                .accessibilityHidden(true)
+
+            Text(value)
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.72))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 7, weight: .bold))
                 .foregroundStyle(Color.white.opacity(0.30))
-                .frame(width: 9)
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 10)
-        .frame(height: 44)
+        .frame(height: 30)
+        .frame(maxWidth: 144)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(Color.white.opacity(0.055))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            Capsule(style: .continuous)
                 .stroke(Color.white.opacity(0.085), lineWidth: 0.5)
         }
-        .contentShape(Rectangle())
+        .contentShape(Capsule(style: .continuous))
     }
 }
 
@@ -339,15 +476,19 @@ struct ControlIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(Color.white.opacity(0.065)))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.86))
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(0.065))
+                )
                 .overlay {
-                    Circle().stroke(Color.white.opacity(0.09), lineWidth: 0.5)
+                    Circle()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
                 }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Color.white.opacity(0.88))
         .accessibilityLabel(title)
     }
 }
@@ -360,55 +501,95 @@ struct SessionCapsuleButton: View {
     let accent: Color
     let action: () -> Void
 
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private var usesCompactDock: Bool {
+        verticalSizeClass == .compact
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: isLive == false)) { context in
             let pulse = isLive
                 ? (sin(context.date.timeIntervalSinceReferenceDate * 3.2) + 1.0) / 2.0
                 : 0.0
+            let buttonSize: CGFloat = usesCompactDock ? 56 : 68
+            let haloSize: CGFloat = usesCompactDock ? 68 : 82
+            let hitSize: CGFloat = usesCompactDock ? 70 : 84
 
             Button(action: action) {
-                HStack(spacing: 8) {
-                    if showsActivity {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Color.black.opacity(0.78))
-                    } else {
-                        Image(systemName: isLive ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .accessibilityHidden(true)
-                    }
+                VStack(spacing: usesCompactDock ? 0 : 5) {
+                    ZStack {
+                        if isLive {
+                            Circle()
+                                .stroke(accent.opacity(0.30), lineWidth: 2)
+                                .frame(width: haloSize, height: haloSize)
+                                .scaleEffect(1.0 + pulse * 0.10)
+                                .opacity(0.72 - pulse * 0.28)
+                        }
 
-                    Text(title)
-                        .font(.system(.subheadline, design: .rounded, weight: .bold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(Color.black.opacity(0.82))
-                .frame(maxWidth: .infinity, minHeight: 46)
-                .padding(.horizontal, 18)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [accent.opacity(0.98), accent.opacity(0.72)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                        Circle()
+                            .fill(
+                                isLive
+                                    ? AnyShapeStyle(Color.white.opacity(0.075))
+                                    : AnyShapeStyle(
+                                        LinearGradient(
+                                            colors: [accent.opacity(0.98), accent.opacity(0.72)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
                             )
-                        )
-                )
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.28), lineWidth: 0.5)
+                            .frame(width: buttonSize, height: buttonSize)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.white.opacity(isLive ? 0.14 : 0.30), lineWidth: 0.5)
+                            }
+                            .shadow(
+                                color: accent.opacity(isLive ? 0.18 + pulse * 0.22 : 0.16),
+                                radius: isLive ? 10 + pulse * 8 : 9,
+                                y: 3
+                            )
+
+                        if showsActivity {
+                            ProgressView()
+                                .controlSize(usesCompactDock ? .small : .regular)
+                                .tint(Color.black.opacity(0.78))
+                        } else if isLive {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.red.opacity(0.92))
+                                .frame(
+                                    width: usesCompactDock ? 16 : 19,
+                                    height: usesCompactDock ? 16 : 19
+                                )
+                                .accessibilityHidden(true)
+                        } else {
+                            Image(systemName: "mic.fill")
+                                .font(
+                                    .system(
+                                        size: usesCompactDock ? 18 : 22,
+                                        weight: .bold
+                                    )
+                                )
+                                .foregroundStyle(Color.black.opacity(0.80))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .frame(width: hitSize, height: hitSize)
+
+                    if usesCompactDock == false {
+                        Text(title)
+                            .font(.system(.caption2, design: .rounded, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.68))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                            .frame(maxWidth: 116)
+                    }
                 }
-                .shadow(
-                    color: accent.opacity(isLive ? 0.20 + pulse * 0.28 : 0.12),
-                    radius: isLive ? 10 + pulse * 9 : 8,
-                    y: 3
-                )
-                .scaleEffect(isLive ? 1.0 + pulse * 0.008 : 1.0)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isDisabled)
-            .opacity(isDisabled ? 0.42 : 1.0)
+            .opacity(isDisabled ? 0.62 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: isDisabled)
             .accessibilityLabel(title)
         }

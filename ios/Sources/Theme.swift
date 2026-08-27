@@ -93,48 +93,6 @@ enum CaptionAccentPreset: String, CaseIterable, Identifiable {
     }
 }
 
-/// Compact product wordmark. Renders as the single word `v2s-ios`, with the
-/// platform suffix tinted so the full name stays legible at caption size.
-struct BrandWordmark: View {
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text(verbatim: "v2s")
-                .foregroundStyle(Color.white.opacity(0.92))
-            Text(verbatim: "-ios")
-                .foregroundStyle(accent.opacity(0.88))
-        }
-        .font(.system(size: 15, weight: .semibold, design: .rounded))
-        .tracking(-0.2)
-        .lineLimit(1)
-        .fixedSize()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: "v2s-ios"))
-    }
-}
-
-struct PrivacyBadge: View {
-    let title: String
-    let accent: Color
-
-    var body: some View {
-        Label(title, systemImage: "lock.fill")
-            .font(.system(.caption2, design: .rounded, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(0.78))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.055))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(accent.opacity(0.20), lineWidth: 0.5)
-            }
-            .accessibilityElement(children: .combine)
-    }
-}
 
 private struct PremiumPanelModifier: ViewModifier {
     let cornerRadius: CGFloat

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct CaptionHalves: View {
@@ -19,21 +20,21 @@ struct CaptionHalves: View {
                 translatedCaption
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .animation(.easeInOut(duration: 0.25), value: model.subtitleDisplayMode)
     }
 
     @ViewBuilder
     private var splitCaptions: some View {
         if isHorizontal {
-            HStack(spacing: 0) {
+            HStack(spacing: 10) {
                 sourceCaption
-                CaptionHairline(isVertical: true, accent: accent)
                 translatedCaption
             }
         } else {
-            VStack(spacing: 0) {
+            VStack(spacing: 10) {
                 sourceCaption
-                CaptionHairline(isVertical: false, accent: accent)
                 translatedCaption
             }
         }
@@ -43,7 +44,6 @@ struct CaptionHalves: View {
         CaptionPane(
             model: model,
             role: .source,
-            languageID: model.iOSEffectiveInputLanguageID,
             accent: accent
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -53,7 +53,6 @@ struct CaptionHalves: View {
         CaptionPane(
             model: model,
             role: .translation,
-            languageID: model.iOSEffectiveOutputLanguageID,
             accent: accent
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,14 +67,10 @@ private enum CaptionRole: String {
 private struct CaptionPane: View {
     @ObservedObject var model: AppModel
     let role: CaptionRole
-    let languageID: String
     let accent: Color
 
     @ScaledMetric(relativeTo: .largeTitle) private var baseCaptionSize: CGFloat = 34
 
-    private var languageName: String {
-        LanguageCatalog.autonym(for: languageID)
-    }
 
     private var committedText: String {
         guard let state = model.overlayState else { return "" }
@@ -105,20 +100,30 @@ private struct CaptionPane: View {
         }
     }
 
-    private var showsDraft: Bool {
-        draftText?.isEmpty == false
+    private var tentativeText: String? {
+        guard let draftText, draftText.isEmpty == false else { return nil }
+        guard committedText.isEmpty == false else { return draftText }
+        guard draftText != committedText else { return nil }
+
+        if draftText.hasPrefix(committedText) {
+            let tail = String(draftText.dropFirst(committedText.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return tail.isEmpty ? nil : tail
+        }
+        return draftText
     }
 
+
     private var visibleText: String {
-        if let draftText, draftText.isEmpty == false {
-            return draftText
-        }
-        return committedText
+        [committedText, tentativeText]
+            .compactMap { $0 }
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 
     private var transitionIdentity: String {
         let epoch = model.overlayState?.captionEpoch ?? 0
-        return "\(role.rawValue)-\(epoch)-\(showsDraft)-\(visibleText)"
+        return "\(role.rawValue)-\(epoch)-\(committedText)-\(tentativeText ?? "")"
     }
 
     private var placeholderKey: AppTextKey {
@@ -131,8 +136,6 @@ private struct CaptionPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            languageChip
-
             Group {
                 if model.sessionState == .idle {
                     idlePlaceholder
@@ -142,30 +145,22 @@ private struct CaptionPane: View {
                     captionText
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 18)
+        .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(IOSTheme.elevated.opacity(0.74))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(IOSTheme.hairline, lineWidth: 0.5)
+        }
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
     }
 
-    private var languageChip: some View {
-        Text(languageName)
-            .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(accent.opacity(0.92))
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(accent.opacity(0.09))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(accent.opacity(0.20), lineWidth: 0.5)
-            }
-    }
 
     private var idlePlaceholder: some View {
         VStack(spacing: 12) {
@@ -173,10 +168,6 @@ private struct CaptionPane: View {
                 .font(.system(size: 25, weight: .medium))
                 .foregroundStyle(accent.opacity(0.46))
                 .accessibilityHidden(true)
-
-            Text(languageName)
-                .font(.system(.title3, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.88))
 
             Text(model.localized(placeholderKey))
                 .font(.system(.subheadline, design: .rounded))
@@ -200,61 +191,55 @@ private struct CaptionPane: View {
     }
 
     private var captionText: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 7) {
-            Text(visibleText)
-                .font(
-                    .system(
-                        size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
-                        weight: showsDraft ? .medium : .semibold,
-                        design: .rounded
+        VStack(alignment: .leading, spacing: 10) {
+            if committedText.isEmpty == false {
+                Text(committedText)
+                    .font(
+                        .system(
+                            size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
+                            weight: .semibold,
+                            design: .rounded
+                        )
                     )
-                )
-                .foregroundStyle(accent.opacity(showsDraft ? 0.68 : 1.0))
-                .multilineTextAlignment(.center)
-                .lineLimit(nil)
-                .minimumScaleFactor(0.5)
-                .allowsTightening(true)
-                .fixedSize(horizontal: false, vertical: false)
+                    .foregroundStyle(accent)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(nil)
+                    .minimumScaleFactor(0.5)
+                    .allowsTightening(true)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            if showsDraft {
-                AnimatedEllipsis(color: accent.opacity(0.72))
-                    .padding(.bottom, 4)
-                    .accessibilityHidden(true)
+            if let tentativeText {
+                HStack(alignment: .lastTextBaseline, spacing: 7) {
+                    Text(tentativeText)
+                        .font(
+                            .system(
+                                size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
+                                weight: .medium,
+                                design: .rounded
+                            )
+                        )
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(nil)
+                        .minimumScaleFactor(0.5)
+                        .allowsTightening(true)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    AnimatedEllipsis(color: accent.opacity(0.64))
+                        .padding(.bottom, 4)
+                        .accessibilityHidden(true)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .id(transitionIdentity)
-        .transition(
-            .asymmetric(
-                insertion: .opacity.combined(with: .scale(scale: 0.985)),
-                removal: .opacity
-            )
-        )
-        .animation(.easeOut(duration: 0.28), value: transitionIdentity)
+        .transition(.opacity)
+        .animation(.easeOut(duration: 0.24), value: transitionIdentity)
         .accessibilityLabel(visibleText)
     }
 }
 
-private struct CaptionHairline: View {
-    let isVertical: Bool
-    let accent: Color
-
-    var body: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [.clear, accent.opacity(0.62), Color.white.opacity(0.08), .clear],
-                    startPoint: isVertical ? .top : .leading,
-                    endPoint: isVertical ? .bottom : .trailing
-                )
-            )
-            .frame(
-                width: isVertical ? 0.5 : nil,
-                height: isVertical ? nil : 0.5
-            )
-            .accessibilityHidden(true)
-    }
-}
 
 private struct AnimatedEllipsis: View {
     let color: Color

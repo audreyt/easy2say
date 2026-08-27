@@ -34,6 +34,7 @@ struct ConversationView: View {
     let isStartDisabled: Bool
     let toggleSession: () -> Void
     let showSettings: () -> Void
+    let showCaptions: () -> Void
 
     private var accent: Color {
         IOSTheme.color(model.iOSCaptionAccentColor)
@@ -76,28 +77,23 @@ struct ConversationView: View {
         GeometryReader { geometry in
             let isHorizontal = geometry.size.width > geometry.size.height
 
-            if isHorizontal {
-                VStack(spacing: 0) {
-                    HStack(spacing: 0) {
+            VStack(spacing: 8) {
+                if isHorizontal {
+                    HStack(spacing: 10) {
                         half(for: .secondary)
-                        ConversationHairline(isVertical: true, accent: accent)
                         half(for: .primary)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: 10) {
+                        half(for: .secondary)
+                        half(for: .primary)
+                    }
+                }
 
-                    controlStrip
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                }
-            } else {
-                VStack(spacing: 0) {
-                    half(for: .secondary)
-                    controlStrip
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                    half(for: .primary)
-                }
+                controlStrip
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
         .animation(.easeInOut(duration: 0.24), value: model.conversationFaceToFace)
     }
@@ -127,12 +123,14 @@ struct ConversationView: View {
             warning: warning,
             isToggleDisabled: isToggleDisabled,
             toggleSession: toggleSession,
-            showSettings: showSettings
+            showSettings: showSettings,
+            showCaptions: showCaptions
         )
     }
 }
 
-/// Compact two-option switch between the captions surface and conversation mode.
+/// One compact control flips between captions and two-way conversation without
+/// consuming a dedicated row of transcript space.
 struct ConversationModeSwitch: View {
     let captionsTitle: String
     let conversationTitle: String
@@ -140,50 +138,35 @@ struct ConversationModeSwitch: View {
     let isConversationActive: Bool
     let select: (Bool) -> Void
 
-    var body: some View {
-        HStack(spacing: 2) {
-            segment(title: captionsTitle, symbol: "captions.bubble", isActive: isConversationActive == false)
-            segment(title: conversationTitle, symbol: "person.2.wave.2.fill", isActive: isConversationActive)
-        }
-        .padding(2)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.055))
-        )
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.085), lineWidth: 0.5)
-        }
-        .animation(.easeOut(duration: 0.2), value: isConversationActive)
+    private var destinationTitle: String {
+        isConversationActive ? captionsTitle : conversationTitle
     }
 
-    private func segment(title: String, symbol: String, isActive: Bool) -> some View {
-        Button {
-            select(isActive == false)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                    .accessibilityHidden(true)
+    private var destinationSymbol: String {
+        isConversationActive ? "captions.bubble.fill" : "person.2.wave.2.fill"
+    }
 
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .foregroundStyle(isActive ? Color.black.opacity(0.82) : Color.white.opacity(0.62))
-            .padding(.horizontal, 11)
-            .frame(minHeight: 28)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isActive ? accent.opacity(0.92) : Color.clear)
-            )
-            .contentShape(Capsule(style: .continuous))
+    var body: some View {
+        Button {
+            select(isConversationActive == false)
+        } label: {
+            Image(systemName: destinationSymbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.92))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(0.055))
+                )
+                .overlay {
+                    Circle()
+                        .stroke(accent.opacity(0.20), lineWidth: 0.5)
+                }
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(destinationTitle)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 
@@ -202,6 +185,13 @@ private struct ConversationHalf: View {
 
     private var languageName: String {
         LanguageCatalog.autonym(for: engine.languageID(for: side))
+    }
+
+    private var readerInterfaceLanguageID: String {
+        let languageID = engine.languageID(for: side)
+        return LanguageCatalog.interface.contains(where: { $0.id == languageID })
+            ? languageID
+            : model.resolvedInterfaceLanguageID
     }
 
     private var draftText: String {
@@ -241,10 +231,9 @@ private struct ConversationHalf: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
-
-            Spacer(minLength: 0)
-
+            if holdsFloor {
+                header
+            }
             if let failureMessage {
                 failureContent(failureMessage)
             } else if isAwaitingFirstTurn {
@@ -252,17 +241,26 @@ private struct ConversationHalf: View {
             } else {
                 transcriptContent
             }
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(holdsFloor ? accent.opacity(0.055) : Color.clear)
+                .fill(
+                    holdsFloor
+                        ? accent.opacity(0.085)
+                        : IOSTheme.elevated.opacity(0.74)
+                )
         )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(accent.opacity(holdsFloor ? 0.46 : 0.0), lineWidth: 1)
+                .stroke(
+                    holdsFloor ? accent.opacity(0.46) : IOSTheme.hairline,
+                    lineWidth: holdsFloor ? 1 : 0.5
+                )
         }
         .shadow(color: accent.opacity(holdsFloor ? 0.18 : 0.0), radius: 16)
         .animation(.easeOut(duration: 0.22), value: holdsFloor)
@@ -279,37 +277,21 @@ private struct ConversationHalf: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            languageChip
+        HStack(spacing: 7) {
+            Image(systemName: "mic.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.88))
+                .accessibilityHidden(true)
 
-            if holdsFloor {
-                Text(model.localized(.conversationSpeakingFormat, languageName))
-                    .font(.system(.caption2, design: .rounded, weight: .semibold))
-                    .foregroundStyle(accent.opacity(0.88))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .transition(.opacity)
-            }
+            Text(model.localized(.conversationSpeakingFormat, languageName))
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.88))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .transition(.opacity)
 
             Spacer(minLength: 0)
         }
-    }
-
-    private var languageChip: some View {
-        Text(languageName)
-            .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(accent.opacity(0.92))
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(accent.opacity(0.09))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(accent.opacity(0.20), lineWidth: 0.5)
-            }
     }
 
     private var transcriptContent: some View {
@@ -326,7 +308,7 @@ private struct ConversationHalf: View {
                         design: .rounded
                     )
                 )
-                .foregroundStyle(accent.opacity(draftText.isEmpty ? 1.0 : 0.70))
+                .foregroundStyle(draftText.isEmpty ? accent : IOSTheme.secondaryText)
                 .lineLimit(4)
                 .minimumScaleFactor(0.5)
                 .allowsTightening(true)
@@ -358,7 +340,12 @@ private struct ConversationHalf: View {
     }
 
     private var emptyHint: some View {
-        Text(model.localized(.conversationEmptyHint))
+        Text(
+            AppLocalization.string(
+                .conversationEmptyHint,
+                languageID: readerInterfaceLanguageID
+            )
+        )
             .font(.system(.subheadline, design: .rounded))
             .foregroundStyle(IOSTheme.secondaryText)
             .multilineTextAlignment(.center)
@@ -391,6 +378,7 @@ private struct ConversationControlStrip: View {
     let isToggleDisabled: Bool
     let toggleSession: () -> Void
     let showSettings: () -> Void
+    let showCaptions: () -> Void
 
     private var toggleTitle: String {
         model.localized(engine.isRunning ? .conversationStop : .conversationStart)
@@ -400,18 +388,33 @@ private struct ConversationControlStrip: View {
         engine.turns.isEmpty == false
     }
 
+    private var modeFlip: some View {
+        ConversationModeSwitch(
+            captionsTitle: model.localized(.conversationCaptionsMode),
+            conversationTitle: model.localized(.conversationMode),
+            accent: accent,
+            isConversationActive: true,
+            select: { isConversationActive in
+                if isConversationActive == false {
+                    showCaptions()
+                }
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 10) {
-            statusLine
-
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                statusLine
+                    .frame(maxWidth: .infinity)
+                modeFlip
+            }
+            HStack(spacing: 28) {
                 ControlIconButton(
-                    symbol: "arrow.counterclockwise",
-                    title: model.localized(.conversationClear),
-                    action: engine.clearTurns
+                    symbol: "gearshape.fill",
+                    title: model.localized(.iosSettings),
+                    action: showSettings
                 )
-                .disabled(hasContent == false)
-                .opacity(hasContent ? 1.0 : 0.42)
 
                 SessionCapsuleButton(
                     title: toggleTitle,
@@ -421,13 +424,14 @@ private struct ConversationControlStrip: View {
                     accent: accent,
                     action: toggleSession
                 )
-                .frame(maxWidth: 210)
 
                 ControlIconButton(
-                    symbol: "gearshape.fill",
-                    title: model.localized(.iosSettings),
-                    action: showSettings
+                    symbol: "arrow.counterclockwise",
+                    title: model.localized(.conversationClear),
+                    action: engine.clearTurns
                 )
+                .disabled(hasContent == false)
+                .opacity(hasContent ? 1.0 : 0.55)
             }
             .frame(maxWidth: .infinity)
         }
@@ -439,18 +443,28 @@ private struct ConversationControlStrip: View {
     @ViewBuilder
     private var statusLine: some View {
         if let warning {
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.red.opacity(0.92))
-                    .accessibilityHidden(true)
+            Button(action: showSettings) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.red.opacity(0.92))
+                        .accessibilityHidden(true)
 
-                Text(warning)
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(Color.red.opacity(0.88))
-                    .lineLimit(2)
+                    Text(warning)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(Color.red.opacity(0.88))
+                        .lineLimit(2)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.red.opacity(0.62))
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(warning)
             .transition(.opacity)
         } else if let phaseTitle {
             HStack(spacing: 8) {
@@ -492,40 +506,40 @@ private struct ConversationControlStrip: View {
     }
 
     private var languagePairLine: some View {
-        HStack(spacing: 7) {
-            Text(LanguageCatalog.autonym(for: engine.languageID(for: .primary)))
+        HStack(spacing: 8) {
+            languagePill(for: .primary)
+
             Image(systemName: "arrow.left.arrow.right")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(accent.opacity(0.72))
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle()
+                        .fill(accent.opacity(0.09))
+                )
                 .accessibilityHidden(true)
-            Text(LanguageCatalog.autonym(for: engine.languageID(for: .secondary)))
+
+            languagePill(for: .secondary)
 
             Spacer(minLength: 0)
         }
-        .font(.system(.caption, design: .rounded, weight: .medium))
-        .foregroundStyle(Color.white.opacity(0.58))
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
     }
-}
 
-private struct ConversationHairline: View {
-    let isVertical: Bool
-    let accent: Color
-
-    var body: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [.clear, accent.opacity(0.62), Color.white.opacity(0.08), .clear],
-                    startPoint: isVertical ? .top : .leading,
-                    endPoint: isVertical ? .bottom : .trailing
-                )
+    private func languagePill(for side: ConversationSide) -> some View {
+        Text(LanguageCatalog.autonym(for: engine.languageID(for: side)))
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(Color.white.opacity(0.74))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(accent.opacity(0.075))
             )
-            .frame(
-                width: isVertical ? 0.5 : nil,
-                height: isVertical ? nil : 0.5
-            )
-            .accessibilityHidden(true)
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(accent.opacity(0.16), lineWidth: 0.5)
+            }
     }
 }

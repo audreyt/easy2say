@@ -40,22 +40,6 @@ struct HomeView: View {
         return hasNoMicrophones || microphoneAccessDenied
     }
 
-    private var modeSwitch: some View {
-        ConversationModeSwitch(
-            captionsTitle: model.localized(.conversationCaptionsMode),
-            conversationTitle: model.localized(.conversationMode),
-            accent: accent,
-            isConversationActive: model.isConversationModeActive,
-            select: setConversationMode
-        )
-    }
-
-    private var privacyBadge: some View {
-        PrivacyBadge(
-            title: model.localized(.iosPrivateBadge),
-            accent: accent
-        )
-    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -66,44 +50,14 @@ struct HomeView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .center, spacing: 12) {
-                            BrandWordmark(accent: accent)
-
-                            Spacer(minLength: 8)
-
-                            modeSwitch
-
-                            Spacer(minLength: 8)
-
-                            privacyBadge
-                        }
-
-                        // Narrow widths cannot carry wordmark, switch and badge on
-                        // one line without the mode labels collapsing.
-                        VStack(spacing: 8) {
-                            HStack(alignment: .center, spacing: 12) {
-                                BrandWordmark(accent: accent)
-
-                                Spacer(minLength: 8)
-
-                                privacyBadge
-                            }
-
-                            modeSwitch
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-
                     if model.isConversationModeActive {
                         ConversationView(
                             model: model,
                             engine: conversation,
                             isStartDisabled: isConversationStartDisabled,
                             toggleSession: toggleConversation,
-                            showSettings: { showsSettings = true }
+                            showSettings: { showsSettings = true },
+                            showCaptions: { setConversationMode(false) }
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
@@ -146,12 +100,13 @@ struct HomeView: View {
                                 isStartDisabled: isStartDisabled,
                                 toggleSession: toggleSession,
                                 showTranscript: { showsTranscript = true },
-                                showSettings: { showsSettings = true }
+                                showSettings: { showsSettings = true },
+                                selectConversationMode: setConversationMode
                             )
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 14)
                 }
             }
         }
@@ -204,6 +159,9 @@ struct HomeView: View {
     }
 
     private func toggleSession() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.72)
+        #endif
         if model.sessionState == .running || model.isSessionStarting {
             model.stopSession()
             return
@@ -222,6 +180,9 @@ struct HomeView: View {
     /// stops whatever is currently listening.
     private func setConversationMode(_ isActive: Bool) {
         guard model.isConversationModeActive != isActive else { return }
+        #if canImport(UIKit)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
 
         if isActive {
             if model.sessionState == .running || model.isSessionStarting {
@@ -235,6 +196,9 @@ struct HomeView: View {
     }
 
     private func toggleConversation() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.72)
+        #endif
         if conversation.isRunning {
             conversation.stop()
             return
