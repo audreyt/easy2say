@@ -209,6 +209,10 @@ enum AppTextKey: String, CaseIterable {
     case foundationModelsTranslationUnavailable
     case foundationModelsTranslationEmpty
     case foundationModelsTranslationRefused
+    case foundationModelsTranslationFallbackHint
+    case conversationAssistedHint
+    case acknowledgments
+    case acknowledgmentsHint
     case tibetanModelMissing
     case tibetanEmptyTranscript
     case tibetanPreparingModel
@@ -539,6 +543,10 @@ enum AppLocalization {
             "foundationModelsTranslationUnavailable": "Apple Intelligence is not available for translation.",
             "foundationModelsTranslationEmpty": "Apple Intelligence returned an empty translation.",
             "foundationModelsTranslationRefused": "Apple Intelligence declined to translate this caption.",
+            "foundationModelsTranslationFallbackHint": "If Apple Translation has no on-device model for a pair, Apple Intelligence may draft a translation on this device. Treat that draft as experimental.",
+            "conversationAssistedHint": "Conversation guesses who is speaking from two on-device transcribers. Tap a half to claim the floor when it guesses wrong.",
+            "acknowledgments": "Acknowledgments",
+            "acknowledgmentsHint": "Open-source licenses and model notices included with Easy2say.",
             "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
             "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
             "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
@@ -747,6 +755,10 @@ enum AppLocalization {
             "foundationModelsTranslationUnavailable": "目前无法使用 Apple Intelligence 翻译。",
             "foundationModelsTranslationEmpty": "Apple Intelligence 未生成翻译内容。",
             "foundationModelsTranslationRefused": "Apple Intelligence 拒绝翻译这句字幕。",
+            "foundationModelsTranslationFallbackHint": "若 Apple 翻译没有该语言对的装置端模型，Apple Intelligence 可能在本机起草译文。请将该译文视为实验性结果。",
+            "conversationAssistedHint": "对话模式用两个装置端转写器猜测谁在说话。猜错时点该半边即可取得发言权。",
+            "acknowledgments": "开源许可",
+            "acknowledgmentsHint": "好说内含的开源许可与模型声明。",
             "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
             "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
             "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
@@ -955,6 +967,10 @@ enum AppLocalization {
             "foundationModelsTranslationUnavailable": "目前無法使用 Apple Intelligence 翻譯。",
             "foundationModelsTranslationEmpty": "Apple Intelligence 未產生翻譯內容。",
             "foundationModelsTranslationRefused": "Apple Intelligence 拒絕翻譯這句字幕。",
+            "foundationModelsTranslationFallbackHint": "若 Apple 翻譯沒有該語言對的裝置端模型，Apple Intelligence 可能在本機起草譯文。請將該譯文視為實驗性結果。",
+            "conversationAssistedHint": "對話模式用兩個裝置端轉寫器猜測誰在說話。猜錯時點該半邊即可取得發言權。",
+            "acknowledgments": "開源授權",
+            "acknowledgmentsHint": "好說內含的開源授權與模型聲明。",
             "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
             "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
             "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",

@@ -26,9 +26,16 @@ private struct SessionStartupFailure: Error, AppLocalizableError {
 }
 
 private enum AppBuildInfo {
+#if os(iOS)
+    static var marketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+    static var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "49"
+    }
+#else
     static let marketingVersion = "0.3.37"
     static let buildNumber = "41"
-#if os(macOS)
     static let repositoryURLString = "https://github.com/franklioxygen/v2s"
     static let repositoryURL = URL(string: repositoryURLString)
 #endif

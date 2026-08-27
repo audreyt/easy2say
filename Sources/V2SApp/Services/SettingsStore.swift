@@ -20,10 +20,13 @@ final class SettingsStore {
             return try JSONDecoder().decode(AppSettings.self, from: data)
         } catch {
             let nsError = error as NSError
-            if nsError.domain != NSCocoaErrorDomain || nsError.code != NSFileReadNoSuchFileError {
+            let missingFile = nsError.domain == NSCocoaErrorDomain
+                && nsError.code == NSFileReadNoSuchFileError
+            if missingFile == false {
                 fputs("Failed to load settings: \(error)\n", stderr)
+                return .default
             }
-            return .default
+            return .seeded()
         }
     }
 

@@ -103,3 +103,24 @@ struct AppSettings: Codable {
         self.glossary         = glossary
     }
 }
+
+extension AppSettings {
+    /// First launch only. Hans as the *primary* system language gets en↔zh-Hans.
+    /// English-primary (even with Hans in the fallback list) keeps en↔zh-Hant.
+    static func seeded(primaryLanguage: String = Locale.preferredLanguages.first ?? "en") -> AppSettings {
+        var settings = AppSettings.default
+        guard prefersSimplifiedChinese(primaryLanguage) else { return settings }
+        settings.inputLanguageID = "en"
+        settings.outputLanguageID = "zh-Hans"
+        settings.conversationPrimaryLanguageID = "zh-Hans"
+        settings.conversationSecondaryLanguageID = "en"
+        return settings
+    }
+
+    static func prefersSimplifiedChinese(_ tag: String) -> Bool {
+        let lowered = tag.replacingOccurrences(of: "_", with: "-").lowercased()
+        return lowered.hasPrefix("zh-hans")
+            || lowered.hasPrefix("zh-cn")
+            || lowered.hasPrefix("zh-sg")
+    }
+}

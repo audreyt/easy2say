@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsSheet: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showsAcknowledgments = false
 
     private var accent: Color {
         IOSTheme.color(model.iOSCaptionAccentColor)
@@ -19,7 +20,9 @@ struct SettingsSheet: View {
                         captionAppearanceSection
                         displaySection
                         conversationSection
+                        translationFallbackSection
                         interfaceLanguageSection
+                        acknowledgmentsSection
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
@@ -41,6 +44,12 @@ struct SettingsSheet: View {
         .environment(\.locale, model.interfaceLocale)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showsAcknowledgments) {
+            AcknowledgmentsSheet(
+                title: model.localized(.acknowledgments),
+                doneTitle: model.localized(.done)
+            )
+        }
     }
 
     private var captionAppearanceSection: some View {
@@ -148,6 +157,11 @@ struct SettingsSheet: View {
                         .font(.system(.caption, design: .rounded))
                         .foregroundStyle(IOSTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    Text(model.localized(.conversationAssistedHint))
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -204,6 +218,19 @@ struct SettingsSheet: View {
         }
     }
 
+    private var translationFallbackSection: some View {
+        SettingsSectionCard(
+            title: model.localized(.translation),
+            symbol: "sparkles",
+            accent: accent
+        ) {
+            Text(model.localized(.foundationModelsTranslationFallbackHint))
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(IOSTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var interfaceLanguageSection: some View {
         SettingsSectionCard(
             title: model.localized(.interfaceLanguage),
@@ -248,6 +275,31 @@ struct SettingsSheet: View {
                 }
             }
             .accessibilityLabel(model.localized(.interfaceLanguage))
+        }
+    }
+
+    private var acknowledgmentsSection: some View {
+        SettingsSectionCard(
+            title: model.localized(.acknowledgments),
+            symbol: "doc.text",
+            accent: accent
+        ) {
+            Button {
+                showsAcknowledgments = true
+            } label: {
+                HStack(spacing: 12) {
+                    Text(model.localized(.acknowledgmentsHint))
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -342,5 +394,57 @@ private struct SettingsSectionCard<Content: View>: View {
         }
         .padding(18)
         .premiumPanel(cornerRadius: 22)
+    }
+}
+
+private struct AcknowledgmentsSheet: View {
+    let title: String
+    let doneTitle: String
+    @Environment(\.dismiss) private var dismiss
+
+    private static let fileNames = [
+        "Easy2say-MIT.txt",
+        "NOTICE.txt",
+        "THIRD_PARTY_NOTICES.txt",
+        "Breeze-ASR-26.txt",
+        "WhisperKit.txt",
+        "Silero-VAD.txt",
+        "OpenCC.txt",
+    ]
+
+    private var text: String {
+        Self.fileNames.compactMap { fileName in
+            guard let url = Bundle.main.url(
+                forResource: fileName,
+                withExtension: nil,
+                subdirectory: "Acknowledgments"
+            ),
+            let body = try? String(contentsOf: url, encoding: .utf8) else {
+                return nil
+            }
+            return "=== \(fileName) ===\n\n\(body)"
+        }
+        .joined(separator: "\n\n")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.78))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+            }
+            .background(IOSTheme.canvas.ignoresSafeArea())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(doneTitle) { dismiss() }
+                }
+            }
+        }
     }
 }

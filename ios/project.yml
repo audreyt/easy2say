@@ -2,6 +2,10 @@ name: v2s-ios
 options:
   minimumXcodeGenVersion: "2.46.0"
   createIntermediateGroups: true
+  knownRegions:
+    - en
+    - zh-Hant
+    - zh-Hans
   deploymentTarget:
     iOS: "26.0"
 settings:
@@ -34,8 +38,12 @@ targets:
       - path: Resources
         excludes:
           - "BreezeASR26/**"
+          - "Acknowledgments/**"
         buildPhase: resources
       - path: Resources/BreezeASR26
+        type: folder
+        buildPhase: resources
+      - path: Resources/Acknowledgments
         type: folder
         buildPhase: resources
     dependencies:
@@ -47,14 +55,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.audreyt.v2s.ios
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: v2s-ios
-        MARKETING_VERSION: "0.3.37"
-        CURRENT_PROJECT_VERSION: "48"
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "49"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: v2s-ios
+        CFBundleDisplayName: Easy2say
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
@@ -69,9 +77,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSMicrophoneUsageDescription: "v2s-ios uses the microphone to generate live subtitles entirely on device."
-        NSCameraUsageDescription: "v2s-ios does not capture video. This declaration is required because its on-device audio framework links Apple's camera-capable capture API."
-        NSSpeechRecognitionUsageDescription: "v2s-ios uses on-device speech recognition to transcribe audio into subtitles."
+        NSMicrophoneUsageDescription: "Easy2say uses the microphone to generate live subtitles entirely on device."
+        NSSpeechRecognitionUsageDescription: "Easy2say uses on-device speech recognition to transcribe audio into subtitles."
         ITSAppUsesNonExemptEncryption: false
 schemes:
   v2s-ios:

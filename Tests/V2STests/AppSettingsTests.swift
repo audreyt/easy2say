@@ -138,4 +138,27 @@ final class AppSettingsTests: XCTestCase {
 
         XCTAssertTrue(decoded.invisibleInRecording)
     }
+    func testHansPrimarySeedsEnglishHansPair() {
+        let settings = AppSettings.seeded(primaryLanguage: "zh-Hans-CN")
+
+        XCTAssertEqual(settings.inputLanguageID, "en")
+        XCTAssertEqual(settings.outputLanguageID, "zh-Hans")
+        XCTAssertEqual(settings.conversationPrimaryLanguageID, "zh-Hans")
+        XCTAssertEqual(settings.conversationSecondaryLanguageID, "en")
+    }
+
+    func testEnglishPrimaryKeepsTraditionalDefault() {
+        let settings = AppSettings.seeded(primaryLanguage: "en-US")
+
+        XCTAssertEqual(settings.inputLanguageID, "en")
+        XCTAssertEqual(settings.outputLanguageID, "zh-Hant")
+        XCTAssertEqual(settings.conversationPrimaryLanguageID, "zh-Hant")
+        XCTAssertEqual(settings.conversationSecondaryLanguageID, "en")
+    }
+
+    func testHansFallbackDoesNotOverrideEnglishPrimary() {
+        XCTAssertFalse(AppSettings.prefersSimplifiedChinese("en-US"))
+        XCTAssertTrue(AppSettings.prefersSimplifiedChinese("zh-CN"))
+    }
+
 }
