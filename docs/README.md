@@ -1,10 +1,8 @@
-# v2s website (GitHub Pages)
+# v2s-ios website
 
-Static showcase published at **https://franklioxygen.github.io/v2s/**
+Static bilingual product page published through GitHub Pages at **https://audreyt.github.io/v2s/**.
 
-Source of truth for edits: sibling folder `v2s-home` at the repo owner’s machine, or edit here and sync back.
-
-GitHub Pages serves this `/docs` folder from the `main` branch (project site: https://franklioxygen.github.io/v2s/).
+The page describes the iOS-first `audreyt/v2s` fork. The upstream macOS product remains at **https://github.com/franklioxygen/v2s**.
 
 Run the localization regression tests from the repository root with Node.js (no extra dependencies):
 

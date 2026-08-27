@@ -3,19 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. Local-first speech, on-device translation, and a lightweight menu bar workflow." />
-  <meta name="theme-color" content="#0a0c10" />
-  <title>v2s — Live bilingual subtitles for macOS</title>
+  <title>v2s-ios — Private bilingual captions for iPhone and iPad</title>
+  <meta name="description" content="Private, on-device bilingual captions for iPhone and iPad. v2s-ios gives source speech and translation equal space, with no accounts, cloud transcription, analytics, or telemetry." />
+  <meta name="author" content="v2s contributors" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#faf8f3" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1d1719" media="(prefers-color-scheme: dark)" />
+  <link rel="canonical" href="https://audreyt.github.io/v2s/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="v2s-ios" />
+  <meta property="og:title" content="v2s-ios — Two languages. One shared moment." />
+  <meta property="og:description" content="Private, on-device bilingual captions for iPhone and iPad." />
+  <meta property="og:url" content="https://audreyt.github.io/v2s/" />
+  <meta property="og:image" content="https://audreyt.github.io/v2s/assets/v2s-hero.png" />
+  <meta property="og:image:alt" content="v2s-ios showing English and Traditional Chinese captions together on an iPhone" />
+  <meta property="og:image:width" content="2400" />
+  <meta property="og:image:height" content="1260" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="zh_TW" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="v2s-ios — Two languages. One shared moment." />
+  <meta name="twitter:description" content="Private, on-device bilingual captions for iPhone and iPad." />
+  <meta name="twitter:image" content="https://audreyt.github.io/v2s/assets/v2s-hero.png" />
   <link rel="icon" href="assets/app-icon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/app-icon-512.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://ds.justfont.com" crossorigin />
+  <link rel="preconnect" href="https://go.justfont.com" crossorigin />
+  <script type="text/javascript">var _jf = _jf || [];_jf.push(['p','65960']);_jf.push(['initAction',true]);_jf.push(['_setFont','jf-lanyangming-light','css','.jf-lanyangming-light']);_jf.push(['_setFont','jf-lanyangming-light','alias','jf-lanyangming']);_jf.push(['_setFont','jf-lanyangming-light','weight',200]);_jf.push(['_setFont','jf-lanyangming-bold','css','.jf-lanyangming-bold']);_jf.push(['_setFont','jf-lanyangming-bold','alias','jf-lanyangming']);_jf.push(['_setFont','jf-lanyangming-bold','weight',700]);_jf.push(['_setFont','jf-lanyanghei-bold','css','.jf-lanyanghei-bold']);_jf.push(['_setFont','jf-lanyanghei-bold','alias','jf-lanyanghei']);_jf.push(['_setFont','jf-lanyanghei-bold','weight',700]);_jf.push(['_setFont','jf-lanyanghei-heavy','css','.jf-lanyanghei-heavy']);_jf.push(['_setFont','jf-lanyanghei-heavy','alias','jf-lanyanghei']);_jf.push(['_setFont','jf-lanyanghei-heavy','weight',900]);(function(A,p,c,m,l,q,r,h,B,D){var b=A._jf;if(b.constructor!==Object){var t=!0,u=function(a){var f=!0,e;for(e in b)b[e][0]==a&&(f&&(f=f&&!1!==b[e][1].call(b)),b[e]=null,delete b[e])},v=/\S+/g,w=/[\t\r\n\f]/g,C=/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g,n="".trim,x=n&&!n.call("\ufeff\u00a0")?function(a){return null==a?"":n.call(a)}:function(a){return null==a?"":(a+"").replace(C,"")},k=function(a){var f,b,g;if("string"===typeof a&&a&&(a=(a||"").match(v)||[],f=h[c]?(" "+h[c]+" ").replace(w," "):" ")){for(g=0;b=a[g++];)0>f.indexOf(" "+b+" ")&&(f+=" "+b+" ");h[c]=x(f)}},d=function(a){var b,e,g;if(0===arguments.length||"string"===typeof a&&a){var d=(a||"").match(v)||[];if(b=h[c]?(" "+h[c]+" ").replace(w," "):""){for(g=0;e=d[g++];)for(;0<=b.indexOf(" "+e+" ");)b=b.replace(" "+e+" "," ");h[c]=a?x(b):""}}},y;b.addScript=y=function(b,f,e,g,d,c){d=d||function(){};c=c||function(){};var a=p.createElement("script"),h=p.getElementsByTagName("script")[0],k,m=!1,l=function(){a.src="";a.parentNode.removeChild(a);a=a.onerror=a.onload=a.onreadystatechange=null};g&&(k=setTimeout(function(){l();c()},g));a.type=f||"text/javascript";a.async=e;a.onload=a.onreadystatechange=function(b,c){m||a.readyState&&!/loaded|complete/.test(a.readyState)||(m=!0,g&&clearTimeout(k),l(),c||d())};a.onerror=function(a,b,d){g&&clearTimeout(k);l();c();return!0};a.src=b;h.parentNode.insertBefore(a,h)};for(var z in b)"initAction"==b[z][0]&&(t=b[z][1]);b.push(["_eventPreload",function(){1==t&&k(m);y(B,null,!1,3E3,null,function(){u("_eventInactived")})}]);b.push(["_eventReload",function(){d(r);d(q);k(l)}]);b.push(["_eventActived",function(){d(m);d(l);k(q)}]);b.push(["_eventInactived",function(){d(m);d(l);k(r)}]);u("_eventPreload")}})(this,this.document,"className","jf-loading","jf-reloading","jf-active","jf-inactive",this.document.getElementsByTagName("html")[0],"//ds.justfont.com/js/stable/v/6.1/id/69938697899");</script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=20260827-2" />
   <script>
     try {
       var l = localStorage.getItem("v2s-home-lang");
-      if (l === "zh") {
-        document.documentElement.lang = "zh-CN";
+      var isZh = l === "zh";
+      if (!l) {
+        var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+        for (var i = 0; i < langs.length; i++) {
+          var tag = (langs[i] || "").toLowerCase();
+          if (tag.indexOf("zh") === 0) { isZh = true; break; }
+          if (tag.indexOf("en") === 0) { break; }
+        }
+      }
+      if (isZh) {
+        document.documentElement.lang = "zh-TW";
         document.documentElement.dataset.lang = "zh";
       }
     } catch (e) {}
@@ -27,287 +59,355 @@
   <header class="site-header" id="top">
     <div class="container header-inner">
       <a class="brand" href="#top" data-i18n-attr="aria-label:a11y.brand">
-        <img src="assets/app-icon.png" alt="" width="32" height="32" class="brand-icon" />
-        <span class="brand-name">v2s</span>
+        <img src="assets/app-icon.png" alt="" width="34" height="34" class="brand-icon" />
+        <span class="brand-lockup">
+          <strong>v2s</strong>
+          <small>iPhone + iPad</small>
+        </span>
       </a>
+
       <nav class="nav" aria-label="Primary" data-i18n-attr="aria-label:a11y.nav">
-        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#features" data-i18n="nav.features">Experience</a>
         <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
         <a href="#languages" data-i18n="nav.languages">Languages</a>
         <a href="#privacy" data-i18n="nav.privacy">Privacy</a>
-        <a href="#get-started" data-i18n="nav.getStarted">Get started</a>
+        <a href="#get-started" data-i18n="nav.getStarted">Build</a>
       </nav>
+
       <div class="header-actions">
         <div class="lang-toggle" role="group" data-i18n-attr="aria-label:a11y.langSwitch">
           <button type="button" class="lang-option is-active" data-lang="en" aria-pressed="true">EN</button>
-          <button type="button" class="lang-option" data-lang="zh" aria-pressed="false">中文</button>
+          <button type="button" class="lang-option" data-lang="zh" aria-pressed="false">華文</button>
         </div>
-        <a class="btn btn-ghost btn-sm" href="https://github.com/franklioxygen/v2s" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
-        <a class="btn btn-primary btn-sm" href="https://github.com/franklioxygen/v2s/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="nav.download">Download</a>
+        <a class="btn btn-ghost btn-sm header-github" href="https://github.com/audreyt/v2s" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
+        <a class="btn btn-primary btn-sm header-build" href="#get-started" data-i18n="nav.build">Build the app</a>
         <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="mobile-nav" data-i18n-attr="aria-label:a11y.menuOpen">
           <span></span><span></span><span></span>
         </button>
       </div>
     </div>
+
     <div class="mobile-nav" id="mobile-nav" hidden>
       <div class="lang-toggle lang-toggle-mobile" role="group" data-i18n-attr="aria-label:a11y.langSwitch">
         <button type="button" class="lang-option is-active" data-lang="en" aria-pressed="true">EN</button>
-        <button type="button" class="lang-option" data-lang="zh" aria-pressed="false">中文</button>
+        <button type="button" class="lang-option" data-lang="zh" aria-pressed="false">華文</button>
       </div>
-      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#features" data-i18n="nav.features">Experience</a>
       <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
       <a href="#languages" data-i18n="nav.languages">Languages</a>
       <a href="#privacy" data-i18n="nav.privacy">Privacy</a>
-      <a href="#get-started" data-i18n="nav.getStarted">Get started</a>
-      <a href="https://github.com/franklioxygen/v2s/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="nav.download">Download</a>
+      <a href="#get-started" data-i18n="nav.getStarted">Build</a>
+      <a href="https://github.com/audreyt/v2s" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
   </header>
 
   <main id="main">
-    <section class="hero">
-      <div class="hero-glow" aria-hidden="true"></div>
-      <div class="container hero-grid">
-        <div class="hero-copy reveal">
-          <div class="badge-row">
-            <span class="badge" data-i18n="hero.badgeOnDevice">Local-first</span>
-            <span class="badge badge-muted" data-i18n="hero.badgeMac">macOS 26+</span>
-          </div>
-          <h1 data-i18n="hero.title">v2s: Live bilingual subtitles, private by design.</h1>
-          <p class="hero-lead" data-i18n="hero.lead">
-            v2s turns microphone or app audio into a clean two-line subtitle bar for meetings, calls, streams, and videos.
-            Hear the original language, read the translation, and stay on the window you already use.
-          </p>
-          <div class="hero-cta">
-            <a class="btn btn-primary btn-lg" href="https://github.com/franklioxygen/v2s/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="hero.ctaDownload">
-              Download for macOS
-            </a>
-            <a class="btn btn-secondary btn-lg" href="#get-started" data-i18n="hero.ctaQuickStart">Quick start</a>
-            <a class="btn btn-ghost btn-lg" href="https://github.com/franklioxygen/v2s" target="_blank" rel="noopener noreferrer" data-i18n="hero.ctaSource">View source</a>
-          </div>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="container hero-copy reveal">
+        <div class="badge-row" aria-label="Product details">
+          <span class="badge" data-i18n="hero.badgeOnDevice">On-device by default</span>
+          <span class="badge badge-muted" data-i18n="hero.badgePlatform">iOS + iPadOS 26+</span>
         </div>
-        <div class="hero-visual reveal reveal-delay">
-          <div class="subtitle-demo" aria-hidden="true">
-            <div class="subtitle-bar">
-              <p class="line translation" data-i18n="hero.demoTranslation">Welcome back — glad you could join today's call.</p>
-              <p class="line source" data-i18n="hero.demoSource">欢迎回来，很高兴你能参加今天的通话。</p>
-            </div>
-            <div class="demo-window">
-              <div class="demo-titlebar">
-                <span class="dot red"></span>
-                <span class="dot yellow"></span>
-                <span class="dot green"></span>
-                <span class="demo-title" data-i18n="hero.demoWindow">Zoom — Team standup</span>
-              </div>
-            </div>
-          </div>
+        <h1 id="hero-title" data-i18n="hero.title" data-i18n-html>Two languages.<br /><em>One shared moment.</em></h1>
+        <p class="hero-lead" data-i18n="hero.lead">
+          v2s-ios listens through the microphone, transcribes and translates on device, and gives both languages equal space — without accounts, cloud transcription, or telemetry.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href="#get-started" data-i18n="hero.ctaBuild">Build for iOS</a>
+          <a class="btn btn-text btn-lg" href="https://github.com/audreyt/v2s" target="_blank" rel="noopener noreferrer"><span data-i18n="hero.ctaSource">Explore the source</span><span aria-hidden="true"> ↗</span></a>
         </div>
       </div>
+
+      <figure class="hero-art reveal reveal-delay">
+        <div class="art-frame">
+          <svg class="voice-art" viewBox="0 0 760 680" aria-hidden="true">
+            <circle class="art-ring" cx="310" cy="340" r="252" />
+            <circle class="art-ring art-ring-dashed" cx="310" cy="340" r="188" />
+            <circle class="art-ring" cx="310" cy="340" r="112" />
+            <path class="art-arc" d="M72 380C148 182 352 114 548 214" />
+            <path class="art-arc" d="M54 438C190 584 414 574 566 434" />
+            <g class="wave-dots">
+              <circle cx="104" cy="338" r="3" /><circle cx="124" cy="323" r="4" /><circle cx="144" cy="294" r="5" />
+              <circle cx="164" cy="254" r="6" /><circle cx="184" cy="222" r="7" /><circle cx="204" cy="238" r="6" />
+              <circle cx="224" cy="286" r="5" /><circle cx="244" cy="328" r="4" /><circle cx="264" cy="346" r="3" />
+              <circle cx="284" cy="331" r="4" /><circle cx="304" cy="296" r="5" /><circle cx="324" cy="268" r="6" />
+              <circle cx="344" cy="286" r="5" /><circle cx="364" cy="332" r="4" /><circle cx="384" cy="352" r="3" />
+              <circle cx="404" cy="334" r="4" /><circle cx="424" cy="296" r="5" /><circle cx="444" cy="244" r="7" />
+              <circle cx="464" cy="214" r="8" /><circle cx="484" cy="236" r="7" /><circle cx="504" cy="284" r="5" />
+              <circle cx="524" cy="324" r="4" /><circle cx="544" cy="340" r="3" />
+            </g>
+            <line class="art-line" x1="86" y1="512" x2="534" y2="512" />
+            <circle class="art-disc" cx="118" cy="128" r="18" />
+            <circle class="art-disc art-disc-large" cx="586" cy="112" r="48" />
+          </svg>
+
+          <div class="art-words" aria-hidden="true">
+            <span data-i18n="hero.artListen">LISTEN</span>
+            <i>↔</i>
+            <span data-i18n="hero.artUnderstand">UNDERSTAND</span>
+          </div>
+
+          <div class="caption-fragment caption-fragment-source" aria-hidden="true">
+            <small>EN</small>
+            <span data-i18n="hero.demoSource">I understand.</span>
+          </div>
+          <div class="caption-fragment caption-fragment-translation" aria-hidden="true">
+            <small>ZH-HANT</small>
+            <span data-i18n="hero.demoTranslation">我明白了。</span>
+          </div>
+
+          <div class="phone-stage">
+            <div class="phone-halo" aria-hidden="true"></div>
+            <div class="phone-shell">
+              <img src="assets/v2s-ios-home.png" alt="v2s-ios showing English and Traditional Chinese captions together on an iPhone" data-i18n-attr="alt:hero.imgAlt" width="1206" height="2622" fetchpriority="high" decoding="async" />
+            </div>
+          </div>
+        </div>
+        <figcaption>
+          <span class="figure-label" data-i18n="hero.figureKicker">CAPTION 01</span>
+          <span data-i18n="hero.figureCaption">Original speech and translation share the screen. Neither is treated as a footnote.</span>
+          <span class="figure-meta">v2s-ios · 2026</span>
+        </figcaption>
+      </figure>
     </section>
 
-    <section class="highlights">
+    <section class="highlights" aria-label="Product principles">
       <div class="container highlights-grid">
         <article class="highlight-card reveal">
+          <span class="card-index">01</span>
           <div class="highlight-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v2m0 14v2M5.6 5.6l1.4 1.4m9.9 9.9 1.4 1.4M3 12h2m14 0h2M5.6 18.4l1.4-1.4m9.9-9.9 1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
           </div>
-          <h3 data-i18n="highlights.h1Title">Private by design</h3>
-          <p data-i18n="highlights.h1Body">No account, analytics, or v2s cloud backend. Translation is on-device; speech stays local whenever the selected language supports it.</p>
+          <h3 data-i18n="highlights.h1Title">Nothing leaves the conversation</h3>
+          <p data-i18n="highlights.h1Body">No account, network client, cloud transcription, analytics, or telemetry. Your words remain on the device in your hands.</p>
         </article>
         <article class="highlight-card reveal reveal-delay">
+          <span class="card-index">02</span>
           <div class="highlight-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2m8-16h2a2 2 0 0 1 2 2v2m0 8v2a2 2 0 0 1-2 2h-2M9 12h6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h16v14H4z"/><path d="M4 12h16"/><path d="m9 9 2-2-2-2M15 15l-2 2 2 2"/></svg>
           </div>
-          <h3 data-i18n="highlights.h2Title">Menu bar first</h3>
-          <p data-i18n="highlights.h2Body">Always one click away. Start, stop, and tune languages without leaving your meeting or player fullscreen.</p>
+          <h3 data-i18n="highlights.h2Title">Equal space for both languages</h3>
+          <p data-i18n="highlights.h2Body">Source and translation each receive half the screen: stacked in portrait, side by side in landscape.</p>
         </article>
         <article class="highlight-card reveal reveal-delay-2">
+          <span class="card-index">03</span>
           <div class="highlight-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 5H5v3M16 19h3v-3M5 8l4-4M19 16l-4 4"/><path d="M7 12h10M12 7v10"/></svg>
           </div>
-          <h3 data-i18n="highlights.h3Title">Pick your audio</h3>
-          <p data-i18n="highlights.h3Body">Capture your microphone or audio from a specific running app — not the whole system mix.</p>
+          <h3 data-i18n="highlights.h3Title">A screen made to share</h3>
+          <p data-i18n="highlights.h3Body">Flip the other person’s half across a table, or let landscape mode open the conversation side by side.</p>
         </article>
       </div>
     </section>
 
     <section class="section" id="features">
       <div class="container">
-        <header class="section-header reveal">
-          <p class="eyebrow" data-i18n="features.eyebrow">Features</p>
-          <h2 data-i18n="features.title">Built for real-time conversations, not post-production.</h2>
-          <p class="section-lead" data-i18n="features.lead">Everything you need to follow live speech in another language, without juggling browser tabs or heavyweight caption apps.</p>
+        <header class="section-header reveal" data-section="01">
+          <p class="eyebrow" data-i18n="features.eyebrow">01 · The experience</p>
+          <h2 data-i18n="features.title">Designed around the person across from you.</h2>
+          <p class="section-lead" data-i18n="features.lead">Not a transcript squeezed into a utility window. A calm, shared surface for following each other in the moment.</p>
         </header>
+
         <div class="feature-grid">
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f1Title">Live overlay</h3>
-            <p data-i18n="features.f1Body">Translated line on top, original speech below — both visible so you can switch context instantly.</p>
+            <span class="feature-num">01</span>
+            <h3 data-i18n="features.f1Title">Live bilingual canvas</h3>
+            <p data-i18n="features.f1Body">Original speech and its translation stay visible together, with a clear half of the screen for each.</p>
           </article>
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f2Title">Per-app capture</h3>
-            <p data-i18n="features.f2Body">Route Zoom, Teams, browsers, or players as the input source while the rest of your desktop stays quiet.</p>
+            <span class="feature-num">02</span>
+            <h3 data-i18n="features.f2Title">Two-way conversation</h3>
+            <p data-i18n="features.f2Body">Two people can speak their own languages into one microphone and read the other person’s words in theirs.</p>
           </article>
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f3Title">Apple SpeechAnalyzer</h3>
-            <p data-i18n="features.f3Body">On-device transcription tuned for the languages Apple supports on your Mac.</p>
+            <span class="feature-num">03</span>
+            <h3 data-i18n="features.f3Title">Across-the-table view</h3>
+            <p data-i18n="features.f3Body">Flip one half 180 degrees so both people can read naturally with the device placed between them.</p>
           </article>
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f4Title">Apple Translation</h3>
-            <p data-i18n="features.f4Body">On-device translation with language packs managed through System Settings when needed.</p>
+            <span class="feature-num">04</span>
+            <h3 data-i18n="features.f4Title">A graceful noisy-room override</h3>
+            <p data-i18n="features.f4Body">The app compares both language lanes; if noise confuses it, tap either half to say who has the floor.</p>
           </article>
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f5Title">AI summaries</h3>
-            <p data-i18n="features.f5Body">Apple Intelligence can summarize your transcript when you need a quick recap after a long call.</p>
+            <span class="feature-num">05</span>
+            <h3 data-i18n="features.f5Title">Local Taigi captions</h3>
+            <p data-i18n="features.f5Body">A bundled 4-bit Breeze-ASR-26 model offers assistive Taigi-to-Chinese-character captions without a model download.</p>
           </article>
           <article class="feature-card reveal">
-            <h3 data-i18n="features.f6Title">Readable styling</h3>
-            <p data-i18n="features.f6Body">Adjust overlay appearance so subtitles stay legible on top of slides, code, or dark video.</p>
+            <span class="feature-num">06</span>
+            <h3 data-i18n="features.f6Title">Transcript at hand</h3>
+            <p data-i18n="features.f6Body">Review the session inside the app, then return to the live view without leaving the private workflow.</p>
           </article>
         </div>
       </div>
     </section>
 
     <section class="section section-alt" id="how-it-works">
-      <div class="container split-section">
-        <div class="split-copy reveal">
-          <p class="eyebrow" data-i18n="howItWorks.eyebrow">How it works</p>
-          <h2 data-i18n="howItWorks.title">Three steps from download to subtitles.</h2>
-          <ol class="steps-list">
-            <li>
-              <strong data-i18n="howItWorks.step1Title">Install</strong>
-              <span data-i18n="howItWorks.step1Body" data-i18n-html></span>
-            </li>
-            <li>
-              <strong data-i18n="howItWorks.step2Title">Configure</strong>
-              <span data-i18n="howItWorks.step2Body">Choose mic or app audio, set input and subtitle languages, grant permissions once.</span>
-            </li>
-            <li>
-              <strong data-i18n="howItWorks.step3Title">Start</strong>
-              <span data-i18n="howItWorks.step3Body">Click Start in the menu bar — subtitles appear at the top of your screen in real time.</span>
-            </li>
-          </ol>
-        </div>
+      <div class="container">
+        <header class="section-header reveal" data-section="02">
+          <p class="eyebrow" data-i18n="howItWorks.eyebrow">02 · How it works</p>
+          <h2 data-i18n="howItWorks.title">From silence to shared understanding in three gestures.</h2>
+        </header>
+        <ol class="steps-list">
+          <li class="reveal">
+            <span class="step-marker">1</span>
+            <strong data-i18n="howItWorks.step1Title">Choose both languages</strong>
+            <span data-i18n="howItWorks.step1Body">Set the language being spoken and the subtitle language each person wants to read.</span>
+          </li>
+          <li class="reveal reveal-delay">
+            <span class="step-marker">2</span>
+            <strong data-i18n="howItWorks.step2Title">Set the screen between you</strong>
+            <span data-i18n="howItWorks.step2Body">Use portrait, landscape, or flip one half for an across-the-table conversation.</span>
+          </li>
+          <li class="reveal reveal-delay-2">
+            <span class="step-marker">3</span>
+            <strong data-i18n="howItWorks.step3Title">Speak naturally</strong>
+            <span data-i18n="howItWorks.step3Body">Tap Start. Speech and translation arrive together, entirely inside v2s-ios.</span>
+          </li>
+        </ol>
       </div>
     </section>
 
     <section class="section" id="languages">
       <div class="container">
-        <header class="section-header reveal">
-          <p class="eyebrow" data-i18n="inputLangs.eyebrow">Input and subtitle languages</p>
-          <h2 data-i18n="inputLangs.title">Language choices matched to your Mac.</h2>
-          <p class="section-lead" data-i18n="inputLangs.lead">v2s asks Apple's Speech and Translation frameworks what your current Mac supports. Available choices vary by macOS version, hardware, and installed or downloadable Apple language models.</p>
+        <header class="section-header reveal" data-section="03">
+          <p class="eyebrow" data-i18n="inputLangs.eyebrow">03 · Language coverage</p>
+          <h2 data-i18n="inputLangs.title">The list follows what your device can actually do.</h2>
+          <p class="section-lead" data-i18n="inputLangs.lead">v2s-ios asks Apple Speech and Translation for the languages available on the current device. Choices can vary with iOS, hardware, and installed language assets.</p>
         </header>
-        <p class="lang-note reveal" data-i18n="inputLangs.inputExamples">Common speech-input examples:</p>
-        <ul class="lang-chips reveal" role="list">
-          <li data-i18n="inputLangs.chipCantonese">Cantonese</li>
-          <li data-i18n="inputLangs.chipZh">Chinese (Simplified)</li>
-          <li data-i18n="inputLangs.chipZhHant">Chinese (Traditional)</li>
-          <li data-i18n="inputLangs.chipEn">English</li>
-          <li data-i18n="inputLangs.chipFr">French</li>
-          <li data-i18n="inputLangs.chipDe">German</li>
-          <li data-i18n="inputLangs.chipIt">Italian</li>
-          <li data-i18n="inputLangs.chipJa">Japanese</li>
-          <li data-i18n="inputLangs.chipKo">Korean</li>
-          <li data-i18n="inputLangs.chipPt">Portuguese</li>
-          <li data-i18n="inputLangs.chipEs">Spanish</li>
-        </ul>
-        <p class="lang-note reveal" data-i18n="inputLangs.outputExamples">Additional subtitle-output examples:</p>
-        <ul class="lang-chips reveal" role="list">
-          <li data-i18n="inputLangs.chipAr">Arabic</li>
-          <li data-i18n="inputLangs.chipNl">Dutch</li>
-          <li data-i18n="inputLangs.chipHi">Hindi</li>
-          <li data-i18n="inputLangs.chipId">Indonesian</li>
-          <li data-i18n="inputLangs.chipRu">Russian</li>
-          <li data-i18n="inputLangs.chipTh">Thai</li>
-          <li data-i18n="inputLangs.chipTr">Turkish</li>
-          <li data-i18n="inputLangs.chipUk">Ukrainian</li>
-          <li data-i18n="inputLangs.chipVi">Vietnamese</li>
-        </ul>
-        <p class="lang-note reveal">
-          <span data-i18n="inputLangs.noteBefore">The app shows the exact choices available on your Mac and validates each translation pair before starting. </span>
-          <a href="https://github.com/franklioxygen/v2s/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="inputLangs.readmeLink" data-i18n-href="inputLangs.readmeHref">Read the full README →</a>
+
+        <div class="language-groups">
+          <div class="language-group reveal">
+            <p class="lang-note" data-i18n="inputLangs.inputExamples">Speech and conversation examples</p>
+            <ul class="lang-chips" role="list">
+              <li data-i18n="inputLangs.chipCantonese">Cantonese</li>
+              <li data-i18n="inputLangs.chipZh">Chinese (Simplified)</li>
+              <li data-i18n="inputLangs.chipZhHant">Chinese (Traditional)</li>
+              <li data-i18n="inputLangs.chipEn">English</li>
+              <li data-i18n="inputLangs.chipFr">French</li>
+              <li data-i18n="inputLangs.chipDe">German</li>
+              <li data-i18n="inputLangs.chipIt">Italian</li>
+              <li data-i18n="inputLangs.chipJa">Japanese</li>
+              <li data-i18n="inputLangs.chipKo">Korean</li>
+              <li data-i18n="inputLangs.chipPt">Portuguese</li>
+              <li data-i18n="inputLangs.chipEs">Spanish</li>
+              <li class="lang-chip-special" data-i18n="inputLangs.chipTaigi">Taigi · Chinese-character captions</li>
+            </ul>
+          </div>
+          <div class="language-group reveal reveal-delay">
+            <p class="lang-note" data-i18n="inputLangs.outputExamples">Additional translation examples</p>
+            <ul class="lang-chips" role="list">
+              <li data-i18n="inputLangs.chipAr">Arabic</li>
+              <li data-i18n="inputLangs.chipNl">Dutch</li>
+              <li data-i18n="inputLangs.chipHi">Hindi</li>
+              <li data-i18n="inputLangs.chipId">Indonesian</li>
+              <li data-i18n="inputLangs.chipRu">Russian</li>
+              <li data-i18n="inputLangs.chipTh">Thai</li>
+              <li data-i18n="inputLangs.chipTr">Turkish</li>
+              <li data-i18n="inputLangs.chipUk">Ukrainian</li>
+              <li data-i18n="inputLangs.chipVi">Vietnamese</li>
+            </ul>
+          </div>
+        </div>
+        <p class="lang-footnote reveal">
+          <span data-i18n="inputLangs.noteBefore">The picker shows the exact choices available now; Apple may download a language asset before first use. </span>
+          <a href="https://github.com/audreyt/v2s/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="inputLangs.readmeLink" data-i18n-href="inputLangs.readmeHref">Read the full technical notes ↗</a>
         </p>
       </div>
     </section>
 
-    <section class="section section-alt" id="privacy">
+    <section class="section privacy-section" id="privacy">
       <div class="container privacy-block reveal">
-        <div class="privacy-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+        <div class="privacy-heading">
+          <p class="eyebrow" data-i18n="privacy.eyebrow">04 · Privacy, literally</p>
+          <h2 data-i18n="privacy.title">No account. No network client. No tiny print.</h2>
         </div>
-        <div>
-          <p class="eyebrow" data-i18n="privacy.eyebrow">Privacy</p>
-          <h2 data-i18n="privacy.title">Local-first, with transparent fallbacks.</h2>
-          <ul class="check-list">
-            <li data-i18n="privacy.li1">No account, cloud backend, analytics, or telemetry</li>
-            <li data-i18n="privacy.li2">v2s never sends audio or subtitle text to its own servers</li>
-            <li data-i18n="privacy.li3">Translation is on-device; speech uses Apple's service only for languages with no local model</li>
-            <li data-i18n="privacy.li4">Permissions requested only for speech, mic, or app audio capture</li>
-          </ul>
-        </div>
+        <ul class="check-list">
+          <li data-i18n="privacy.li1">Microphone audio and captions are never sent to a v2s server — there is no v2s server.</li>
+          <li data-i18n="privacy.li2">Speech recognition and translation run on device with Apple’s frameworks and local language assets.</li>
+          <li data-i18n="privacy.li3">Apple may download a required language asset once; processing then stays on the device.</li>
+          <li data-i18n="privacy.li4">Voice activity detection and the optional bundled Taigi model run through Apple’s Core ML stack.</li>
+        </ul>
       </div>
     </section>
 
     <section class="section" id="get-started">
       <div class="container">
-        <header class="section-header reveal">
-          <p class="eyebrow" data-i18n="quickStart.eyebrow">Quick start</p>
-          <h2 data-i18n="quickStart.title">From download to first subtitle in minutes.</h2>
+        <header class="section-header reveal" data-section="05">
+          <p class="eyebrow" data-i18n="quickStart.eyebrow">05 · Build the app</p>
+          <h2 data-i18n="quickStart.title">From source to your iPhone in one quiet sitting.</h2>
+          <p class="section-lead" data-i18n="quickStart.lead">The iOS experience is built from this fork. Bring Xcode 26, an iOS 26 device or simulator, and your own signing team for a physical device.</p>
         </header>
+
         <div class="install-steps reveal">
           <div class="install-step">
             <span class="step-num">1</span>
             <div>
-              <h3 data-i18n="quickStart.s1Title">Download</h3>
-              <p data-i18n="quickStart.s1Body" data-i18n-html></p>
-              <div class="code-block">
-                <pre><code>open https://github.com/franklioxygen/v2s/releases/latest</code></pre>
-                <button type="button" class="copy-btn" data-copy="open https://github.com/franklioxygen/v2s/releases/latest" data-i18n="quickStart.copy" data-i18n-attr="aria-label:quickStart.copyCmd">Copy</button>
-              </div>
+              <h3 data-i18n="quickStart.s1Title">Prepare</h3>
+              <p data-i18n="quickStart.s1Body">Install Xcode 26, XcodeGen, and the Hugging Face CLI. A physical device also needs a local development team in Signing &amp; Capabilities.</p>
             </div>
           </div>
-          <div class="install-step">
+          <div class="install-step install-step-code">
             <span class="step-num">2</span>
             <div>
-              <h3 data-i18n="quickStart.s2Title">Install</h3>
-              <p data-i18n="quickStart.s2Body" data-i18n-html></p>
+              <h3 data-i18n="quickStart.s2Title">Fetch and generate</h3>
+              <p data-i18n="quickStart.s2Body">Clone the fork, fetch the pinned Taigi model, and generate the iOS project.</p>
+              <div class="code-block">
+                <pre><code>git clone https://github.com/audreyt/v2s.git
+cd v2s
+brew install xcodegen huggingface-cli
+./scripts/fetch_breeze_asr_26.sh
+(cd ios &amp;&amp; xcodegen generate)
+open ios/v2s-ios.xcodeproj</code></pre>
+                <button type="button" class="copy-btn" data-copy="git clone https://github.com/audreyt/v2s.git
+cd v2s
+brew install xcodegen huggingface-cli
+./scripts/fetch_breeze_asr_26.sh
+(cd ios &amp;&amp; xcodegen generate)
+open ios/v2s-ios.xcodeproj" data-i18n="quickStart.copy" data-i18n-attr="aria-label:quickStart.copyCmds">Copy</button>
+              </div>
             </div>
           </div>
           <div class="install-step">
             <span class="step-num">3</span>
             <div>
-              <h3 data-i18n="quickStart.s3Title">Build from source</h3>
-              <p data-i18n="quickStart.s3Body">Requires Xcode and macOS 26+ for speech and translation APIs.</p>
-              <div class="code-block">
-                <pre><code>git clone https://github.com/franklioxygen/v2s.git
-cd v2s
-open v2s.xcodeproj</code></pre>
-                <button type="button" class="copy-btn" data-copy="git clone https://github.com/franklioxygen/v2s.git
-cd v2s
-open v2s.xcodeproj" data-i18n="quickStart.copy" data-i18n-attr="aria-label:quickStart.copyCmds">Copy</button>
-              </div>
+              <h3 data-i18n="quickStart.s3Title">Run</h3>
+              <p data-i18n="quickStart.s3Body">Choose the v2s-ios scheme and an iPhone, iPad, or simulator, then run from Xcode.</p>
             </div>
           </div>
         </div>
+
         <aside class="permissions-card reveal">
-          <h3 data-i18n="quickStart.permsTitle">First-run permissions</h3>
+          <p class="permissions-kicker" data-i18n="quickStart.permsTitle">What the first run asks for</p>
           <ul>
-            <li><strong data-i18n="quickStart.perm1Title">Speech Recognition</strong> — <span data-i18n="quickStart.perm1Body">transcribe audio to text</span></li>
-            <li><strong data-i18n="quickStart.perm2Title">Microphone</strong> — <span data-i18n="quickStart.perm2Body">when using mic as input</span></li>
-            <li><strong data-i18n="quickStart.perm3Title">Audio Capture</strong> — <span data-i18n="quickStart.perm3Body">when capturing another app's audio</span></li>
+            <li><strong data-i18n="quickStart.perm1Title">Speech Recognition</strong><span data-i18n="quickStart.perm1Body">to turn spoken audio into text</span></li>
+            <li><strong data-i18n="quickStart.perm2Title">Microphone</strong><span data-i18n="quickStart.perm2Body">to hear the conversation you choose to caption</span></li>
+            <li><strong data-i18n="quickStart.perm3Title">Language assets</strong><span data-i18n="quickStart.perm3Body">downloaded by Apple only when a selected language needs them</span></li>
           </ul>
+        </aside>
+
+        <aside class="fork-note reveal" id="lineage">
+          <div>
+            <p class="eyebrow" data-i18n="fork.eyebrow">Lineage</p>
+            <h3 data-i18n="fork.title">An iOS-first fork, in the open.</h3>
+          </div>
+          <div>
+            <p data-i18n="fork.body">v2s-ios begins with pull request #20 on franklioxygen/v2s and keeps the original macOS target buildable for shared-engine work. The iPhone and iPad experience is this fork’s focus.</p>
+            <a href="https://github.com/franklioxygen/v2s" target="_blank" rel="noopener noreferrer"><span data-i18n="fork.upstream">See the upstream macOS project</span><span aria-hidden="true"> ↗</span></a>
+          </div>
         </aside>
       </div>
     </section>
 
     <section class="cta-band">
       <div class="container cta-inner reveal">
-        <div>
-          <h2 data-i18n="cta.title">Ready to follow every word?</h2>
-          <p data-i18n="cta.body">Free, open source, and built for macOS. Download v2s and keep your conversations accessible.</p>
-        </div>
+        <p class="cta-kicker">v2s-ios</p>
+        <h2 data-i18n="cta.title">Let both sides of the conversation stay visible.</h2>
+        <p data-i18n="cta.body">Open source, on device, and designed for the phone already between you.</p>
         <div class="cta-actions">
-          <a class="btn btn-primary btn-lg" href="https://github.com/franklioxygen/v2s/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n="cta.download">Download latest</a>
-          <a class="btn btn-secondary btn-lg" href="https://github.com/franklioxygen/v2s" target="_blank" rel="noopener noreferrer" data-i18n="cta.star">Star on GitHub</a>
+          <a class="btn btn-light btn-lg" href="https://github.com/audreyt/v2s" target="_blank" rel="noopener noreferrer" data-i18n="cta.source">Open on GitHub</a>
+          <a class="btn btn-dark-outline btn-lg" href="https://github.com/audreyt/v2s/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-i18n="cta.readme" data-i18n-href="cta.readmeHref">Read the build notes</a>
         </div>
       </div>
     </section>
@@ -316,15 +416,16 @@ open v2s.xcodeproj" data-i18n="quickStart.copy" data-i18n-attr="aria-label:quick
   <footer class="site-footer">
     <div class="container footer-inner">
       <div class="footer-brand">
-        <img src="assets/app-icon.png" alt="" width="24" height="24" />
-        <span>v2s</span>
+        <img src="assets/app-icon.png" alt="" width="28" height="28" />
+        <span>v2s-ios</span>
       </div>
-      <p class="footer-meta"><span data-i18n="footer.license">MIT License · </span><a href="https://github.com/franklioxygen/v2s">franklioxygen/v2s</a></p>
-      <p class="footer-meta"><a href="https://github.com/franklioxygen/v2s/blob/main/README.zh-CN.md" data-i18n="footer.docLink" data-i18n-href="footer.docHref">中文文档</a></p>
+      <p class="footer-meta"><span data-i18n="footer.notice">Fork attribution · </span><a href="https://github.com/audreyt/v2s/blob/main/NOTICE">NOTICE</a></p>
+      <p class="footer-meta"><a href="https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md" data-i18n="footer.docLink" data-i18n-href="footer.docHref">繁體中文 README</a></p>
+      <p class="footer-meta footer-upstream"><a href="https://github.com/franklioxygen/v2s" data-i18n="footer.upstream">Upstream macOS project ↗</a></p>
     </div>
   </footer>
 
-  <script src="js/i18n.js"></script>
-  <script src="js/main.js" defer></script>
+  <script src="js/i18n.js?v=20260827-2"></script>
+  <script src="js/main.js?v=20260827-2" defer></script>
 </body>
 </html>

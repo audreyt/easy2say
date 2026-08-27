@@ -4,100 +4,104 @@
   const strings = {
     en: {
       meta: {
-        title: "v2s — Live bilingual subtitles for macOS",
+        title: "v2s-ios — Private bilingual captions for iPhone and iPad",
         description:
-          "v2s — live bilingual subtitles for meetings, calls, streams, and videos on macOS. Local-first speech, on-device translation, and a lightweight menu bar workflow.",
+          "Private, on-device bilingual captions for iPhone and iPad. v2s-ios gives source speech and translation equal space, with no accounts, cloud transcription, analytics, or telemetry.",
+        ogTitle: "v2s-ios — Two languages. One shared moment.",
+        imageAlt: "v2s-ios showing English and Traditional Chinese captions together on an iPhone",
       },
       a11y: {
         skip: "Skip to content",
-        brand: "v2s home",
-        nav: "Primary",
+        brand: "v2s-ios home",
+        nav: "Primary navigation",
         menuOpen: "Open menu",
         menuClose: "Close menu",
         langSwitch: "Language",
       },
       nav: {
-        features: "Features",
+        features: "Experience",
         howItWorks: "How it works",
         languages: "Languages",
         privacy: "Privacy",
-        getStarted: "Get started",
+        getStarted: "Build",
         github: "GitHub",
-        download: "Download",
+        build: "Build the app",
       },
       hero: {
-        badgeOnDevice: "Local-first",
-        badgeMac: "macOS 26+",
-        title: "v2s: Live bilingual subtitles, private by design.",
+        badgeOnDevice: "On-device by default",
+        badgePlatform: "iOS + iPadOS 26+",
+        title: "Two languages.<br><em>One shared moment.</em>",
         lead:
-          "v2s turns microphone or app audio into a clean two-line subtitle bar for meetings, calls, streams, and videos. Hear the original language, read the translation, and stay on the window you already use.",
-        ctaDownload: "Download for macOS",
-        ctaQuickStart: "Quick start",
-        ctaSource: "View source",
-        demoTranslation: "Welcome back — glad you could join today's call.",
-        demoSource: "欢迎回来，很高兴你能参加今天的通话。",
-        demoWindow: "Zoom — Team standup",
-        imgAlt: "v2s subtitle overlay on a video call",
+          "v2s-ios listens through the microphone, transcribes and translates on device, and gives both languages equal space — without accounts, cloud transcription, or telemetry.",
+        ctaBuild: "Build for iOS",
+        ctaSource: "Explore the source",
+        artListen: "Listen",
+        artUnderstand: "Understand",
+        demoSource: "I understand.",
+        demoTranslation: "我明白了。",
+        imgAlt: "v2s-ios showing English and Traditional Chinese captions together on an iPhone",
+        figureKicker: "Caption 01",
+        figureCaption: "Original speech and translation share the screen. Neither is treated as a footnote.",
       },
       highlights: {
-        h1Title: "Private by design",
+        h1Title: "Nothing leaves the conversation",
         h1Body:
-          "No account, analytics, or v2s cloud backend. Translation is on-device; speech stays local whenever the selected language supports it.",
-        h2Title: "Menu bar first",
+          "No account, network client, cloud transcription, analytics, or telemetry. Your words remain on the device in your hands.",
+        h2Title: "Equal space for both languages",
         h2Body:
-          "Always one click away. Start, stop, and tune languages without leaving your meeting or player fullscreen.",
-        h3Title: "Pick your audio",
+          "Source and translation each receive half the screen: stacked in portrait, side by side in landscape.",
+        h3Title: "A screen made to share",
         h3Body:
-          "Capture your microphone or audio from a specific running app — not the whole system mix.",
+          "Flip the other person’s half across a table, or let landscape mode open the conversation side by side.",
       },
       features: {
-        eyebrow: "Features",
-        title: "Built for real-time conversations, not post-production.",
+        eyebrow: "01 · The experience",
+        title: "Designed around the person across from you.",
         lead:
-          "Everything you need to follow live speech in another language, without juggling browser tabs or heavyweight caption apps.",
-        f1Title: "Live overlay",
+          "Not a transcript squeezed into a utility window. A calm, shared surface for following each other in the moment.",
+        f1Title: "Live bilingual canvas",
         f1Body:
-          "Translated line on top, original speech below — both visible so you can switch context instantly.",
-        f2Title: "Per-app capture",
+          "Original speech and its translation stay visible together, with a clear half of the screen for each.",
+        f2Title: "Two-way conversation",
         f2Body:
-          "Route Zoom, Teams, browsers, or players as the input source while the rest of your desktop stays quiet.",
-        f3Title: "Apple SpeechAnalyzer",
-        f3Body: "On-device transcription tuned for the languages Apple supports on your Mac.",
-        f4Title: "Apple Translation",
+          "Two people can speak their own languages into one microphone and read the other person’s words in theirs.",
+        f3Title: "Across-the-table view",
+        f3Body:
+          "Flip one half 180 degrees so both people can read naturally with the device placed between them.",
+        f4Title: "A graceful noisy-room override",
         f4Body:
-          "On-device translation with language packs managed through System Settings when needed.",
-        f5Title: "AI summaries",
+          "The app compares both language lanes; if noise confuses it, tap either half to say who has the floor.",
+        f5Title: "Local Taigi captions",
         f5Body:
-          "Apple Intelligence can summarize your transcript when you need a quick recap after a long call.",
-        f6Title: "Readable styling",
+          "A bundled 4-bit Breeze-ASR-26 model offers assistive Taigi-to-Chinese-character captions without a model download.",
+        f6Title: "Transcript at hand",
         f6Body:
-          "Adjust overlay appearance so subtitles stay legible on top of slides, code, or dark video.",
+          "Review the session inside the app, then return to the live view without leaving the private workflow.",
       },
       howItWorks: {
-        eyebrow: "How it works",
-        title: "Three steps from download to subtitles.",
-        step1Title: "Install",
+        eyebrow: "02 · How it works",
+        title: "From silence to shared understanding in three gestures.",
+        step1Title: "Choose both languages",
         step1Body:
-          "Download the latest release, unzip, and move <code>v2s.app</code> to Applications.",
-        step2Title: "Configure",
+          "Set the language being spoken and the subtitle language each person wants to read.",
+        step2Title: "Set the screen between you",
         step2Body:
-          "Choose mic or app audio, set input and subtitle languages, grant permissions once.",
-        step3Title: "Start",
+          "Use portrait, landscape, or flip one half for an across-the-table conversation.",
+        step3Title: "Speak naturally",
         step3Body:
-          "Click Start in the menu bar — subtitles appear at the top of your screen in real time.",
-        caption: "Menu bar controls and language settings",
-        imgAlt: "v2s settings and menu bar interface",
+          "Tap Start. Speech and translation arrive together, entirely inside v2s-ios.",
       },
       inputLangs: {
-        eyebrow: "Input and subtitle languages",
-        title: "Language choices matched to your Mac.",
+        eyebrow: "03 · Language coverage",
+        title: "The list follows what your device can actually do.",
         lead:
-          "v2s asks Apple's Speech and Translation frameworks what your current Mac supports. Available choices vary by macOS version, hardware, and installed or downloadable Apple language models.",
-        inputExamples: "Common speech-input examples:",
-        outputExamples: "Additional subtitle-output examples:",
-        noteBefore: "The app shows the exact choices available on your Mac and validates each translation pair before starting. ",
-        readmeLink: "Read the full README →",
-        readmeHref: "https://github.com/franklioxygen/v2s/blob/main/README.md",
+          "v2s-ios asks Apple Speech and Translation for the languages available on the current device. Choices can vary with iOS, hardware, and installed language assets.",
+        inputExamples: "Speech and conversation examples",
+        outputExamples: "Additional translation examples",
+        noteBefore:
+          "The picker shows the exact choices available now; Apple may download a language asset before first use. ",
+        readmeLink: "Read the full technical notes ↗",
+        readmeHref: "https://github.com/audreyt/v2s/blob/main/README.md",
         chipCantonese: "Cantonese",
         chipZh: "Chinese (Simplified)",
         chipZhHant: "Chinese (Traditional)",
@@ -118,327 +122,342 @@
         chipTr: "Turkish",
         chipUk: "Ukrainian",
         chipVi: "Vietnamese",
+        chipTaigi: "Taigi · Chinese-character captions",
       },
       privacy: {
-        eyebrow: "Privacy",
-        title: "Local-first, with transparent fallbacks.",
-        li1: "No account, cloud backend, analytics, or telemetry",
-        li2: "v2s never sends audio or subtitle text to its own servers",
-        li3: "Translation is on-device; speech uses Apple's service only for languages with no local model",
-        li4: "Permissions requested only for speech, mic, or app audio capture",
+        eyebrow: "04 · Privacy, literally",
+        title: "No account. No network client. No tiny print.",
+        li1: "Microphone audio and captions are never sent to a v2s server — there is no v2s server.",
+        li2: "Speech recognition and translation run on device with Apple’s frameworks and local language assets.",
+        li3: "Apple may download a required language asset once; processing then stays on the device.",
+        li4: "Voice activity detection and the optional bundled Taigi model run through Apple’s Core ML stack.",
       },
       quickStart: {
-        eyebrow: "Quick start",
-        title: "From download to first subtitle in minutes.",
-        s1Title: "Download",
-        s1Body: "Grab the latest <code>.app.zip</code> from GitHub Releases.",
-        s2Title: "Install",
+        eyebrow: "05 · Build the app",
+        title: "From source to your iPhone in one quiet sitting.",
+        lead:
+          "The iOS experience is built from this fork. Bring Xcode 26, an iOS 26 device or simulator, and your own signing team for a physical device.",
+        s1Title: "Prepare",
+        s1Body:
+          "Install Xcode 26, XcodeGen, and the Hugging Face CLI. A physical device also needs a local development team in Signing & Capabilities.",
+        s2Title: "Fetch and generate",
         s2Body:
-          "Unzip and drag <code>v2s.app</code> into Applications, then launch from the menu bar.",
-        s3Title: "Build from source",
-        s3Body: "Requires Xcode and macOS 26+ for speech and translation APIs.",
+          "Clone the fork, fetch the pinned Taigi model, and generate the iOS project.",
+        s3Title: "Run",
+        s3Body:
+          "Choose the v2s-ios scheme and an iPhone, iPad, or simulator, then run from Xcode.",
         copy: "Copy",
         copied: "Copied",
         copyFailed: "Failed",
-        copyCmd: "Copy command",
-        copyCmds: "Copy commands",
-        permsTitle: "First-run permissions",
+        copyCmds: "Copy build commands",
+        permsTitle: "What the first run asks for",
         perm1Title: "Speech Recognition",
-        perm1Body: "transcribe audio to text",
+        perm1Body: "to turn spoken audio into text",
         perm2Title: "Microphone",
-        perm2Body: "when using mic as input",
-        perm3Title: "Audio Capture",
-        perm3Body: "when capturing another app's audio",
+        perm2Body: "to hear the conversation you choose to caption",
+        perm3Title: "Language assets",
+        perm3Body: "downloaded by Apple only when a selected language needs them",
+      },
+      fork: {
+        eyebrow: "Lineage",
+        title: "An iOS-first fork, in the open.",
+        body:
+          "v2s-ios begins with pull request #20 on franklioxygen/v2s and keeps the original macOS target buildable for shared-engine work. The iPhone and iPad experience is this fork’s focus.",
+        upstream: "See the upstream macOS project",
       },
       cta: {
-        title: "Ready to follow every word?",
-        body: "Free, open source, and built for macOS. Download v2s and keep your conversations accessible.",
-        download: "Download latest",
-        star: "Star on GitHub",
+        title: "Let both sides of the conversation stay visible.",
+        body: "Open source, on device, and designed for the phone already between you.",
+        source: "Open on GitHub",
+        readme: "Read the build notes",
+        readmeHref: "https://github.com/audreyt/v2s/blob/main/README.md",
       },
       footer: {
-        license: "MIT License · ",
-        docLink: "中文文档",
-        docHref: "https://github.com/franklioxygen/v2s/blob/main/README.zh-CN.md",
+        notice: "Fork attribution · ",
+        docLink: "繁體中文 README",
+        docHref: "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md",
+        upstream: "Upstream macOS project ↗",
       },
     },
+
     zh: {
       meta: {
-        title: "v2s — macOS 实时双语字幕",
+        title: "v2s-ios — iPhone 與 iPad 私密雙語字幕",
         description:
-          "v2s — 适用于会议、通话、直播和视频的 macOS 实时双语字幕。本地优先语音识别、本地翻译与轻量菜单栏工作流。",
+          "iPhone 與 iPad 上私密、於裝置端處理的雙語字幕。v2s-ios 讓原文與譯文平分畫面，不設帳號、不使用雲端轉寫，也沒有分析或遙測。",
+        ogTitle: "v2s-ios — 兩種語言，同一個當下。",
+        imageAlt: "v2s-ios 在 iPhone 上並列顯示英文原文與繁體中文字幕",
       },
       a11y: {
-        skip: "跳到正文",
-        brand: "v2s 首页",
-        nav: "主导航",
-        menuOpen: "打开菜单",
-        menuClose: "关闭菜单",
-        langSwitch: "语言",
+        skip: "跳至主要內容",
+        brand: "v2s-ios 首頁",
+        nav: "主要導覽",
+        menuOpen: "開啟選單",
+        menuClose: "關閉選單",
+        langSwitch: "語言",
       },
       nav: {
-        features: "功能",
+        features: "體驗",
         howItWorks: "使用方式",
-        languages: "语言",
-        privacy: "隐私",
-        getStarted: "快速开始",
+        languages: "語言",
+        privacy: "隱私",
+        getStarted: "建置",
         github: "GitHub",
-        download: "下载",
+        build: "建置應用程式",
       },
       hero: {
-        badgeOnDevice: "本地优先",
-        badgeMac: "macOS 26+",
-        title: "v2s：重视隐私的实时双语字幕。",
+        badgeOnDevice: "預設於裝置端處理",
+        badgePlatform: "iOS + iPadOS 26+",
+        title: "兩種語言，<br><em>同一個當下。</em>",
         lead:
-          "v2s 将麦克风或应用音频转换为简洁的双行字幕条，适用于会议、通话、直播和视频。一边听原语言，一边读翻译，无需切换窗口。",
-        ctaDownload: "下载 macOS 版",
-        ctaQuickStart: "快速开始",
-        ctaSource: "查看源码",
-        demoTranslation: "欢迎回来，很高兴你能参加今天的通话。",
-        demoSource: "Welcome back — glad you could join today's call.",
-        demoWindow: "Zoom — 团队站会",
-        imgAlt: "v2s 在视频会议上的字幕叠加效果",
+          "v2s-ios 透過麥克風聆聽，在裝置端辨識語音並翻譯，讓原文與譯文各佔一半畫面。沒有帳號、雲端轉寫，也不追蹤你。",
+        ctaBuild: "建置 iOS 版",
+        ctaSource: "查看原始碼",
+        artListen: "聽見",
+        artUnderstand: "理解",
+        demoSource: "I understand.",
+        demoTranslation: "我明白了。",
+        imgAlt: "v2s-ios 在 iPhone 上並列顯示英文原文與繁體中文字幕",
+        figureKicker: "字幕 01",
+        figureCaption: "原文與譯文共享同一面畫面；任何一種語言，都不是註腳。",
       },
       highlights: {
-        h1Title: "隐私优先",
-        h1Body: "无需账号、分析或 v2s 云端后台。翻译在本地完成；所选语言支持时，语音识别也在本地完成。",
-        h2Title: "菜单栏即用",
-        h2Body: "始终一键可达。开始、停止与语言设置，无需离开会议或播放器全屏。",
-        h3Title: "自选音频源",
-        h3Body: "捕获麦克风或指定运行中应用的音频 — 而非整个系统混音。",
+        h1Title: "對話，不離開裝置",
+        h1Body:
+          "不設帳號，沒有網路用戶端、雲端轉寫、分析或遙測。你說的話，只留在手中的裝置。",
+        h2Title: "兩種語言，同樣重要",
+        h2Body:
+          "原文與譯文各佔一半畫面：直向時上下排列，橫向時左右並排。",
+        h3Title: "一面可以共享的畫面",
+        h3Body:
+          "隔桌時可將對方那一半上下翻轉；改用橫向，對話便在左右兩側展開。",
       },
       features: {
-        eyebrow: "功能特性",
-        title: "为实时对话而生，而非后期制作。",
-        lead: "跟随另一种语言的现场语音所需的一切，无需在浏览器标签与笨重字幕应用之间来回切换。",
-        f1Title: "实时悬浮字幕",
-        f1Body: "第一行显示翻译，第二行显示原文 — 便于即时对照。",
-        f2Title: "按应用捕获",
-        f2Body: "将 Zoom、Teams、浏览器或播放器设为输入源，桌面其余部分保持安静。",
-        f3Title: "Apple SpeechAnalyzer",
-        f3Body: "基于 Apple 本地语音识别，适配 Mac 支持的语言。",
-        f4Title: "Apple Translation",
-        f4Body: "本地翻译；部分语言包可在系统设置中按需下载。",
-        f5Title: "AI 摘要",
-        f5Body: "长会后可用 Apple Intelligence 快速回顾字幕记录要点。",
-        f6Title: "可读样式",
-        f6Body: "调节悬浮条外观，在幻灯片、代码或深色视频上保持清晰可读。",
+        eyebrow: "01 · 使用體驗",
+        title: "設計的起點，是坐在你對面的人。",
+        lead:
+          "不是把逐字稿硬塞進工具視窗，而是一個安靜、共享的畫面，讓彼此在當下跟得上。",
+        f1Title: "雙語即時畫面",
+        f1Body:
+          "原文與譯文同時留在眼前，各自擁有清楚、完整的一半畫面。",
+        f2Title: "雙向對話",
+        f2Body:
+          "兩人對著同一支麥克風，各自說自己的語言，也各自讀到聽得懂的譯文。",
+        f3Title: "隔桌閱讀",
+        f3Body:
+          "將其中一半旋轉 180 度，裝置放在兩人之間，雙方都能自然閱讀。",
+        f4Title: "吵雜時，輕觸接手",
+        f4Body:
+          "應用程式會比較兩種語言的辨識結果；環境太吵時，輕觸任一半即可指定發言方。",
+        f5Title: "裝置端台語字幕",
+        f5Body:
+          "內建 4 位元 Breeze-ASR-26 模型，不需另行下載；結果為輔助用華文漢字轉寫。",
+        f6Title: "字幕記錄隨手可查",
+        f6Body:
+          "在應用程式內回顧這次對話，再回到即時畫面；整段流程不離開私密環境。",
       },
       howItWorks: {
-        eyebrow: "使用方式",
-        title: "三步：从下载到字幕。",
-        step1Title: "安装",
-        step1Body: "下载最新发布包，解压后将 <code>v2s.app</code> 移入「应用程序」。",
-        step2Title: "配置",
-        step2Body: "选择麦克风或应用音频，设置输入与字幕语言，首次使用时授予权限。",
-        step3Title: "开始",
-        step3Body: "在菜单栏点击 Start — 字幕实时出现在屏幕顶部。",
-        caption: "菜单栏控制与语言设置",
-        imgAlt: "v2s 设置界面与菜单栏",
+        eyebrow: "02 · 使用方式",
+        title: "從安靜，到聽懂彼此，只要三個動作。",
+        step1Title: "選好兩邊的語言",
+        step1Body:
+          "設定正在說的語言，以及每一方想閱讀的字幕語言。",
+        step2Title: "把畫面放在彼此之間",
+        step2Body:
+          "使用直向、橫向，或翻轉其中一半，配合當下的對話位置。",
+        step3Title: "自然開口",
+        step3Body:
+          "點一下「開始」，原文與譯文便會一起出現在 v2s-ios 裡。",
       },
       inputLangs: {
-        eyebrow: "输入与字幕语言",
-        title: "语言选项与你的 Mac 相匹配。",
-        lead: "v2s 会向 Apple 的 Speech 与 Translation 框架查询当前 Mac 的实际支持情况。可用选项会因 macOS 版本、硬件以及已安装或可下载的 Apple 语言模型而异。",
-        inputExamples: "常见语音输入语言示例：",
-        outputExamples: "其他字幕输出语言示例：",
-        noteBefore: "应用会显示当前 Mac 上实际可用的选项，并在开始前验证所选翻译语言组合。 ",
-        readmeLink: "阅读完整 README →",
-        readmeHref: "https://github.com/franklioxygen/v2s/blob/main/README.zh-CN.md",
-        chipCantonese: "粤语",
-        chipZh: "简体中文",
-        chipZhHant: "繁体中文",
-        chipEn: "英语",
-        chipFr: "法语",
-        chipDe: "德语",
-        chipAr: "阿拉伯语",
-        chipNl: "荷兰语",
-        chipHi: "印地语",
-        chipId: "印度尼西亚语",
-        chipIt: "意大利语",
-        chipJa: "日语",
-        chipKo: "韩语",
-        chipPt: "葡萄牙语",
-        chipRu: "俄语",
-        chipEs: "西班牙语",
-        chipTh: "泰语",
-        chipTr: "土耳其语",
-        chipUk: "乌克兰语",
-        chipVi: "越南语",
+        eyebrow: "03 · 語言支援",
+        title: "可用語言，以這台裝置當下的能力為準。",
+        lead:
+          "v2s-ios 會向 Apple Speech 與 Translation 查詢目前裝置可用的語言。選項可能隨 iOS 版本、硬體與已安裝的語言資源而異。",
+        inputExamples: "語音與雙向對話語言（舉例）",
+        outputExamples: "其他翻譯語言（舉例）",
+        noteBefore:
+          "語言選單會顯示當下確實可用的選項；首次使用前，Apple 可能需要下載語言資源。 ",
+        readmeLink: "閱讀完整技術說明 ↗",
+        readmeHref: "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md",
+        chipCantonese: "粵語",
+        chipZh: "簡體中文",
+        chipZhHant: "繁體中文",
+        chipEn: "英文",
+        chipFr: "法文",
+        chipDe: "德文",
+        chipAr: "阿拉伯文",
+        chipNl: "荷蘭文",
+        chipHi: "印地文",
+        chipId: "印尼文",
+        chipIt: "義大利文",
+        chipJa: "日文",
+        chipKo: "韓文",
+        chipPt: "葡萄牙文",
+        chipRu: "俄文",
+        chipEs: "西班牙文",
+        chipTh: "泰文",
+        chipTr: "土耳其文",
+        chipUk: "烏克蘭文",
+        chipVi: "越南文",
+        chipTaigi: "台語 · 華文漢字轉寫",
       },
       privacy: {
-        eyebrow: "隐私保护",
-        title: "本地优先，回退逻辑透明。",
-        li1: "无需账号、云端后台、分析或遥测",
-        li2: "v2s 不会把音频或字幕文本发送到自己的服务器",
-        li3: "翻译在本地完成；只有在语言没有本地模型时，语音识别才会使用 Apple 服务",
-        li4: "仅在需要时请求语音、麦克风或应用音频捕获权限",
+        eyebrow: "04 · 隱私，照字面理解",
+        title: "沒有帳號。沒有網路用戶端。也沒有小字條款。",
+        li1: "麥克風音訊與字幕不會送到 v2s 伺服器——因為根本沒有這種伺服器。",
+        li2: "語音辨識與翻譯透過 Apple 框架與本機語言資源，在裝置端執行。",
+        li3: "Apple 可能會先下載一次必要的語言資源；之後的處理留在裝置上。",
+        li4: "語音活動偵測與選用的內建台語模型，皆透過 Apple Core ML 執行。",
       },
       quickStart: {
-        eyebrow: "快速开始",
-        title: "几分钟内从下载到首条字幕。",
-        s1Title: "下载",
-        s1Body: "从 GitHub Releases 获取最新 <code>.app.zip</code>。",
-        s2Title: "安装",
-        s2Body: "解压后将 <code>v2s.app</code> 拖入「应用程序」，从菜单栏启动。",
-        s3Title: "从源码构建",
-        s3Body: "需要 Xcode 与 macOS 26+（语音与翻译 API）。",
-        copy: "复制",
-        copied: "已复制",
-        copyFailed: "失败",
-        copyCmd: "复制命令",
-        copyCmds: "复制命令",
-        permsTitle: "首次运行权限",
-        perm1Title: "语音识别",
-        perm1Body: "将音频转写为文本",
-        perm2Title: "麦克风",
-        perm2Body: "使用麦克风作为输入时",
-        perm3Title: "音频捕获",
-        perm3Body: "捕获其他应用音频时",
+        eyebrow: "05 · 建置應用程式",
+        title: "從原始碼到你的 iPhone，一次專心建置就能跑起來。",
+        lead:
+          "這個 iOS 版要從本分支建置。請準備 Xcode 26、iOS 26 裝置或模擬器；若要安裝到實體裝置，還需要自己的簽署團隊。",
+        s1Title: "準備環境",
+        s1Body:
+          "安裝 Xcode 26、XcodeGen 與 Hugging Face CLI。實體裝置還需在 Signing & Capabilities 選擇本機開發團隊。",
+        s2Title: "取得並產生專案",
+        s2Body:
+          "複製此分支、取得固定版本的台語模型，再產生 iOS 專案。",
+        s3Title: "執行",
+        s3Body:
+          "選擇 v2s-ios scheme 與 iPhone、iPad 或模擬器，接著從 Xcode 執行。",
+        copy: "複製",
+        copied: "已複製",
+        copyFailed: "複製失敗",
+        copyCmds: "複製建置指令",
+        permsTitle: "首次執行會詢問",
+        perm1Title: "語音辨識",
+        perm1Body: "將你選擇的語音轉為文字",
+        perm2Title: "麥克風",
+        perm2Body: "聆聽你選擇要加上字幕的對話",
+        perm3Title: "語言資源",
+        perm3Body: "只有所選語言需要時，才由 Apple 下載",
+      },
+      fork: {
+        eyebrow: "專案脈絡",
+        title: "一個把 iOS 放在第一順位的公開分支。",
+        body:
+          "v2s-ios 以 franklioxygen/v2s 的 pull request #20 為起點，並保留原始 macOS 目標，供共用引擎開發與迴歸驗證使用。這個分支的重心，是 iPhone 與 iPad 體驗。",
+        upstream: "查看上游 macOS 專案",
       },
       cta: {
-        title: "准备好听懂每一句话？",
-        body: "免费开源，为 macOS 打造。下载 v2s，让对话更易理解。",
-        download: "下载最新版",
-        star: "在 GitHub 标星",
+        title: "讓對話的兩邊，都留在眼前。",
+        body: "原始碼公開、於裝置端處理，也為你們之間那支手機而設計。",
+        source: "在 GitHub 開啟",
+        readme: "閱讀建置說明",
+        readmeHref: "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md",
       },
       footer: {
-        license: "MIT 许可证 · ",
-        docLink: "English Doc",
-        docHref: "https://github.com/franklioxygen/v2s/blob/main/README.md",
+        notice: "分支歸屬說明 · ",
+        docLink: "English README",
+        docHref: "https://github.com/audreyt/v2s/blob/main/README.md",
+        upstream: "上游 macOS 專案 ↗",
       },
     },
   };
 
   function getNested(obj, path) {
-    return path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), obj);
+    return path.split(".").reduce(
+      (value, key) => value && Object.prototype.hasOwnProperty.call(value, key) ? value[key] : null,
+      obj
+    );
+  }
+
+  function storedLanguage() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored === "en" || stored === "zh" ? stored : null;
+    } catch {
+      return null;
+    }
   }
 
   function detectLang() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "en" || stored === "zh") return stored;
-    const browser = (navigator.language || "").toLowerCase();
-    return browser.startsWith("zh") ? "zh" : "en";
-  }
-
-  function isTraditionalLocaleTag(tag) {
-    const locale = (tag || "").toLowerCase();
-    if (!locale.startsWith("zh")) return false;
-    // Bare "zh", zh-CN/zh-SG and zh-Hans(-*) stay Simplified; every other zh-* counts as Traditional.
-    if (locale === "zh") return false;
-    if (locale === "zh-hans" || locale.startsWith("zh-hans-")) return false;
-    if (locale === "zh-cn" || locale.startsWith("zh-cn-")) return false;
-    if (locale === "zh-sg" || locale.startsWith("zh-sg-")) return false;
-    return true;
-  }
-
-  // Strongest (first) Traditional locale from navigator.languages; null when none.
-  // Never persisted in localStorage.
-  function detectTraditionalVariant() {
-    const candidates = (navigator.languages && navigator.languages.length)
-      ? Array.prototype.slice.call(navigator.languages)
+    const stored = storedLanguage();
+    if (stored) return stored;
+    const candidates = Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
       : [navigator.language];
     for (const tag of candidates) {
-      if (!isTraditionalLocaleTag(tag)) continue;
-      const locale = tag.toLowerCase();
-      return /(^|-)(hk|mo)(-|$)/.test(locale) ? "hk" : "tw";
+      if (!tag) continue;
+      const lower = String(tag).toLowerCase();
+      if (lower.startsWith("zh")) return "zh";
+      if (lower.startsWith("en")) return "en";
     }
-    return null;
+    return "en";
   }
 
   let currentLang = detectLang();
 
-  // OpenCC runtime conversion (Simplified -> Traditional), loaded lazily from CDN.
-  let converter = null;
-  let converterRequested = false;
-  const targetVariant = detectTraditionalVariant();
-
-  function loadConverter() {
-    if (!targetVariant || converterRequested || typeof document === "undefined") return;
-    converterRequested = true;
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js";
-    script.async = true;
-    script.onload = () => {
-      try {
-        converter = window.OpenCC.Converter({
-          from: "cn",
-          to: targetVariant === "hk" ? "hk" : "twp",
-        });
-      } catch (err) {
-        converter = null;
-        return;
-      }
-      // Re-render already-rendered text in Traditional.
-      applyLang(currentLang);
-    };
-    script.onerror = () => {
-      // OpenCC failed to load: page keeps working with Simplified.
-      converter = null;
-    };
-    document.head.appendChild(script);
+  function t(key) {
+    const localized = currentLang === "zh" ? strings.zh : strings.en;
+    return getNested(localized, key) ?? getNested(strings.en, key) ?? "";
   }
 
-  function t(key) {
-    const localizedStrings = currentLang === "zh" ? strings.zh : strings.en;
-    const value = getNested(localizedStrings, key) ?? getNested(strings.en, key) ?? "";
-    // All translated output (title, meta, text, attrs, hrefs) passes through here,
-    // so converting at this single point covers everything uniformly.
-    return converter && currentLang === "zh" ? converter(value) : value;
+  function setMeta(selector, value) {
+    const node = document.querySelector(selector);
+    if (node && value) node.setAttribute("content", value);
   }
 
   function applyLang(lang) {
     currentLang = lang === "zh" ? "zh" : "en";
-    localStorage.setItem(STORAGE_KEY, currentLang);
+    try {
+      localStorage.setItem(STORAGE_KEY, currentLang);
+    } catch {}
 
-    const htmlLang = currentLang === "zh"
-      ? (targetVariant === "hk" ? "zh-HK" : targetVariant === "tw" ? "zh-TW" : "zh-CN")
-      : "en";
-    document.documentElement.lang = htmlLang;
+    document.documentElement.lang = currentLang === "zh" ? "zh-TW" : "en";
     document.documentElement.dataset.lang = currentLang;
-
     document.title = t("meta.title");
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) metaDesc.setAttribute("content", t("meta.description"));
 
-    document.querySelectorAll("[data-i18n]").forEach((el) => {
-      const key = el.getAttribute("data-i18n");
+    setMeta('meta[name="description"]', t("meta.description"));
+    setMeta('meta[property="og:title"]', t("meta.ogTitle"));
+    setMeta('meta[property="og:description"]', t("meta.description"));
+    setMeta('meta[property="og:image:alt"]', t("meta.imageAlt"));
+    setMeta('meta[property="og:locale"]', currentLang === "zh" ? "zh_TW" : "en_US");
+    setMeta('meta[name="twitter:title"]', t("meta.ogTitle"));
+    setMeta('meta[name="twitter:description"]', t("meta.description"));
+
+    document.querySelectorAll("[data-i18n]").forEach((element) => {
+      const key = element.getAttribute("data-i18n");
       const value = t(key);
-      if (value == null || value === "") return;
-      if (el.hasAttribute("data-i18n-html")) {
-        el.innerHTML = value;
+      if (!value) return;
+      if (element.hasAttribute("data-i18n-html")) {
+        element.innerHTML = value;
       } else {
-        el.textContent = value;
+        element.textContent = value;
       }
     });
 
-    document.querySelectorAll("[data-i18n-attr]").forEach((el) => {
-      const spec = el.getAttribute("data-i18n-attr");
+    document.querySelectorAll("[data-i18n-attr]").forEach((element) => {
+      const spec = element.getAttribute("data-i18n-attr");
       if (!spec) return;
       spec.split(";").forEach((pair) => {
-        const [attr, key] = pair.split(":").map((s) => s.trim());
-        if (attr && key) el.setAttribute(attr, t(key));
+        const [attribute, key] = pair.split(":").map((part) => part.trim());
+        if (attribute && key) element.setAttribute(attribute, t(key));
       });
     });
 
-    document.querySelectorAll("[data-i18n-href]").forEach((el) => {
-      const key = el.getAttribute("data-i18n-href");
-      if (key) el.setAttribute("href", t(key));
+    document.querySelectorAll("[data-i18n-href]").forEach((element) => {
+      const key = element.getAttribute("data-i18n-href");
+      if (key) element.setAttribute("href", t(key));
     });
 
-    document.querySelectorAll(".lang-option").forEach((btn) => {
-      const active = btn.getAttribute("data-lang") === currentLang;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", String(active));
+    document.querySelectorAll(".lang-option").forEach((button) => {
+      const active = button.getAttribute("data-lang") === currentLang;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
 
     document.dispatchEvent(new CustomEvent("v2s:langchange", { detail: { lang: currentLang } }));
   }
 
   function initLangToggle() {
-    document.querySelectorAll(".lang-option").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const lang = btn.getAttribute("data-lang");
+    document.querySelectorAll(".lang-option").forEach((button) => {
+      button.addEventListener("click", () => {
+        const lang = button.getAttribute("data-lang");
         if (lang && lang !== currentLang) applyLang(lang);
       });
     });
@@ -453,5 +472,4 @@
   };
 
   applyLang(currentLang);
-  loadConverter();
 })(window);

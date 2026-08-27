@@ -54,11 +54,7 @@
 		A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A1 /* BreezeASR26Tokenizer.json */; };
 		A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */; };
 		A000000000000000000000B0 /* TranslateGemmaTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000AF /* TranslateGemmaTranslationService.swift */; };
-		A000000000000000000000B2 /* TranslateGemma in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000B1 /* TranslateGemma */; };
-		A000000000000000000000B5 /* CoreAILM in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B4 /* CoreAILM */; };
-		A000000000000000000000B8 /* SentencepieceTokenizer in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B7 /* SentencepieceTokenizer */; };
 		A000000000000000000000B9 /* TibetanASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BA /* TibetanASREngine.swift */; };
-		A000000000000000000000BC /* MonlamWhisperTibetan in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BB /* MonlamWhisperTibetan */; };
 		A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C1 /* FoundationModelsTranslationService.swift */; };
 		A000000000000000000000C2 /* MelongOmlxTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C3 /* MelongOmlxTranslationService.swift */; };
 		A000000000000000000000C4 /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C5 /* ConversationEngine.swift */; };
@@ -116,9 +112,7 @@
 		A000000000000000000000A1 /* BreezeASR26Tokenizer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26Tokenizer.json; sourceTree = "<group>"; };
 		A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26TokenizerConfig.json; sourceTree = "<group>"; };
 		A000000000000000000000AF /* TranslateGemmaTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateGemmaTranslationService.swift; sourceTree = "<group>"; };
-		A000000000000000000000B1 /* TranslateGemma */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TranslateGemma; path = ../../../macOS/Resources/TranslateGemma; sourceTree = "<group>"; };
 		A000000000000000000000BA /* TibetanASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TibetanASREngine.swift; sourceTree = "<group>"; };
-		A000000000000000000000BB /* MonlamWhisperTibetan */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonlamWhisperTibetan; path = ../../../macOS/Resources/MonlamWhisperTibetan; sourceTree = "<group>"; };
 		A000000000000000000000C1 /* FoundationModelsTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsTranslationService.swift; sourceTree = "<group>"; };
 		A000000000000000000000C3 /* MelongOmlxTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MelongOmlxTranslationService.swift; sourceTree = "<group>"; };
 		A000000000000000000000C5 /* ConversationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationEngine.swift; sourceTree = "<group>"; };
@@ -135,8 +129,6 @@
 			files = (
 				A00000000000000000000089 /* Sparkle in Frameworks */,
 				A000000000000000000000A0 /* WhisperKit in Frameworks */,
-				A000000000000000000000B5 /* CoreAILM in Frameworks */,
-				A000000000000000000000B8 /* SentencepieceTokenizer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,8 +201,6 @@
 				A0000000000000000000009C /* BreezeASR26 */,
 				A000000000000000000000A1 /* BreezeASR26Tokenizer.json */,
 				A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */,
-				A000000000000000000000B1 /* TranslateGemma */,
-				A000000000000000000000BB /* MonlamWhisperTibetan */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -337,8 +327,6 @@
 			packageProductDependencies = (
 				A00000000000000000000088 /* Sparkle */,
 				A0000000000000000000009F /* WhisperKit */,
-				A000000000000000000000B4 /* CoreAILM */,
-				A000000000000000000000B7 /* SentencepieceTokenizer */,
 			);
 			productName = v2s;
 			productReference = A0000000000000000000000A /* v2s.app */;
@@ -371,8 +359,6 @@
 			packageReferences = (
 				A00000000000000000000087 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
-				A000000000000000000000B3 /* XCRemoteSwiftPackageReference "coreai-models" */,
-				A000000000000000000000B6 /* XCRemoteSwiftPackageReference "swift-sentencepiece" */,
 			);
 			productRefGroup = A00000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -400,22 +386,6 @@
 				version = 1.1.0;
 			};
 		};
-		A000000000000000000000B3 /* XCRemoteSwiftPackageReference "coreai-models" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/coreai-models";
-			requirement = {
-				kind = revision;
-				revision = 86b363dca67cf276c1a5c96eea5e4b57e3a0643c;
-			};
-		};
-		A000000000000000000000B6 /* XCRemoteSwiftPackageReference "swift-sentencepiece" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/jkrukowski/swift-sentencepiece";
-			requirement = {
-				kind = exactVersion;
-				version = 0.0.3;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -428,8 +398,6 @@
 				A0000000000000000000009D /* BreezeASR26 in Resources */,
 				A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */,
 				A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */,
-				A000000000000000000000B2 /* TranslateGemma in Resources */,
-				A000000000000000000000BC /* MonlamWhisperTibetan in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -501,7 +469,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -512,12 +480,13 @@
 		A00000000000000000000017 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD)";
+				ARCHS = "arm64 x86_64";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 			};
@@ -539,7 +508,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.3.37;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
@@ -557,6 +526,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ARCHS = "arm64 x86_64";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
@@ -569,7 +539,8 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				ONLY_ACTIVE_ARCH = NO;
 				MARKETING_VERSION = 0.3.37;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -614,16 +585,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
-		};
-		A000000000000000000000B4 /* CoreAILM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A000000000000000000000B3 /* XCRemoteSwiftPackageReference "coreai-models" */;
-			productName = CoreAILM;
-		};
-		A000000000000000000000B7 /* SentencepieceTokenizer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A000000000000000000000B6 /* XCRemoteSwiftPackageReference "swift-sentencepiece" */;
-			productName = SentencepieceTokenizer;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

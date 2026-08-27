@@ -18,6 +18,11 @@ xcuserdata/
 .build/
 .swiftpm/
 
+# Android / Gradle
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+
 # XcodeGen output
 /ios/Info.plist
 /ios/v2s-ios.xcodeproj/
