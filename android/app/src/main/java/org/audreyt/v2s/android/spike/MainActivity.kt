@@ -12,6 +12,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -22,7 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.Locale
 
-class MainActivity : Activity(), SpeechSpikeEvents {
+class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
     private val background = Color.rgb(8, 11, 16)
     private val panel = Color.rgb(19, 25, 34)
     private val panelBorder = Color.rgb(47, 61, 76)
@@ -32,14 +33,18 @@ class MainActivity : Activity(), SpeechSpikeEvents {
     private val warning = Color.rgb(251, 191, 36)
 
     private lateinit var controller: SpeechSpikeController
+    private lateinit var translationController: SystemTranslationController
     private lateinit var scrollView: ScrollView
     private lateinit var captionMode: RadioButton
     private lateinit var conversationMode: RadioButton
     private lateinit var primaryLanguage: EditText
     private lateinit var secondaryLanguage: EditText
+    private lateinit var secondaryLanguageLabel: TextView
     private lateinit var secondaryLanguageGroup: View
     private lateinit var startButton: Button
     private lateinit var statusView: TextView
+    private lateinit var translationStatusView: TextView
+    private lateinit var translationSettingsButton: Button
     private lateinit var detectedLanguageView: TextView
     private lateinit var partialView: TextView
     private lateinit var primaryHeader: TextView
@@ -49,21 +54,25 @@ class MainActivity : Activity(), SpeechSpikeEvents {
     private lateinit var unknownGroup: View
     private lateinit var unknownTranscript: TextView
     private lateinit var capabilityView: TextView
+    private lateinit var translationCapabilityView: TextView
 
     private var active = false
     private var pendingConfig: SpikeConfig? = null
+    private var translationReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = background
-        window.navigationBarColor = background
         setContentView(buildSurface())
         controller = SpeechSpikeController(this, this)
+        translationController = SystemTranslationController(this, this)
+        translationSettingsButton.visibility =
+            if (translationController.hasSettingsActivity) View.VISIBLE else View.GONE
         updateModeSurface()
     }
 
     override fun onDestroy() {
         controller.close()
+        translationController.close()
         super.onDestroy()
     }
 
@@ -78,8 +87,7 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         val config = pendingConfig
         pendingConfig = null
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && config != null) {
-            clearTranscripts()
-            controller.start(config)
+            beginSession(config)
         } else {
             onStatus("Microphone permission denied.", active = false)
         }
@@ -130,6 +138,7 @@ class MainActivity : Activity(), SpeechSpikeEvents {
                 appendTranscript(unknownTranscript, line)
             }
         }
+        if (translationReady) translationController.translate(result)
         scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -147,6 +156,48 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         }
     }
 
+    override fun onTranslationStatus(message: String) {
+        translationStatusView.text = message
+        translationStatusView.setTextColor(accent)
+    }
+
+    override fun onTranslationCapabilityReport(report: String) {
+        translationCapabilityView.text = report
+    }
+
+    override fun onTranslationPreparationFailed(message: String) {
+        translationReady = false
+        translationStatusView.text =
+            "$message Translation is degraded; speech continues independently when its model is ready."
+        translationStatusView.setTextColor(warning)
+    }
+
+    override fun onTranslationResult(result: TranslatedResult) {
+        translationStatusView.text =
+            "${LanguagePairRouter.displayTag(result.sourceLanguageTag)} → " +
+                "${LanguagePairRouter.displayTag(result.targetLanguageTag)} translated on device"
+        translationStatusView.setTextColor(accent)
+        val line = if (captionMode.isChecked) {
+            result.translatedText
+        } else {
+            "FROM ${LanguagePairRouter.displayTag(result.sourceLanguageTag)}  ${result.translatedText}"
+        }
+        appendTranscript(transcriptFor(result.targetLane), line)
+        scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    override fun onTranslationFailure(
+        sourceText: String,
+        targetLane: ConversationLane,
+        message: String,
+    ) {
+        translationStatusView.text = message
+        translationStatusView.setTextColor(warning)
+        if (targetLane != ConversationLane.UNKNOWN) {
+            appendTranscript(transcriptFor(targetLane), "[translation failed] $sourceText")
+        }
+    }
+
     private fun buildSurface(): View {
         scrollView = ScrollView(this).apply {
             setBackgroundColor(this@MainActivity.background)
@@ -155,6 +206,16 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(32))
+        }
+        scrollView.setOnApplyWindowInsetsListener { _, insets ->
+            val systemBars = insets.getInsets(WindowInsets.Type.systemBars())
+            scrollView.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                systemBars.bottom,
+            )
+            insets
         }
         scrollView.addView(
             content,
@@ -170,7 +231,8 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         })
         content.addView(verticalSpace(8))
         content.addView(text(
-            "Explicit on-device SpeechRecognizer only. No INTERNET permission and no network fallback.",
+            "Android on-device SpeechRecognizer + TranslationManager. " +
+                "No INTERNET permission and no app network fallback.",
             14f,
             secondaryText,
         ))
@@ -198,7 +260,8 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         secondaryLanguageGroup = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(verticalSpace(10))
-            addView(text("Secondary", 13f, secondaryText))
+            secondaryLanguageLabel = text("Translation target", 13f, secondaryText)
+            addView(secondaryLanguageLabel)
             secondaryLanguage = languageField("zh-TW")
             addView(secondaryLanguage)
         }
@@ -226,6 +289,24 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         statusView = boxedText("Ready to probe this device", accent, 15f)
         content.addView(statusView)
         content.addView(verticalSpace(10))
+        translationStatusView = boxedText("SYSTEM TRANSLATION  waiting", secondaryText, 13f)
+        content.addView(translationStatusView)
+        content.addView(verticalSpace(10))
+
+        translationSettingsButton = Button(this).apply {
+            text = "OPEN SYSTEM TRANSLATION SETTINGS"
+            textSize = 12f
+            isAllCaps = false
+            backgroundTintList = ColorStateList.valueOf(panelBorder)
+            setTextColor(primaryText)
+            setOnClickListener {
+                if (!translationController.openSettings()) {
+                    toast("System translation settings are unavailable.")
+                }
+            }
+            visibility = View.GONE
+        }
+        content.addView(translationSettingsButton)
 
         detectedLanguageView = boxedText("DETECTED  waiting", secondaryText, 13f).apply {
             visibility = View.GONE
@@ -238,15 +319,15 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         content.addView(partialView)
         content.addView(verticalSpace(14))
 
-        primaryHeader = sectionLabel("CAPTIONS · en-US")
+        primaryHeader = sectionLabel("SOURCE · en-US")
         content.addView(primaryHeader)
-        primaryTranscript = transcriptView("Speak after the recognizer reports Listening on device.")
+        primaryTranscript = transcriptView("Final source captions appear here.")
         content.addView(primaryTranscript)
         content.addView(verticalSpace(14))
 
-        secondaryHeader = sectionLabel("SECONDARY · zh-TW")
+        secondaryHeader = sectionLabel("TRANSLATION · zh-TW")
         content.addView(secondaryHeader)
-        secondaryTranscript = transcriptView("Detected secondary-language utterances appear here.")
+        secondaryTranscript = transcriptView("Final on-device translations appear here.")
         content.addView(secondaryTranscript)
         content.addView(verticalSpace(14))
 
@@ -260,9 +341,9 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         content.addView(unknownGroup)
         content.addView(verticalSpace(18))
 
-        content.addView(sectionLabel("DEVICE CAPABILITY RECEIPT"))
+        content.addView(sectionLabel("SPEECH CAPABILITY RECEIPT"))
         capabilityView = boxedText(
-            "Start a session to list installed, downloadable, pending, and ignored-online language models.",
+            "Start a session to list installed, downloadable, pending, and ignored-online speech models.",
             secondaryText,
             12f,
         ).apply {
@@ -270,6 +351,17 @@ class MainActivity : Activity(), SpeechSpikeEvents {
             setTextIsSelectable(true)
         }
         content.addView(capabilityView)
+        content.addView(verticalSpace(14))
+        content.addView(sectionLabel("TRANSLATION CAPABILITY RECEIPT"))
+        translationCapabilityView = boxedText(
+            "Start a session to query the OEM-provided on-device translation service.",
+            secondaryText,
+            12f,
+        ).apply {
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        }
+        content.addView(translationCapabilityView)
 
         return scrollView
     }
@@ -277,20 +369,27 @@ class MainActivity : Activity(), SpeechSpikeEvents {
     private fun updateModeSurface() {
         if (!::secondaryLanguageGroup.isInitialized) return
         val conversation = conversationMode.isChecked
-        secondaryLanguageGroup.visibility = if (conversation) View.VISIBLE else View.GONE
-        secondaryHeader.visibility = if (conversation) View.VISIBLE else View.GONE
-        secondaryTranscript.visibility = if (conversation) View.VISIBLE else View.GONE
+        secondaryLanguageGroup.visibility = View.VISIBLE
+        secondaryHeader.visibility = View.VISIBLE
+        secondaryTranscript.visibility = View.VISIBLE
         detectedLanguageView.visibility = if (conversation) View.VISIBLE else View.GONE
+        secondaryLanguageLabel.text = if (conversation) "Secondary speaker" else "Translation target"
         primaryHeader.text = if (conversation) {
             "PRIMARY · ${primaryLanguage.text}"
         } else {
-            "CAPTIONS · ${primaryLanguage.text}"
+            "SOURCE · ${primaryLanguage.text}"
         }
-        secondaryHeader.text = "SECONDARY · ${secondaryLanguage.text}"
+        secondaryHeader.text = if (conversation) {
+            "SECONDARY · ${secondaryLanguage.text}"
+        } else {
+            "TRANSLATION · ${secondaryLanguage.text}"
+        }
     }
 
     private fun toggleSession() {
         if (active) {
+            translationReady = false
+            translationController.stop()
             controller.stop()
             return
         }
@@ -298,12 +397,21 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         val config = validatedConfig() ?: return
         updateHeaders(config)
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            clearTranscripts()
-            controller.start(config)
+            beginSession(config)
         } else {
             pendingConfig = config
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MICROPHONE_PERMISSION_REQUEST)
         }
+    }
+
+    private fun beginSession(config: SpikeConfig) {
+        clearTranscripts()
+        translationReady = false
+        onStatus("Preparing on-device speech…", active = true)
+        translationController.prepare(config) {
+            translationReady = true
+        }
+        controller.start(config)
     }
 
     private fun validatedConfig(): SpikeConfig? {
@@ -313,21 +421,18 @@ class MainActivity : Activity(), SpeechSpikeEvents {
             return null
         }
 
-        if (!conversationMode.isChecked) {
-            return SpikeConfig(SpikeMode.CAPTION, primary)
-        }
-
         val secondary = secondaryLanguage.text.toString().trim()
         if (!isLanguageTag(secondary)) {
-            toast("Enter a valid secondary BCP-47 language tag.")
+            toast("Enter a valid translation/secondary BCP-47 language tag.")
             return null
         }
         if (LanguagePairRouter.baseLanguage(primary) == LanguagePairRouter.baseLanguage(secondary)) {
-            toast("Conversation mode requires two distinct spoken languages.")
+            toast("Source and target must be distinct spoken languages.")
             return null
         }
 
-        return SpikeConfig(SpikeMode.CONVERSATION, primary, secondary)
+        val mode = if (conversationMode.isChecked) SpikeMode.CONVERSATION else SpikeMode.CAPTION
+        return SpikeConfig(mode, primary, secondary)
     }
 
     private fun isLanguageTag(value: String): Boolean {
@@ -338,11 +443,15 @@ class MainActivity : Activity(), SpeechSpikeEvents {
 
     private fun updateHeaders(config: SpikeConfig) {
         primaryHeader.text = if (config.mode == SpikeMode.CAPTION) {
-            "CAPTIONS · ${LanguagePairRouter.displayTag(config.primaryLanguageTag)}"
+            "SOURCE · ${LanguagePairRouter.displayTag(config.primaryLanguageTag)}"
         } else {
             "PRIMARY · ${LanguagePairRouter.displayTag(config.primaryLanguageTag)}"
         }
-        secondaryHeader.text = "SECONDARY · ${LanguagePairRouter.displayTag(config.secondaryLanguageTag)}"
+        secondaryHeader.text = if (config.mode == SpikeMode.CAPTION) {
+            "TRANSLATION · ${LanguagePairRouter.displayTag(config.secondaryLanguageTag)}"
+        } else {
+            "SECONDARY · ${LanguagePairRouter.displayTag(config.secondaryLanguageTag)}"
+        }
     }
 
     private fun clearTranscripts() {
@@ -352,7 +461,9 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         unknownGroup.visibility = View.GONE
         partialView.visibility = View.GONE
         detectedLanguageView.text = "DETECTED  waiting"
+        translationStatusView.text = "Checking system translation…"
         capabilityView.text = "Checking…"
+        translationCapabilityView.text = "Checking…"
     }
 
     private fun setInputsEnabled(enabled: Boolean) {
@@ -360,6 +471,7 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         conversationMode.isEnabled = enabled
         primaryLanguage.isEnabled = enabled
         secondaryLanguage.isEnabled = enabled
+        translationSettingsButton.isEnabled = enabled
     }
 
     private fun appendTranscript(view: TextView, line: String) {
@@ -368,6 +480,12 @@ class MainActivity : Activity(), SpeechSpikeEvents {
         if (view.length() > MAX_TRANSCRIPT_CHARACTERS) {
             view.text = view.text.takeLast(MAX_TRANSCRIPT_CHARACTERS - 2_000)
         }
+    }
+
+    private fun transcriptFor(lane: ConversationLane): TextView = when (lane) {
+        ConversationLane.PRIMARY -> primaryTranscript
+        ConversationLane.SECONDARY -> secondaryTranscript
+        ConversationLane.UNKNOWN -> unknownTranscript
     }
 
     private fun card(): LinearLayout = LinearLayout(this).apply {
@@ -408,11 +526,18 @@ class MainActivity : Activity(), SpeechSpikeEvents {
     }
 
     private fun radio(label: String, checked: Boolean): RadioButton = RadioButton(this).apply {
+        id = View.generateViewId()
         text = label
         textSize = 15f
         setTextColor(primaryText)
         isChecked = checked
-        buttonTintList = ColorStateList.valueOf(accent)
+        buttonTintList = ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf(),
+            ),
+            intArrayOf(accent, secondaryText),
+        )
         setPadding(0, dp(4), 0, dp(4))
     }
 
