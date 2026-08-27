@@ -1,2 +1,4 @@
 CFBundleDisplayName = "好说";
 CFBundleName = "好说";
+NSMicrophoneUsageDescription = "好说使用麦克风，在设备端生成实时字幕。";
+NSSpeechRecognitionUsageDescription = "好说使用设备端语音识别，将语音转成字幕。";

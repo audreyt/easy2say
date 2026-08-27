@@ -186,6 +186,9 @@ enum AppTextKey: String, CaseIterable {
     case iosSettings
     case conversationMode
     case conversationCaptionsMode
+    case switchToCaptionsMode
+    case switchToConversationMode
+    case swapInputAndSubtitleLanguages
     case conversationStart
     case conversationStop
     case conversationPreparing
@@ -520,6 +523,9 @@ enum AppLocalization {
             "iosSettings": "Settings",
             "conversationMode": "Conversation",
             "conversationCaptionsMode": "Captions",
+            "switchToCaptionsMode": "Switch to captions mode",
+            "switchToConversationMode": "Switch to conversation mode",
+            "swapInputAndSubtitleLanguages": "Swap input and subtitle languages",
             "conversationStart": "Start conversation",
             "conversationStop": "End conversation",
             "conversationPreparing": "Preparing both languages…",
@@ -738,6 +744,9 @@ enum AppLocalization {
             "conversationListening": "正在聆听两种语言",
             "conversationClaimFloorFormat": "用%@说话",
             "conversationEmptyHint": "直接说话即可。双方都能用自己的语言阅读整段对话。",
+            "switchToCaptionsMode": "切换到字幕模式",
+            "switchToConversationMode": "切换到对话模式",
+            "swapInputAndSubtitleLanguages": "交换输入与字幕语言",
             "conversationFaceToFace": "面对面",
             "conversationFaceToFaceHint": "将对方那一半屏幕上下翻转，方便隔桌阅读。",
             "conversationYourLanguage": "你的语言",
@@ -950,6 +959,9 @@ enum AppLocalization {
             "conversationListening": "正在聆聽兩種語言",
             "conversationClaimFloorFormat": "用%@說話",
             "conversationEmptyHint": "直接開口就好。雙方都會以自己的語言看到完整對話。",
+            "switchToCaptionsMode": "切換到字幕模式",
+            "switchToConversationMode": "切換到對話模式",
+            "swapInputAndSubtitleLanguages": "交換輸入與字幕語言",
             "conversationFaceToFace": "面對面",
             "conversationFaceToFaceHint": "將對方那一半螢幕上下翻轉，方便隔桌閱讀。",
             "conversationYourLanguage": "你的語言",

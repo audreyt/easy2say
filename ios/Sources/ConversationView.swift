@@ -136,10 +136,12 @@ struct ConversationModeSwitch: View {
     let conversationTitle: String
     let accent: Color
     let isConversationActive: Bool
+    let destinationAccessibilityLabel: String
     let select: (Bool) -> Void
 
-    private var destinationTitle: String {
-        isConversationActive ? captionsTitle : conversationTitle
+
+    private var currentTitle: String {
+        isConversationActive ? conversationTitle : captionsTitle
     }
 
     private var destinationSymbol: String {
@@ -167,8 +169,8 @@ struct ConversationModeSwitch: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(destinationTitle)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(destinationAccessibilityLabel)
+        .accessibilityValue(currentTitle)
     }
 }
 
@@ -396,6 +398,7 @@ private struct ConversationControlStrip: View {
             conversationTitle: model.localized(.conversationMode),
             accent: accent,
             isConversationActive: true,
+            destinationAccessibilityLabel: model.localized(.switchToCaptionsMode),
             select: { isConversationActive in
                 if isConversationActive == false {
                     showCaptions()

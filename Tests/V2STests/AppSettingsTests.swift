@@ -161,4 +161,17 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(AppSettings.prefersSimplifiedChinese("zh-CN"))
     }
 
+    @MainActor
+    func testMissingSettingsFileKeepsMacDefaults() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("settings.json")
+        let settings = SettingsStore(fileURL: missing).load()
+
+        XCTAssertEqual(settings.inputLanguageID, "en")
+        XCTAssertEqual(settings.outputLanguageID, "zh-Hant")
+        XCTAssertEqual(settings.conversationPrimaryLanguageID, "zh-Hant")
+        XCTAssertEqual(settings.conversationSecondaryLanguageID, "en")
+    }
+
 }

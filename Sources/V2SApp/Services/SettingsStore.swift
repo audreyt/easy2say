@@ -26,7 +26,11 @@ final class SettingsStore {
                 fputs("Failed to load settings: \(error)\n", stderr)
                 return .default
             }
+#if os(iOS)
             return .seeded()
+#else
+            return .default
+#endif
         }
     }
 

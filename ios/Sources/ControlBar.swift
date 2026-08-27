@@ -31,6 +31,9 @@ struct ControlBar: View {
             conversationTitle: model.localized(.conversationMode),
             accent: accent,
             isConversationActive: model.isConversationModeActive,
+            destinationAccessibilityLabel: model.localized(
+                model.isConversationModeActive ? .switchToCaptionsMode : .switchToConversationMode
+            ),
             select: selectConversationMode
         )
     }
@@ -150,8 +153,10 @@ struct ControlBar: View {
         .allowsHitTesting(canSwapLanguages)
         .opacity(canSwapLanguages ? 1.0 : 0.42)
         .accessibilityElement()
-        .accessibilityLabel(
-            "\(model.localized(.inputLanguage)) ↔ \(model.localized(.subtitleLanguage))"
+        .accessibilityLabel(model.localized(.swapInputAndSubtitleLanguages))
+        .accessibilityValue(
+            "\(LanguageCatalog.autonym(for: model.iOSEffectiveInputLanguageID)) → "
+                + LanguageCatalog.autonym(for: model.iOSEffectiveOutputLanguageID)
         )
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
