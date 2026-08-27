@@ -2,3 +2,4 @@ CFBundleDisplayName = "好说";
 CFBundleName = "好说";
 NSMicrophoneUsageDescription = "好说使用麦克风，在设备端生成实时字幕。";
 NSSpeechRecognitionUsageDescription = "好说使用设备端语音识别，将语音转成字幕。";
+NSCameraUsageDescription = "好说不会拍摄视频。因设备端音频框架链接 Apple 支持相机的采集 API，系统要求提供此说明。";

@@ -2,3 +2,4 @@ CFBundleDisplayName = "Easy2say";
 CFBundleName = "Easy2say";
 NSMicrophoneUsageDescription = "Easy2say uses the microphone to generate live subtitles entirely on device.";
 NSSpeechRecognitionUsageDescription = "Easy2say uses on-device speech recognition to transcribe audio into subtitles.";
+NSCameraUsageDescription = "Easy2say does not capture video. This declaration is required because its on-device audio framework links Apple's camera-capable capture API.";

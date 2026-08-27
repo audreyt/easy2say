@@ -31,7 +31,7 @@ private enum AppBuildInfo {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
     static var buildNumber: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "49"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "50"
     }
 #else
     static let marketingVersion = "0.3.37"

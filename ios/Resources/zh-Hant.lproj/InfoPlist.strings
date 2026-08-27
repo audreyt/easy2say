@@ -2,3 +2,4 @@ CFBundleDisplayName = "好說";
 CFBundleName = "好說";
 NSMicrophoneUsageDescription = "好說使用麥克風，在裝置端產生即時字幕。";
 NSSpeechRecognitionUsageDescription = "好說使用裝置端語音辨識，將語音轉成字幕。";
+NSCameraUsageDescription = "好說不會拍攝影像。因裝置端音訊框架連結 Apple 支援相機的擷取 API，系統要求提供此說明。";
