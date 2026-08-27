@@ -314,24 +314,78 @@
     return path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), obj);
   }
 
-  function detectLang() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "en" || stored === "zh") return stored;
-    const browser = (navigator.language || "").toLowerCase();
-    return browser.startsWith("zh") ? "zh" : "en";
+  function isTraditionalLocaleTag(tag) {
+    const locale = (tag || "").toLowerCase();
+    if (!locale.startsWith("zh")) return false;
+    // Bare "zh", zh-CN/zh-SG and zh-Hans(-*) stay Simplified; every other zh-* counts as Traditional.
+    if (locale === "zh") return false;
+    if (locale === "zh-hans" || locale.startsWith("zh-hans-")) return false;
+    if (locale === "zh-cn" || locale.startsWith("zh-cn-")) return false;
+    if (locale === "zh-sg" || locale.startsWith("zh-sg-")) return false;
+    return true;
+  }
+
+  // Strongest (first) Traditional locale from navigator.languages; null when none.
+  // Never persisted in localStorage.
+  function detectTraditionalVariant() {
+    const candidates = (navigator.languages && navigator.languages.length)
+      ? Array.prototype.slice.call(navigator.languages)
+      : [navigator.language];
+    for (const tag of candidates) {
+      if (!isTraditionalLocaleTag(tag)) continue;
+      const locale = tag.toLowerCase();
+      return /(^|-)(hk|mo)(-|$)/.test(locale) ? "hk" : "tw";
+    }
+    return null;
   }
 
   let currentLang = detectLang();
 
+  // OpenCC runtime conversion (Simplified -> Traditional), loaded lazily from CDN.
+  let converter = null;
+  let converterRequested = false;
+  const targetVariant = detectTraditionalVariant();
+
+  function loadConverter() {
+    if (!targetVariant || converterRequested || typeof document === "undefined") return;
+    converterRequested = true;
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js";
+    script.async = true;
+    script.onload = () => {
+      try {
+        converter = window.OpenCC.Converter({
+          from: "cn",
+          to: targetVariant === "hk" ? "hk" : "twp",
+        });
+      } catch (err) {
+        converter = null;
+        return;
+      }
+      // Re-render already-rendered text in Traditional.
+      applyLang(currentLang);
+    };
+    script.onerror = () => {
+      // OpenCC failed to load: page keeps working with Simplified.
+      converter = null;
+    };
+    document.head.appendChild(script);
+  }
+
   function t(key) {
-    return getNested(strings[currentLang], key) ?? getNested(strings.en, key) ?? "";
+    const value = getNested(strings[currentLang], key) ?? getNested(strings.en, key) ?? "";
+    // All translated output (title, meta, text, attrs, hrefs) passes through here,
+    // so converting at this single point covers everything uniformly.
+    return converter && currentLang === "zh" ? converter(value) : value;
   }
 
   function applyLang(lang) {
     currentLang = lang === "zh" ? "zh" : "en";
     localStorage.setItem(STORAGE_KEY, currentLang);
 
-    const htmlLang = currentLang === "zh" ? "zh-CN" : "en";
+    const htmlLang = currentLang === "zh"
+      ? (targetVariant === "hk" ? "zh-HK" : "zh-TW")
+      : "en";
     document.documentElement.lang = htmlLang;
     document.documentElement.dataset.lang = currentLang;
 
@@ -391,4 +445,5 @@
   };
 
   applyLang(currentLang);
+  loadConverter();
 })(window);
