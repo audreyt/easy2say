@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/audreyt/v2s/releases/latest/download/v2s-universal.pkg"><strong>Download the Universal 2 package for macOS</strong></a><br>
+  <a href="https://github.com/audreyt/v2s/releases/latest/download/v2s-universal.pkg"><strong>Download macOS</strong></a><br>
   <sub>macOS 26 or later · Apple silicon and Intel</sub>
 </p>
 

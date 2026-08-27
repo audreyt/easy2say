@@ -33,7 +33,7 @@
         title: "Two languages.<br><em>One shared moment.</em>",
         lead:
           "v2s-ios listens through the microphone, transcribes and translates on device, and gives both languages equal space — without accounts, cloud transcription, or telemetry.",
-        ctaDownload: "Download Universal .pkg",
+        ctaDownload: "Download macOS",
         ctaSource: "Explore the source",
         artListen: "Listen",
         artUnderstand: "Understand",
@@ -168,7 +168,7 @@
       cta: {
         title: "Let both sides of the conversation stay visible.",
         body: "Open source, on device, and ready to install on Mac.",
-        download: "Download Universal .pkg",
+        download: "Download macOS",
         readme: "Read the build notes",
         readmeHref: "https://github.com/audreyt/v2s/blob/main/README.md",
       },
@@ -211,7 +211,7 @@
         title: "兩種語言，<br><em>同一個當下。</em>",
         lead:
           "v2s-ios 透過麥克風聆聽，在裝置端辨識語音並翻譯，讓原文與譯文各佔一半畫面。沒有帳號、雲端轉寫，也不追蹤你。",
-        ctaDownload: "下載 Universal .pkg",
+        ctaDownload: "下載 macOS 版",
         ctaSource: "查看原始碼",
         artListen: "聽見",
         artUnderstand: "理解",
@@ -346,7 +346,7 @@
       cta: {
         title: "讓對話的兩邊，都留在眼前。",
         body: "原始碼公開、於裝置端處理，現在也可直接安裝於 Mac。",
-        download: "下載 Universal .pkg",
+        download: "下載 macOS 版",
         readme: "閱讀建置說明",
         readmeHref: "https://github.com/audreyt/v2s/blob/main/README.zh-Hant.md",
       },
