@@ -314,6 +314,13 @@
     return path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), obj);
   }
 
+  function detectLang() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "en" || stored === "zh") return stored;
+    const browser = (navigator.language || "").toLowerCase();
+    return browser.startsWith("zh") ? "zh" : "en";
+  }
+
   function isTraditionalLocaleTag(tag) {
     const locale = (tag || "").toLowerCase();
     if (!locale.startsWith("zh")) return false;
@@ -384,7 +391,7 @@
     localStorage.setItem(STORAGE_KEY, currentLang);
 
     const htmlLang = currentLang === "zh"
-      ? (targetVariant === "hk" ? "zh-HK" : "zh-TW")
+      ? (targetVariant === "hk" ? "zh-HK" : targetVariant === "tw" ? "zh-TW" : "zh-CN")
       : "en";
     document.documentElement.lang = htmlLang;
     document.documentElement.dataset.lang = currentLang;
