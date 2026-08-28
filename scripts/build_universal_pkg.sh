@@ -11,6 +11,10 @@ PACKAGE_SCRIPTS_DIR="$ROOT_DIR/packaging/macos/scripts"
 STABLE_OUTPUT_PATH="${STABLE_OUTPUT_PATH:-$BUILD_ROOT/Easy2say-universal.pkg}"
 OUTPUT_PATH="${OUTPUT_PATH:-}"
 INSTALLER_IDENTITY="${INSTALLER_IDENTITY:-}"
+APPLICATION_IDENTITY="${APPLICATION_IDENTITY:-}"
+APPLICATION_ENTITLEMENTS="${APPLICATION_ENTITLEMENTS:-$ROOT_DIR/Config/DeveloperID.entitlements}"
+REUSE_SIGNED_APP="${REUSE_SIGNED_APP:-0}"
+SIGNING_KEYCHAIN="${SIGNING_KEYCHAIN:-}"
 
 fail() {
   printf 'error: %s\n' "$1" >&2
@@ -73,31 +77,52 @@ require_cmd pkgbuild
 require_cmd pkgutil
 require_cmd plutil
 require_cmd shasum
-require_cmd xcodebuild
+if [[ "$REUSE_SIGNED_APP" == "0" ]]; then
+  require_cmd xcodebuild
+fi
 
 [[ -d "$PROJECT_PATH" ]] || fail "Xcode project not found: $PROJECT_PATH"
 [[ -x "$PACKAGE_SCRIPTS_DIR/preinstall" ]] || fail "Executable preinstall migration script not found: $PACKAGE_SCRIPTS_DIR/preinstall"
+case "$REUSE_SIGNED_APP" in
+  0|1) ;;
+  *) fail "REUSE_SIGNED_APP must be 0 or 1" ;;
+esac
+codesign_keychain_args=()
+if [[ -n "$SIGNING_KEYCHAIN" ]]; then
+  [[ -f "$SIGNING_KEYCHAIN" ]] || fail "Signing keychain not found: $SIGNING_KEYCHAIN"
+  codesign_keychain_args+=(--keychain "$SIGNING_KEYCHAIN")
+fi
 
 mkdir -p "$BUILD_ROOT"
-rm -rf "$DERIVED_DATA/Build"
+if [[ "$REUSE_SIGNED_APP" == "0" ]]; then
+  rm -rf "$DERIVED_DATA/Build"
 
-xcodebuild \
-  -project "$PROJECT_PATH" \
-  -scheme v2s \
-  -configuration Release \
-  -destination 'generic/platform=macOS' \
-  -derivedDataPath "$DERIVED_DATA" \
-  ARCHS='arm64 x86_64' \
-  ONLY_ACTIVE_ARCH=NO \
-  MACOSX_DEPLOYMENT_TARGET=26.0 \
-  CODE_SIGNING_ALLOWED=NO \
-  clean build
+  xcodebuild \
+    -project "$PROJECT_PATH" \
+    -scheme v2s \
+    -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -derivedDataPath "$DERIVED_DATA" \
+    ARCHS='arm64 x86_64' \
+    ONLY_ACTIVE_ARCH=NO \
+    MACOSX_DEPLOYMENT_TARGET=26.0 \
+    CODE_SIGNING_ALLOWED=NO \
+    clean build
+fi
 
 [[ -d "$APP_PATH" ]] || fail "Built app not found: $APP_PATH"
 assert_no_optional_models "$APP_PATH"
 assert_universal_machos "$APP_PATH"
 
-codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+if [[ "$REUSE_SIGNED_APP" == "0" ]]; then
+  if [[ -n "$APPLICATION_IDENTITY" ]]; then
+    [[ -f "$APPLICATION_ENTITLEMENTS" ]] || fail "Application entitlements not found: $APPLICATION_ENTITLEMENTS"
+    codesign --force --deep --options runtime --timestamp "${codesign_keychain_args[@]}" --sign "$APPLICATION_IDENTITY" "$APP_PATH"
+    codesign --force --options runtime --timestamp --entitlements "$APPLICATION_ENTITLEMENTS" "${codesign_keychain_args[@]}" --sign "$APPLICATION_IDENTITY" "$APP_PATH"
+  else
+    codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+  fi
+fi
 codesign --verify --deep --strict "$APP_PATH"
 
 version="$(plutil -extract CFBundleShortVersionString raw "$APP_PATH/Contents/Info.plist")"
@@ -122,6 +147,9 @@ pkg_args=(
   --version "$version"
   --scripts "$PACKAGE_SCRIPTS_DIR"
 )
+if [[ -n "$SIGNING_KEYCHAIN" ]]; then
+  pkg_args+=(--keychain "$SIGNING_KEYCHAIN")
+fi
 if [[ -n "$INSTALLER_IDENTITY" ]]; then
   pkg_args+=(--sign "$INSTALLER_IDENTITY")
 fi

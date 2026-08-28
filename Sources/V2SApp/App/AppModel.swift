@@ -34,8 +34,8 @@ private enum AppBuildInfo {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "51"
     }
 #else
-    static let marketingVersion = "0.3.38"
-    static let buildNumber = "42"
+    static let marketingVersion = "0.3.39"
+    static let buildNumber = "43"
     static let repositoryURLString = "https://github.com/audreyt/easy2say"
     static let repositoryURL = URL(string: repositoryURLString)
 #endif
