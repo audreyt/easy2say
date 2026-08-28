@@ -3690,31 +3690,31 @@ final class AppModel: ObservableObject {
     private func sampleText(for languageID: String) -> String {
         switch languageID {
         case "zh-Hans":
-            return "欢迎使用 Easy2say，顶部字幕条已经准备好了。"
+            return "欢迎使用 Easy2Say，顶部字幕条已经准备好了。"
         case "zh-Hant":
-            return "歡迎使用 Easy2say，頂部字幕列已經準備好了。"
+            return "歡迎使用 Easy2Say，頂部字幕列已經準備好了。"
         case "es":
-            return "Bienvenido a Easy2say. La barra de subtitulos ya esta lista."
+            return "Bienvenido a Easy2Say. La barra de subtitulos ya esta lista."
         case "de":
-            return "Willkommen bei Easy2say. Die Untertitel-Leiste ist bereit."
+            return "Willkommen bei Easy2Say. Die Untertitel-Leiste ist bereit."
         case "ja":
-            return "Easy2say へようこそ。字幕バーの準備ができました。"
+            return "Easy2Say へようこそ。字幕バーの準備ができました。"
         case "fr":
-            return "Bienvenue dans Easy2say. La barre de sous-titres est prete."
+            return "Bienvenue dans Easy2Say. La barre de sous-titres est prete."
         case "it":
-            return "Benvenuto in Easy2say. La barra dei sottotitoli e pronta."
+            return "Benvenuto in Easy2Say. La barra dei sottotitoli e pronta."
         case "ko":
-            return "Easy2say에 오신 것을 환영합니다. 자막 바가 준비되었습니다."
+            return "Easy2Say에 오신 것을 환영합니다. 자막 바가 준비되었습니다."
         case "yue":
-            return "歡迎使用 Easy2say，字幕列已經準備好。"
+            return "歡迎使用 Easy2Say，字幕列已經準備好。"
         case "ar":
-            return "مرحبا بك في Easy2say. شريط الترجمة جاهز."
+            return "مرحبا بك في Easy2Say. شريط الترجمة جاهز."
         case "pt":
-            return "Bem-vindo ao Easy2say. A barra de legendas esta pronta."
+            return "Bem-vindo ao Easy2Say. A barra de legendas esta pronta."
         case "ru":
-            return "Добро пожаловать в Easy2say. Строка субтитров готова."
+            return "Добро пожаловать в Easy2Say. Строка субтитров готова."
         default:
-            return "Welcome to Easy2say. The subtitle bar is ready."
+            return "Welcome to Easy2Say. The subtitle bar is ready."
         }
     }
 

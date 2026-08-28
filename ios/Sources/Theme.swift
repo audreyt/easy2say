@@ -72,7 +72,7 @@ enum CaptionAccentPreset: String, CaseIterable, Identifiable {
         case .violet:
             return (0.72, 0.64, 1.00)
         case .coral:
-            // The Easy2say peach, so the brand colour is also a caption colour.
+            // The Easy2Say peach, so the brand colour is also a caption colour.
             return (0.957, 0.643, 0.600)
         }
     }

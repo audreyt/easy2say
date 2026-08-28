@@ -4,22 +4,22 @@
   const strings = {
     en: {
       meta: {
-        title: "Easy2say — Private bilingual captions for iPhone and iPad",
+        title: "Easy2Say — Private bilingual captions for iPhone and iPad",
         description:
-          "Private, on-device bilingual captions and assisted conversation for iPhone and iPad. Easy2say gives two people and two languages equal space, with no account, cloud transcription, analytics, or telemetry.",
-        ogTitle: "Easy2say — Two people. Two languages.",
-        imageAlt: "Easy2say showing English and Traditional Chinese captions together on an iPhone",
+          "Private, on-device bilingual captions and assisted conversation for iPhone and iPad. Easy2Say gives two people and two languages equal space, with no account, cloud transcription, analytics, or telemetry.",
+        ogTitle: "Easy2Say — Two people. Two languages.",
+        imageAlt: "Easy2Say showing English and Traditional Chinese captions together on an iPhone",
       },
       a11y: {
         skip: "Skip to content",
-        brand: "Easy2say home",
+        brand: "Easy2Say home",
         nav: "Primary navigation",
         menuOpen: "Open menu",
         menuClose: "Close menu",
         langSwitch: "Language",
       },
       brand: {
-        name: "Easy2say",
+        name: "Easy2Say",
         platform: "好說 · iOS + iPadOS",
       },
       nav: {
@@ -36,14 +36,14 @@
         badgePlatform: "iOS · iPadOS · macOS 26+",
         title: "Two people.<br><em>Two languages.</em>",
         lead:
-          "Easy2say listens through one microphone, keeps both people visible, and drafts bilingual captions on device — without accounts, cloud transcription, or telemetry.",
+          "Easy2Say listens through one microphone, keeps both people visible, and drafts bilingual captions on device — without accounts, cloud transcription, or telemetry.",
         ctaDownload: "Download macOS",
         ctaSource: "Explore the source",
         artListen: "Listen",
         artUnderstand: "Understand",
         demoSource: "I understand.",
         demoTranslation: "我明白了。",
-        imgAlt: "Easy2say showing English and Traditional Chinese captions together on an iPhone",
+        imgAlt: "Easy2Say showing English and Traditional Chinese captions together on an iPhone",
         figureKicker: "Caption 01",
         figureCaption: "Original speech and translation share the screen. Neither is treated as a footnote.",
       },
@@ -93,13 +93,13 @@
           "Use portrait, landscape, or flip one half for an across-the-table conversation.",
         step3Title: "Speak naturally",
         step3Body:
-          "Tap Start. Speech and translation arrive together, entirely inside Easy2say.",
+          "Tap Start. Speech and translation arrive together, entirely inside Easy2Say.",
       },
       inputLangs: {
         eyebrow: "03 · Language coverage",
         title: "The list follows what your device can actually do.",
         lead:
-          "Easy2say asks Apple Speech and Translation for the languages available on the current device. When a pair has no Apple Translation model, on-device Apple Intelligence may provide an experimental draft.",
+          "Easy2Say asks Apple Speech and Translation for the languages available on the current device. When a pair has no Apple Translation model, on-device Apple Intelligence may provide an experimental draft.",
         inputExamples: "Speech and conversation examples",
         outputExamples: "Additional translation examples",
         noteBefore:
@@ -131,7 +131,7 @@
       privacy: {
         eyebrow: "04 · Privacy, literally",
         title: "No account. No network client. No tiny print.",
-        li1: "Microphone audio and captions are never sent to an Easy2say server — there is no Easy2say server.",
+        li1: "Microphone audio and captions are never sent to an Easy2Say server — there is no Easy2Say server.",
         li2: "Speech recognition and Apple Translation run on device with local language assets.",
         li3: "For unsupported translation pairs, Apple Intelligence may draft an experimental translation on this device.",
         li4: "Voice activity detection and the optional bundled Taigi model run through Apple’s Core ML stack.",
@@ -166,7 +166,7 @@
         eyebrow: "Lineage",
         title: "An iOS-first fork, in the open.",
         body:
-          "Easy2say grows from pull request #20 on franklioxygen/v2s, keeps the original macOS target buildable, and publishes this fork’s Universal 2 package. The iPhone and iPad experience remains the fork’s focus.",
+          "Easy2Say grows from pull request #20 on franklioxygen/v2s, keeps the original macOS target buildable, and publishes this fork’s Universal 2 package. The iPhone and iPad experience remains the fork’s focus.",
         upstream: "See the upstream macOS project",
       },
       cta: {
@@ -204,7 +204,7 @@
       },
       brand: {
         name: "好說",
-        platform: "Easy2say · iOS + iPadOS",
+        platform: "Easy2Say · iOS + iPadOS",
       },
       nav: {
         features: "體驗",

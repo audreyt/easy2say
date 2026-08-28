@@ -2,19 +2,27 @@
 
 set -euo pipefail
 
-legacy_app="${EASY2SAY_APPLICATIONS_DIR:-/Applications}/v2s.app"
-legacy_info="$legacy_app/Contents/Info.plist"
+applications_dir="${EASY2SAY_APPLICATIONS_DIR:-/Applications}"
 expected_bundle_id="com.franklioxygen.v2s"
 
-if [[ ! -d "$legacy_app" || ! -f "$legacy_info" ]]; then
-  exit 0
-fi
+remove_matching_app() {
+  local app_path="$1"
+  local info="$app_path/Contents/Info.plist"
 
-bundle_id="$(/usr/bin/plutil -extract CFBundleIdentifier raw "$legacy_info" 2>/dev/null || true)"
-if [[ "$bundle_id" != "$expected_bundle_id" ]]; then
-  echo "Leaving unrelated legacy path in place: $legacy_app" >&2
-  exit 0
-fi
+  if [[ ! -d "$app_path" || ! -f "$info" ]]; then
+    return 0
+  fi
 
-/bin/rm -rf "$legacy_app"
-echo "Removed legacy v2s.app before installing Easy2say.app."
+  local bundle_id
+  bundle_id="$(/usr/bin/plutil -extract CFBundleIdentifier raw "$info" 2>/dev/null || true)"
+  if [[ "$bundle_id" != "$expected_bundle_id" ]]; then
+    echo "Leaving unrelated legacy path in place: $app_path" >&2
+    return 0
+  fi
+
+  /bin/rm -rf "$app_path"
+  echo "Removed $app_path before installing Easy2Say.app."
+}
+
+remove_matching_app "$applications_dir/v2s.app"
+remove_matching_app "$applications_dir/Easy2say.app"

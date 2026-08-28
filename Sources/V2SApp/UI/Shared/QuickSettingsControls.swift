@@ -5,7 +5,7 @@ import UIKit
 #endif
 import SwiftUI
 
-/// Easy2say brand palette, shared by every platform surface.
+/// Easy2Say brand palette, shared by every platform surface.
 ///
 /// Plum is the ground the paired-voice mark sits on, peach is the voice itself, and
 /// everything else is derived from those two so the app cannot drift into a second
@@ -31,7 +31,7 @@ enum EasyBrand {
     }
 }
 
-/// The one Easy2say mark: a rounded speech bubble with an integrated lower-left
+/// The one Easy2Say mark: a rounded speech bubble with an integrated lower-left
 /// tail, carrying a 2-column × 3-row field of rounded slots knocked out of it. The
 /// two columns, split by a clear central gutter, are the conversation hint the app
 /// icon has always had; the bubble is what makes the tray glyph read at 18 pt.

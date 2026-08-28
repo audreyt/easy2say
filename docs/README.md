@@ -1,4 +1,4 @@
-# Easy2say website
+# Easy2Say website
 
 Static bilingual product page continuously deployed from `main` through Cloudflare Pages at **https://easy2say.ai/**.
 

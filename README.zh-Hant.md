@@ -1,13 +1,13 @@
-# Easy2say
+# Easy2Say
 
 [English](README.md) · 繁體中文 · [简体中文](README.zh-CN.md)
 
 **iPhone 與 iPad 上私密、於裝置端處理的雙語字幕。**
 
-`Easy2say` 是以 iOS 為優先、源自 [franklioxygen/v2s](https://github.com/franklioxygen/v2s) 的分支。它透過裝置麥克風、Apple Speech 與 Apple Translation，同時顯示語音辨識原文與翻譯。此分支以[上游 pull request #20](https://github.com/franklioxygen/v2s/pull/20) 為起點，並保留該 PR 中由 [@oToToT](https://github.com/oToToT) 貢獻、擴充後的執行階段語言目錄。
+`Easy2Say` 是以 iOS 為優先、源自 [franklioxygen/v2s](https://github.com/franklioxygen/v2s) 的分支。它透過裝置麥克風、Apple Speech 與 Apple Translation，同時顯示語音辨識原文與翻譯。此分支以[上游 pull request #20](https://github.com/franklioxygen/v2s/pull/20) 為起點，並保留該 PR 中由 [@oToToT](https://github.com/oToToT) 貢獻、擴充後的執行階段語言目錄。
 
 <p align="center">
-  <img src="docs/assets/easy2say-ios-home.png" alt="Easy2say 在 iPhone 上將原文與翻譯字幕各佔一半畫面顯示">
+  <img src="docs/assets/easy2say-ios-home.png" alt="Easy2Say 在 iPhone 上將原文與翻譯字幕各佔一半畫面顯示">
 </p>
 
 ## 功能
@@ -24,14 +24,14 @@
 
 ## iOS 與 macOS 功能比較
 
-| 功能 | iPhone/iPad 上的 Easy2say | macOS 上的 Easy2say |
+| 功能 | iPhone/iPad 上的 Easy2Say | macOS 上的 Easy2Say |
 | --- | --- | --- |
 | 即時麥克風字幕 | 是 | 是 |
 | 裝置端語音辨識與翻譯 | 是 | 是 |
 | 字幕呈現方式 | 原文與翻譯各佔一半；直向時上下排列，橫向時左右並排 | 半透明浮動字幕面板，可上下或左右分欄，並可反轉順序 |
 | 全螢幕呈現 | 全螢幕字幕；輕觸顯示控制項 | 可在任一指定螢幕顯示觀眾畫面 |
 | 擷取其他應用程式的音訊 | 否。iOS 應用程式僅使用麥克風。 | 是 |
-| 將字幕浮動顯示於其他應用程式上方 | 否。字幕只顯示在 Easy2say 內。 | 是 |
+| 將字幕浮動顯示於其他應用程式上方 | 否。字幕只顯示在 Easy2Say 內。 | 是 |
 
 iOS 應用程式無法擷取其他應用程式的音訊，也不提供跨應用程式的浮動覆蓋層。
 
@@ -40,9 +40,9 @@ iOS 應用程式無法擷取其他應用程式的音訊，也不提供跨應用�
 - 不設帳號，也沒有網路用戶端。
 - 不使用雲端轉寫，也沒有分析或遙測功能。
 - iOS 目標不含更新程式。
-- Easy2say 不會將麥克風音訊或字幕傳送至伺服器。
+- Easy2Say 不會將麥克風音訊或字幕傳送至伺服器。
 - Apple 可能會先下載其 Speech 與 Translation 框架所需的語言資源。之後，應用程式會使用這些資源在裝置端處理。
-- 語音活動偵測透過 Apple 系統內建的 Core ML 框架執行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；Easy2say 不打包 ONNX Runtime，且[轉換過程可重現](scripts/convert_silero_vad_coreml.py)。
+- 語音活動偵測透過 Apple 系統內建的 Core ML 框架執行 [Silero VAD](THIRD_PARTY_NOTICES.md) 模型；Easy2Say 不打包 ONNX Runtime，且[轉換過程可重現](scripts/convert_silero_vad_coreml.py)。
 - 台語辨識使用 [WhisperKit 與固定版本的 Breeze-ASR-26 Core ML 轉換模型](THIRD_PARTY_NOTICES.md)。發行版本內含完整模型與 tokenizer，並停用 WhisperKit 的網路下載功能。
 
 ## 系統需求
@@ -120,9 +120,9 @@ xcodebuild \
 
 ## macOS 與上游
 
-此分支會發佈 Easy2say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2say-universal.pkg)下載。內建 Breeze-ASR-26 與 Silero VAD，不含 TranslateGemma、私有 Monlam Whisper 或 Melong 權重。自 0.3.39 版起，應用程式與安裝套件皆以 Developer ID 簽署，並已通過 Apple 公證、附加公證票證。Gatekeeper 可直接開啟下載檔案，無需手動略過安全設定。
+此分支會發佈 Easy2Say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2Say-universal.pkg)下載。內建 Breeze-ASR-26 與 Silero VAD，不含 TranslateGemma、私有 Monlam Whisper 或 Melong 權重。自 0.3.39 版起，應用程式與安裝套件皆以 Developer ID 簽署，並已通過 Apple 公證、附加公證票證。Gatekeeper 可直接開啟下載檔案，無需手動略過安全設定。
 
-0.3.38 是首次改用 Easy2say 名稱與更新來源的 macOS 版本；既有 `v2s` 使用者需手動安裝一次，安裝程式會移除同一 bundle ID 的 `/Applications/v2s.app`，並保留原有設定與模型快取。原始 macOS 專案與血緣資訊仍見 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
+0.3.38 是首次改用 Easy2Say 名稱與更新來源的 macOS 版本；既有 `v2s` 使用者需手動安裝一次，安裝程式會移除同一 bundle ID 的 `/Applications/v2s.app`，並保留原有設定與模型快取。原始 macOS 專案與血緣資訊仍見 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
 
 ## 授權
 

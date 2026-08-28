@@ -40,7 +40,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         button.action = #selector(togglePopover(_:))
         button.target = self
         button.imagePosition = .imageOnly
-        button.toolTip = "Easy2say"
+        button.toolTip = "Easy2Say"
     }
 
     private func configurePopover() {
@@ -74,7 +74,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private func updateStatusIcon(for state: SessionState) {
         guard let button = statusItem.button else { return }
         let stateDescription = state.displayName(in: model.resolvedInterfaceLanguageID)
-        let description = "Easy2say — \(stateDescription)"
+        let description = "Easy2Say — \(stateDescription)"
 
         button.image = Self.statusGlyph(for: state)
         button.contentTintColor = nil
@@ -139,7 +139,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Easy2say status icon"
+        image.accessibilityDescription = "Easy2Say status icon"
         return image
     }
 

@@ -403,7 +403,7 @@ private struct AcknowledgmentsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private static let fileNames = [
-        "Easy2say-MIT.txt",
+        "Easy2Say-MIT.txt",
         "NOTICE.txt",
         "THIRD_PARTY_NOTICES.txt",
         "Breeze-ASR-26.txt",

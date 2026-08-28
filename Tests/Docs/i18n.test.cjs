@@ -37,8 +37,8 @@ test("switches explicitly between English and native zh-TW copy", () => {
   const { i18n, document } = createI18n("en-US");
   const englishTitle = i18n.t("meta.title");
 
-  assert.equal(englishTitle, "Easy2say — Private bilingual captions for iPhone and iPad");
-  assert.equal(i18n.t("brand.name"), "Easy2say");
+  assert.equal(englishTitle, "Easy2Say — Private bilingual captions for iPhone and iPad");
+  assert.equal(i18n.t("brand.name"), "Easy2Say");
   assert.equal(document.documentElement.lang, "en");
 
   i18n.applyLang("zh");

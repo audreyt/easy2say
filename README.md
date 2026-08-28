@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/assets/app-icon-512.png" width="96" alt="Easy2say app icon">
+  <img src="docs/assets/app-icon-512.png" width="96" alt="Easy2Say app icon">
 </p>
 
-<h1 align="center">Easy2say</h1>
+<h1 align="center">Easy2Say</h1>
 
 <p align="center">
   <strong>Two languages. One shared moment.</strong><br>
@@ -14,13 +14,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/audreyt/easy2say/releases/latest/download/Easy2say-universal.pkg"><strong>Download macOS</strong></a><br>
+  <a href="https://github.com/audreyt/easy2say/releases/latest/download/Easy2Say-universal.pkg"><strong>Download macOS</strong></a><br>
   <sub>macOS 26 or later · Apple silicon and Intel</sub>
 </p>
 
 <p align="center">
   <a href="https://easy2say.ai/">
-    <img src="docs/assets/easy2say-hero.png" alt="Easy2say showing English and Traditional Chinese captions together on an iPhone">
+    <img src="docs/assets/easy2say-hero.png" alt="Easy2Say showing English and Traditional Chinese captions together on an iPhone">
   </a>
 </p>
 
@@ -29,7 +29,7 @@
 
 ## The conversation, not the chrome
 
-Easy2say listens through the device microphone, transcribes with Apple Speech, translates with Apple Translation, and gives the original speech and its translation equal space.
+Easy2Say listens through the device microphone, transcribes with Apple Speech, translates with Apple Translation, and gives the original speech and its translation equal space.
 
 - **One screen, two languages.** The source and translation each receive half the display.
 - **Made for either orientation.** Portrait stacks both halves; landscape places them side by side.
@@ -66,7 +66,7 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 - No accounts or network client.
 - No cloud transcription, analytics, or telemetry.
 - No updater in the iOS target.
-- Microphone audio and captions are never sent to an Easy2say server; there is no Easy2say server.
+- Microphone audio and captions are never sent to an Easy2Say server; there is no Easy2Say server.
 - Apple may initially download language assets required by Speech and Translation. Processing then uses those assets on device.
 - Voice activity detection runs the [Silero VAD](THIRD_PARTY_NOTICES.md) model through Apple’s system Core ML framework.
 - The app bundles no ONNX Runtime, and the [Silero conversion is reproducible](scripts/convert_silero_vad_coreml.py).
@@ -74,14 +74,14 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 
 ## iOS and macOS at a glance
 
-| Capability | Easy2say on iPhone/iPad | Easy2say on macOS |
+| Capability | Easy2Say on iPhone/iPad | Easy2Say on macOS |
 | --- | --- | --- |
 | Live microphone captions | Yes | Yes |
 | On-device speech recognition and translation | Yes | Yes |
 | Caption presentation | Equal source and translation halves | Translucent vertical or side-by-side overlay; either direction |
 | Fullscreen presentation | Full-screen captions; tap to show controls | Audience Display on any selected screen |
 | Capture another app’s audio | No; iOS is microphone-only | Yes |
-| Float captions over other apps | No; captions stay inside Easy2say | Yes |
+| Float captions over other apps | No; captions stay inside Easy2Say | Yes |
 
 ## Requirements
 
@@ -95,7 +95,7 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 
 The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. Starting with 0.3.39, the app and installer are signed with Developer ID, notarized by Apple, and stapled. Gatekeeper accepts the download without a manual override.
 
-Version 0.3.38 is the first macOS build under the Easy2say name and update feed. Existing `v2s` users must install this package once manually because older builds still follow the upstream feed and signing key. The installer removes `/Applications/v2s.app` only when its bundle identifier matches this app, installs `/Applications/Easy2say.app`, and preserves the existing settings and model cache paths.
+Version 0.3.38 is the first macOS build under the Easy2Say name and update feed. Existing `v2s` users must install this package once manually because older builds still follow the upstream feed and signing key. The installer removes `/Applications/v2s.app` only when its bundle identifier matches this app, installs `/Applications/Easy2Say.app`, and preserves the existing settings and model cache paths.
 
 To build a local package:
 

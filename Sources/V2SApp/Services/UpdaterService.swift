@@ -50,12 +50,22 @@ final class UpdaterService: ObservableObject {
     }
 }
 
+protocol LaunchAtLoginRegistering: AnyObject {
+    var status: SMAppService.Status { get }
+    func register() throws
+    func unregister() throws
+}
+
+extension SMAppService: LaunchAtLoginRegistering {}
+
 @MainActor
 final class LaunchAtLoginService: ObservableObject {
-    private static let pathMigrationDefaultsKey = "easy2sayLaunchAtLoginPathMigrationV1"
-    private static let pathMigrationPendingKey = "easy2sayLaunchAtLoginPathMigrationPendingV1"
+    static let pathMigrationDefaultsKey = "easy2sayLaunchAtLoginPathMigrationV1"
+    static let pathMigrationPendingKey = "easy2sayLaunchAtLoginPathMigrationPendingV1"
+    static let pathMigrationDefaultsKeyV2 = "easy2sayLaunchAtLoginPathMigrationV2"
+    static let pathMigrationPendingKeyV2 = "easy2sayLaunchAtLoginPathMigrationPendingV2"
 
-    private let appService = SMAppService.mainApp
+    private let appService: LaunchAtLoginRegistering
     private var cancellables = Set<AnyCancellable>()
     private let userDefaults: UserDefaults
 
@@ -65,10 +75,19 @@ final class LaunchAtLoginService: ObservableObject {
 
     init(
         notificationCenter: NotificationCenter = .default,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        appService: LaunchAtLoginRegistering = SMAppService.mainApp
     ) {
         self.userDefaults = userDefaults
-        migrateLegacyRegistrationIfNeeded()
+        self.appService = appService
+        migratePathRegistrationIfNeeded(
+            completeKey: Self.pathMigrationDefaultsKey,
+            pendingKey: Self.pathMigrationPendingKey
+        )
+        migratePathRegistrationIfNeeded(
+            completeKey: Self.pathMigrationDefaultsKeyV2,
+            pendingKey: Self.pathMigrationPendingKeyV2
+        )
         refreshStatus()
 
         notificationCenter.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -79,29 +98,29 @@ final class LaunchAtLoginService: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func migrateLegacyRegistrationIfNeeded() {
-        guard userDefaults.bool(forKey: Self.pathMigrationDefaultsKey) == false else {
+    private func migratePathRegistrationIfNeeded(completeKey: String, pendingKey: String) {
+        guard userDefaults.bool(forKey: completeKey) == false else {
             return
         }
 
-        let registrationWasEnabled = userDefaults.bool(forKey: Self.pathMigrationPendingKey)
+        let registrationWasEnabled = userDefaults.bool(forKey: pendingKey)
         if registrationWasEnabled {
-            refreshMigratedRegistration()
+            refreshMigratedRegistration(completeKey: completeKey, pendingKey: pendingKey)
             return
         }
 
         switch appService.status {
         case .enabled, .requiresApproval:
-            userDefaults.set(true, forKey: Self.pathMigrationPendingKey)
-            refreshMigratedRegistration()
+            userDefaults.set(true, forKey: pendingKey)
+            refreshMigratedRegistration(completeKey: completeKey, pendingKey: pendingKey)
         case .notRegistered, .notFound:
-            userDefaults.set(true, forKey: Self.pathMigrationDefaultsKey)
+            userDefaults.set(true, forKey: completeKey)
         @unknown default:
             break
         }
     }
 
-    private func refreshMigratedRegistration() {
+    private func refreshMigratedRegistration(completeKey: String, pendingKey: String) {
         switch appService.status {
         case .enabled, .requiresApproval:
             do {
@@ -119,11 +138,11 @@ final class LaunchAtLoginService: ObservableObject {
 
         do {
             try appService.register()
-            userDefaults.set(true, forKey: Self.pathMigrationDefaultsKey)
-            userDefaults.removeObject(forKey: Self.pathMigrationPendingKey)
+            userDefaults.set(true, forKey: completeKey)
+            userDefaults.removeObject(forKey: pendingKey)
         } catch {
             Logger.launchAtLogin.warning(
-                "Could not register Easy2say at its new application path: \(error.localizedDescription, privacy: .public)"
+                "Could not register Easy2Say at its new application path: \(error.localizedDescription, privacy: .public)"
             )
         }
     }

@@ -46,7 +46,7 @@ struct StatusBarPopoverView: View {
             HStack(alignment: .center) {
                 BrandMarkBadge(size: 26)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: "Easy2say")
+                    Text(verbatim: "Easy2Say")
                         .font(.headline)
                     Text(model.statusMessage)
                         .font(.caption)
