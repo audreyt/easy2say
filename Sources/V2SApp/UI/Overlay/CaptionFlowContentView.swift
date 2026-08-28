@@ -5,6 +5,8 @@ struct CaptionFlowContentView: View {
     @ObservedObject var model: AppModel
     var showsScrollbarPadding: Bool = false
     var updatesModelHistoryVisibleCount: Bool = false
+    var reservesColumnHeaderSpace: Bool = true
+    var columnHeaderOpacity: Double = 1.0
 
     @Namespace private var captionFlowNamespace
     @State private var lastDraftSlotHeight: CGFloat = 0.0
@@ -724,7 +726,7 @@ struct CaptionFlowContentView: View {
     }
 
     private var captionColumnHeaderHeight: CGFloat {
-        usesColumnCaptions ? Self.columnHeaderHeight : 0
+        (reservesColumnHeaderSpace && usesColumnCaptions) ? Self.columnHeaderHeight : 0
     }
 
     @ViewBuilder
@@ -769,6 +771,9 @@ struct CaptionFlowContentView: View {
             }
             .frame(height: Self.columnHeaderHeight, alignment: .center)
             .environment(\.layoutDirection, .leftToRight)
+            .opacity(columnHeaderOpacity)
+            .accessibilityHidden(columnHeaderOpacity <= 0.001)
+            .animation(.easeInOut(duration: 0.25), value: columnHeaderOpacity)
         }
     }
 

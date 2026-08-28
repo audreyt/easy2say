@@ -21,7 +21,9 @@ struct AudienceDisplayView: View {
                 CaptionFlowContentView(
                     model: model,
                     showsScrollbarPadding: false,
-                    updatesModelHistoryVisibleCount: false
+                    updatesModelHistoryVisibleCount: false,
+                    reservesColumnHeaderSpace: false,
+                    columnHeaderOpacity: isHovering ? 1.0 : 0.0
                 )
                 .padding(.horizontal, horizontalPadding)
                 .padding(.bottom, bottomPadding)
@@ -34,6 +36,7 @@ struct AudienceDisplayView: View {
                 action: onExit
             )
             .opacity(isHovering ? 1.0 : 0.0)
+            .accessibilityHidden(isHovering == false)
             .animation(.easeInOut(duration: 0.25), value: isHovering)
             .padding(24)
         }

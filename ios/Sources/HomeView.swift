@@ -351,10 +351,8 @@ struct HomeView: View {
 
             if showsFullscreenChrome || UIAccessibility.isVoiceOverRunning {
                 VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        fullscreenStatusChip
-
-                        Spacer(minLength: 8)
+                    HStack {
+                        Spacer()
 
                         Button(action: exitFullscreen) {
                             HStack(spacing: 6) {
@@ -383,7 +381,6 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
-
                     Spacer()
 
                     HStack {
@@ -408,33 +405,6 @@ struct HomeView: View {
         .accessibilityAction(named: model.localized(.iosExitFullscreen)) {
             exitFullscreen()
         }
-    }
-
-    private var fullscreenStatusChip: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(model.sessionState == .running ? IOSTheme.alert : accent.opacity(0.65))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-
-            Text(
-                "\(LanguageCatalog.autonym(for: model.iOSEffectiveInputLanguageID)) → \(LanguageCatalog.autonym(for: model.iOSEffectiveOutputLanguageID))"
-            )
-            .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(IOSTheme.primaryText.opacity(0.88))
-            .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(IOSTheme.elevated.opacity(0.88))
-        )
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(IOSTheme.hairline, lineWidth: 0.5)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private func openSystemSettings() {

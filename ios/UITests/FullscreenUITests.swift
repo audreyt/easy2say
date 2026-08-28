@@ -21,10 +21,16 @@ final class FullscreenUITests: XCTestCase {
         let exitButton = app.buttons["exit-fullscreen-button"]
         XCTAssertTrue(exitButton.waitForExistence(timeout: 4), "Exit Fullscreen button should appear in fullscreen mode")
 
-        // 4. Exit Fullscreen
+        // 4. Verify no top language titles/chips exist in fullscreen mode
+        let languageChipPredicate = NSPredicate(format: "label CONTAINS '→'")
+        XCTAssertFalse(
+            app.staticTexts.containing(languageChipPredicate).element.exists,
+            "Top language titles / chip should not be present in fullscreen mode"
+        )
+        // 5. Exit Fullscreen
         exitButton.tap()
 
-        // 5. Control bar with Fullscreen button is restored
+        // 6. Control bar with Fullscreen button is restored
         XCTAssertTrue(fullscreenButton.waitForExistence(timeout: 4), "Control bar should be restored after exiting fullscreen")
     }
 
