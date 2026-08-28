@@ -6,7 +6,7 @@ const { runInNewContext } = require("node:vm");
 
 const source = readFileSync(join(__dirname, "../../docs/js/i18n.js"), "utf8");
 
-function createI18n(language, storedLang = null) {
+function createI18n(language, storedLang = null, languages = [language]) {
   const scripts = [];
   const storage = new Map([["v2s-home-lang", storedLang]]);
   const document = {
@@ -21,7 +21,7 @@ function createI18n(language, storedLang = null) {
   runInNewContext(source, {
     window,
     document,
-    navigator: { language, languages: [language] },
+    navigator: { language, languages },
     localStorage: {
       getItem: (key) => storage.get(key),
       setItem: (key, value) => storage.set(key, value),
@@ -50,6 +50,25 @@ test("honors valid stored language preferences", () => {
   assert.equal(createI18n("zh-CN", "en").i18n.t("nav.download"), "Download");
 });
 
+test("honors the first Chinese locale preference", () => {
+  const { document, i18n, scripts } = createI18n(
+    "zh-CN",
+    null,
+    ["zh-CN", "zh-TW"],
+  );
+  assert.equal(scripts.length, 0);
+  assert.equal(i18n.t("nav.download"), "下载");
+  assert.equal(document.documentElement.lang, "zh-CN");
+});
+
+for (const language of ["zh", "zh-CN", "zh-SG", "zh-Hans", "zh-MY"]) {
+  test(`keeps Simplified Chinese for ${language}`, () => {
+    const { document, scripts } = createI18n(language);
+    assert.equal(scripts.length, 0);
+    assert.equal(document.documentElement.lang, "zh-CN");
+  });
+}
+
 for (const language of ["__proto__", "constructor", "toString", "fr"]) {
   test(`does not select a dictionary for unsupported language ${language}`, () => {
     const { i18n, storage } = createI18n("zh-CN", language);
@@ -64,6 +83,7 @@ for (const language of ["__proto__", "constructor", "toString", "fr"]) {
 
 for (const [language, variant, htmlLang] of [
   ["zh-TW", "twp", "zh-TW"],
+  ["zh-Hant-TW", "twp", "zh-TW"],
   ["zh-HK", "hk", "zh-HK"],
   ["zh-MO", "hk", "zh-HK"],
 ]) {
@@ -71,6 +91,7 @@ for (const [language, variant, htmlLang] of [
     const { i18n, document, scripts, window } = createI18n(language);
     assert.equal(scripts.length, 1);
     assert.equal(i18n.t("nav.download"), "下载");
+    assert.equal(document.documentElement.lang, "zh-CN");
     window.OpenCC = {
       Converter: (options) => {
         assert.equal(options.from, "cn");
@@ -90,9 +111,12 @@ for (const [language, variant, htmlLang] of [
 }
 
 test("keeps Simplified Chinese when the converter cannot load or initialize", () => {
-  const { i18n, scripts } = createI18n("zh-TW");
+  const { i18n, document, scripts } = createI18n("zh-TW");
+  assert.equal(document.documentElement.lang, "zh-CN");
   scripts[0].onerror();
   assert.equal(i18n.t("nav.download"), "下载");
+  assert.equal(document.documentElement.lang, "zh-CN");
   scripts[0].onload();
   assert.equal(i18n.t("nav.download"), "下载");
+  assert.equal(document.documentElement.lang, "zh-CN");
 });

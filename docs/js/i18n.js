@@ -321,27 +321,22 @@
     return browser.startsWith("zh") ? "zh" : "en";
   }
 
-  function isTraditionalLocaleTag(tag) {
-    const locale = (tag || "").toLowerCase();
-    if (!locale.startsWith("zh")) return false;
-    // Bare "zh", zh-CN/zh-SG and zh-Hans(-*) stay Simplified; every other zh-* counts as Traditional.
-    if (locale === "zh") return false;
-    if (locale === "zh-hans" || locale.startsWith("zh-hans-")) return false;
-    if (locale === "zh-cn" || locale.startsWith("zh-cn-")) return false;
-    if (locale === "zh-sg" || locale.startsWith("zh-sg-")) return false;
-    return true;
-  }
-
-  // Strongest (first) Traditional locale from navigator.languages; null when none.
-  // Never persisted in localStorage.
+  // Use the first Chinese locale in browser preference order. A Simplified locale
+  // takes precedence over any later Traditional locale. Never persisted in localStorage.
   function detectTraditionalVariant() {
     const candidates = (navigator.languages && navigator.languages.length)
       ? Array.prototype.slice.call(navigator.languages)
       : [navigator.language];
     for (const tag of candidates) {
-      if (!isTraditionalLocaleTag(tag)) continue;
-      const locale = tag.toLowerCase();
-      return /(^|-)(hk|mo)(-|$)/.test(locale) ? "hk" : "tw";
+      try {
+        const locale = new Intl.Locale(tag);
+        if (locale.language !== "zh") continue;
+        const resolved = locale.maximize();
+        if (resolved.script !== "Hant") return null;
+        return resolved.region === "HK" || resolved.region === "MO" ? "hk" : "tw";
+      } catch (err) {
+        // Ignore malformed locale tags and continue through browser preferences.
+      }
     }
     return null;
   }
@@ -391,9 +386,9 @@
     currentLang = lang === "zh" ? "zh" : "en";
     localStorage.setItem(STORAGE_KEY, currentLang);
 
-    const htmlLang = currentLang === "zh"
-      ? (targetVariant === "hk" ? "zh-HK" : targetVariant === "tw" ? "zh-TW" : "zh-CN")
-      : "en";
+    const htmlLang = currentLang === "zh" && converter
+      ? (targetVariant === "hk" ? "zh-HK" : "zh-TW")
+      : currentLang === "zh" ? "zh-CN" : "en";
     document.documentElement.lang = htmlLang;
     document.documentElement.dataset.lang = currentLang;
 
