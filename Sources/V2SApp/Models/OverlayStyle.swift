@@ -88,6 +88,43 @@ struct OverlayColor: Codable, Equatable {
     }
 }
 
+/// How the translated and original captions are arranged inside the overlay.
+///
+/// Two axes, spelled out as four explicit choices rather than a flag pair: rows or
+/// columns, and which language leads. `topDown` is the historical rendering —
+/// translation above the original in one flowing column.
+enum OverlayCaptionLayout: String, Codable, CaseIterable, Sendable {
+    case topDown
+    case bottomUp
+    case leftToRight
+    case rightToLeft
+
+    /// Columns instead of rows. Horizontal layouts need both languages on screen,
+    /// which the overlay checks before honouring them.
+    var usesColumns: Bool {
+        self == .leftToRight || self == .rightToLeft
+    }
+
+    /// Whether the translation takes the leading slot: the top row, or the left
+    /// column.
+    var leadsWithTranslation: Bool {
+        self == .topDown || self == .leftToRight
+    }
+
+    func displayName(in languageID: String) -> String {
+        switch self {
+        case .topDown:
+            return AppLocalization.string(.captionLayoutTopDown, languageID: languageID)
+        case .bottomUp:
+            return AppLocalization.string(.captionLayoutBottomUp, languageID: languageID)
+        case .leftToRight:
+            return AppLocalization.string(.captionLayoutLeftToRight, languageID: languageID)
+        case .rightToLeft:
+            return AppLocalization.string(.captionLayoutRightToLeft, languageID: languageID)
+        }
+    }
+}
+
 struct OverlayStyle: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case targetDisplayID
@@ -107,6 +144,7 @@ struct OverlayStyle: Codable, Equatable {
         case overlayScaleFactor
         case attachToSource
         case invisibleInRecording
+        case captionLayout
     }
 
     private enum LegacyCodingKeys: String, CodingKey {
@@ -133,6 +171,8 @@ struct OverlayStyle: Codable, Equatable {
     /// Keeps the overlay on screen for the user while excluding it from screen
     /// recordings, screenshots, and shared screens.
     var invisibleInRecording: Bool
+    /// Row or column arrangement, and which language leads.
+    var captionLayout: OverlayCaptionLayout
 
     var scaledTranslatedFontSize: Double { translatedFontSize * overlayScaleFactor }
     var scaledSourceFontSize: Double { sourceFontSize * overlayScaleFactor }
@@ -154,7 +194,8 @@ struct OverlayStyle: Codable, Equatable {
         translatedFirst: true,
         overlayScaleFactor: 1.0,
         attachToSource: false,
-        invisibleInRecording: false
+        invisibleInRecording: false,
+        captionLayout: .topDown
     )
 
     init(
@@ -174,7 +215,8 @@ struct OverlayStyle: Codable, Equatable {
         translatedFirst: Bool,
         overlayScaleFactor: Double = 1.0,
         attachToSource: Bool = false,
-        invisibleInRecording: Bool = false
+        invisibleInRecording: Bool = false,
+        captionLayout: OverlayCaptionLayout = .topDown
     ) {
         self.targetDisplayID = targetDisplayID
         self.topInset = topInset
@@ -193,6 +235,7 @@ struct OverlayStyle: Codable, Equatable {
         self.overlayScaleFactor = overlayScaleFactor
         self.attachToSource = attachToSource
         self.invisibleInRecording = invisibleInRecording
+        self.captionLayout = captionLayout
     }
 
     init(from decoder: Decoder) throws {
@@ -221,5 +264,9 @@ struct OverlayStyle: Codable, Equatable {
         overlayScaleFactor = try c.decodeIfPresent(Double.self, forKey: .overlayScaleFactor) ?? 1.0
         attachToSource = try c.decodeIfPresent(Bool.self, forKey: .attachToSource) ?? false
         invisibleInRecording = try c.decodeIfPresent(Bool.self, forKey: .invisibleInRecording) ?? false
+        // Settings written before this key existed carry their order in the legacy
+        // `translatedFirst` flag, so old installs keep the arrangement they had.
+        captionLayout = try c.decodeIfPresent(OverlayCaptionLayout.self, forKey: .captionLayout)
+            ?? (translatedFirst ? .topDown : .bottomUp)
     }
 }

@@ -151,7 +151,7 @@ private struct CaptionPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(IOSTheme.elevated.opacity(0.74))
+                .fill(IOSTheme.elevated.opacity(0.78))
         )
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -166,7 +166,7 @@ private struct CaptionPane: View {
         VStack(spacing: 12) {
             Image(systemName: placeholderSymbol)
                 .font(.system(size: 25, weight: .medium))
-                .foregroundStyle(accent.opacity(0.46))
+                .foregroundStyle(IOSTheme.brand.opacity(0.50))
                 .accessibilityHidden(true)
 
             Text(model.localized(placeholderKey))

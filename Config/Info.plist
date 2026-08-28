@@ -21,16 +21,16 @@
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/franklioxygen/v2s/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/audreyt/easy2say/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>c9L/6qNsTDZVevxERjyM4gwJ1n7nXjc7tMdjdQB4uvQ=</string>
+	<string>fmhINBDfUJ8qpSZv34qK07qvWSxZYGsKCuGo5AcFOM0=</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>v2s captures audio from other apps to generate live subtitles.</string>
+	<string>Easy2say captures audio from other apps to generate live subtitles.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>v2s uses the microphone to generate subtitles from live speech.</string>
+	<string>Easy2say uses the microphone to generate subtitles from live speech.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>v2s uses speech recognition to transcribe audio into subtitles.</string>
+	<string>Easy2say uses speech recognition to transcribe audio into subtitles.</string>
 </dict>
 </plist>

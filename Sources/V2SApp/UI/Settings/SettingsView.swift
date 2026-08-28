@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: AppModel
     @ObservedObject var updaterService: UpdaterService
     @ObservedObject var launchAtLoginService: LaunchAtLoginService
@@ -36,7 +37,8 @@ struct SettingsView: View {
     // MARK: - Header Bar
 
     private var headerBar: some View {
-        HStack {
+        HStack(spacing: 12) {
+            BrandMarkBadge(size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.localized(.advancedSettings))
                     .font(.headline)
@@ -44,6 +46,10 @@ struct SettingsView: View {
                     Circle()
                         .fill(sessionDotColor)
                         .frame(width: 7, height: 7)
+                        .overlay {
+                            Circle()
+                                .stroke(EasyBrand.cream.opacity(0.42), lineWidth: 0.5)
+                        }
                     Text(model.statusMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -81,14 +87,16 @@ struct SettingsView: View {
             .help(model.localized(.quit))
         }
         .padding(.horizontal, 20)
+        .tint(EasyBrand.controlTint(for: colorScheme))
         .padding(.vertical, 12)
     }
 
+    /// Same three states as the menu-bar glyph, same three colours.
     private var sessionDotColor: Color {
         switch model.sessionState {
         case .idle: return .secondary
-        case .running: return .green
-        case .error: return .red
+        case .running: return EasyBrand.peach
+        case .error: return EasyBrand.alert
         }
     }
 
@@ -249,9 +257,13 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 settingsCard {
                     sectionHeader(model.localized(.subtitleOverlay), icon: "rectangle.on.rectangle")
-                    Text(model.localized(.onlyThreeControlsAcceptClicks))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    settingsRow(model.localized(.captionLayout)) {
+                        CaptionLayoutMenuPicker(
+                            interfaceLanguageID: model.resolvedInterfaceLanguageID,
+                            selection: model.overlayCaptionLayoutSelectionBinding
+                        )
+                    }
+                    Divider()
                     settingsRow(model.localized(.textOutline)) {
                         Toggle("", isOn: textOutlineEnabledBinding)
                             .toggleStyle(.switch)
@@ -571,6 +583,7 @@ struct SettingsView: View {
 
 
 private struct GlossaryAddRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let sourcePlaceholder: String
     let targetPlaceholder: String
     let onAdd: (String, String) -> Void
@@ -598,7 +611,7 @@ private struct GlossaryAddRow: View {
                 target = ""
             } label: {
                 Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(EasyBrand.controlTint(for: colorScheme))
             }
             .buttonStyle(.plain)
             .disabled(source.trimmingCharacters(in: .whitespaces).isEmpty

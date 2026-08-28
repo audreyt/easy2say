@@ -1,21 +1,22 @@
-cask "v2s" do
+cask "easy2say" do
   version "__VERSION__"
   sha256 "__SHA256__"
 
-  url "https://github.com/franklioxygen/v2s/releases/download/v#{version}/v2s-#{version}.app.zip"
-  name "v2s"
-  desc "Live bilingual subtitles for meetings, calls, streams, and videos"
-  homepage "https://github.com/franklioxygen/v2s"
+  url "https://github.com/audreyt/easy2say/releases/download/v#{version}/Easy2say-universal.pkg"
+  name "Easy2say"
+  desc "Private, on-device bilingual captions for iPhone, iPad, and Mac"
+  homepage "https://easy2say.ai/"
 
   livecheck do
     url :url
     strategy :github_latest
   end
 
-  auto_updates true
-  depends_on macos: :sequoia
+  depends_on macos: ">= :tahoe"
 
-  app "v2s.app"
+  pkg "Easy2say-universal.pkg"
+
+  uninstall pkgutil: "com.franklioxygen.v2s.pkg"
 
   zap trash: [
     "~/Library/Application Support/v2s",

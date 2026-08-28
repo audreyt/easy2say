@@ -38,7 +38,8 @@ struct OverlayView: View {
         Group {
             if let state = model.overlayState {
                 GeometryReader { proxy in
-                    let availableHistoryHeight = availableHistoryHeight(for: proxy.size.height, state: state)
+                    let captionAreaHeight = proxy.size.height - captionColumnHeaderHeight
+                    let availableHistoryHeight = availableHistoryHeight(for: captionAreaHeight, state: state)
                     let visibleHistoryEntries = historyVisibleEntries(from: state.history, availableHeight: availableHistoryHeight)
                     let visibleHistoryCount = visibleHistoryEntries.count
 
@@ -62,8 +63,11 @@ struct OverlayView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .bottom)
                     }
+                    .padding(.top, captionColumnHeaderHeight)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .mask(continuousFlowMask)
+                    .background(alignment: .center) { captionColumnDivider }
+                    .overlay(alignment: .top) { captionColumnHeader }
                     .onPreferenceChange(DraftSlotHeightPreferenceKey.self) { height in
                         guard height > 0 else { return }
                         let snappedHeight = ceil(height)
@@ -197,41 +201,7 @@ struct OverlayView: View {
                     draftText: draftText
                 )
                 applyingPromotionTransition(
-                    to: VStack(spacing: 2) {
-                        if showsTranslatedSubtitle {
-                            if let draftTranslated = visibleDraftTranslatedText {
-                                translatedText(
-                                    draftTranslated,
-                                    color: subtitleColor(opacity: 0.55)
-                                )
-                            } else if model.shouldReserveDraftTranslationSlot {
-                                Text(" ")
-                                    .font(.system(size: model.overlayStyle.scaledTranslatedFontSize, weight: .semibold))
-                                    .multilineTextAlignment(.center)
-                                    .lineLimit(nil)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity)
-                                    .hidden()
-                                    .accessibilityHidden(true)
-                            }
-                        }
-
-                        if showsOriginalSubtitle {
-                            let prefixLen = min(state.draftStablePrefixLength, draftText.count)
-                            let stable = String(draftText.prefix(prefixLen))
-                            let mutable = String(draftText.dropFirst(prefixLen))
-
-                            captionText(
-                                draftSourceAttributedText(
-                                    stable: stable,
-                                    mutable: mutable
-                                ),
-                                rawText: draftText,
-                                fontSize: displayedSourceFontSize,
-                                weight: displayedSourceFontWeight
-                            )
-                        }
-                    }
+                    to: draftBody(state: state, draftText: draftText, translated: visibleDraftTranslatedText)
                     .background(draftSlotHeightReader),
                     key: promotionKey(
                         promotionID: state.draftPromotionID,
@@ -247,6 +217,92 @@ struct OverlayView: View {
             minHeight: draftSlotHeight(for: state),
             maxHeight: draftSlotHeight(for: state),
             alignment: .top
+        )
+    }
+
+    /// Every layout uses the same ordering primitive. Column placement is forced to
+    /// physical left-to-right so Arabic UI chrome cannot reverse the user's chosen
+    /// left/right mode; each caption restores the direction of its own language.
+    @ViewBuilder
+    private func draftBody(
+        state: OverlayPreviewState,
+        draftText: String,
+        translated: String?
+    ) -> some View {
+        if usesColumnCaptions {
+            HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
+                inLayoutOrder(
+                    translated: {
+                        captionColumn {
+                            draftTranslatedLine(translated)
+                        }
+                        .environment(\.layoutDirection, draftTranslatedCaptionLayoutDirection)
+                    },
+                    original: {
+                        captionColumn {
+                            draftSourceLine(state: state, draftText: draftText)
+                        }
+                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
+                    }
+                )
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        } else {
+            VStack(spacing: 2) {
+                inLayoutOrder(
+                    translated: {
+                        Group {
+                            if showsTranslatedSubtitle {
+                                draftTranslatedLine(translated)
+                            }
+                        }
+                        .environment(\.layoutDirection, draftTranslatedCaptionLayoutDirection)
+                    },
+                    original: {
+                        Group {
+                            if showsOriginalSubtitle {
+                                draftSourceLine(state: state, draftText: draftText)
+                            }
+                        }
+                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
+                    }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func draftTranslatedLine(_ translated: String?) -> some View {
+        if let translated {
+            translatedText(
+                translated,
+                color: subtitleColor(opacity: 0.55)
+            )
+        } else if model.shouldReserveDraftTranslationSlot {
+            Text(" ")
+                .font(.system(size: model.overlayStyle.scaledTranslatedFontSize, weight: .semibold))
+                .multilineTextAlignment(captionTextAlignment)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .hidden()
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func draftSourceLine(state: OverlayPreviewState, draftText: String) -> some View {
+        let prefixLen = min(state.draftStablePrefixLength, draftText.count)
+        let stable = String(draftText.prefix(prefixLen))
+        let mutable = String(draftText.dropFirst(prefixLen))
+
+        return captionText(
+            draftSourceAttributedText(
+                stable: stable,
+                mutable: mutable
+            ),
+            rawText: draftText,
+            fontSize: displayedSourceFontSize,
+            weight: displayedSourceFontWeight
         )
     }
 
@@ -356,8 +412,9 @@ struct OverlayView: View {
             translated: entry.translatedText,
             source: entry.sourceText
         )
+        let translatedText = usesFallback ? entry.sourceText : entry.translatedText
         return estimatedCaptionPairHeight(
-            showsTranslated: showsTranslatedSubtitle,
+            showsTranslated: showsTranslatedSubtitle && translatedText.isEmpty == false,
             showsSource: showsOriginalSubtitle && entry.sourceText.isEmpty == false && usesFallback == false
         )
     }
@@ -387,7 +444,9 @@ struct OverlayView: View {
             ? translatedLineHeight
             : 0
         let sourceHeight = showsOriginalSubtitle ? sourceLineHeight : 0
-        return translatedHeight + sourceHeight
+        return usesColumnCaptions
+            ? max(translatedHeight, sourceHeight)
+            : translatedHeight + sourceHeight
     }
 
     private func displayedDraftTranslatedText(
@@ -480,7 +539,72 @@ struct OverlayView: View {
         }
     }
 
+    @ViewBuilder
     private func captionPair(
+        translated: String,
+        translatedColor: Color,
+        source: String,
+        sourceColor: Color
+    ) -> some View {
+        if usesColumnCaptions {
+            // Both languages are already on screen at once, so the translated column
+            // never borrows the original text as a stand-in while translation lags.
+            HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
+                inLayoutOrder(
+                    translated: {
+                        captionColumn {
+                            if translated.isEmpty == false {
+                                translatedText(translated, color: translatedColor)
+                            }
+                        }
+                        .environment(\.layoutDirection, translatedCaptionLayoutDirection)
+                    },
+                    original: {
+                        captionColumn {
+                            if source.isEmpty == false {
+                                sourceText(source, color: sourceColor)
+                            }
+                        }
+                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
+                    }
+                )
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        } else {
+            stackedCaptionPair(
+                translated: translated,
+                translatedColor: translatedColor,
+                source: source,
+                sourceColor: sourceColor
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func captionColumn<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// Emits the translated and original halves in the order this layout asks for,
+    /// so row order and column order are decided in exactly one place.
+    @ViewBuilder
+    private func inLayoutOrder<Translated: View, Original: View>(
+        @ViewBuilder translated: () -> Translated,
+        @ViewBuilder original: () -> Original
+    ) -> some View {
+        if captionLayout.leadsWithTranslation {
+            translated()
+            original()
+        } else {
+            original()
+            translated()
+        }
+    }
+
+    private func stackedCaptionPair(
         translated: String,
         translatedColor: Color,
         source: String,
@@ -491,45 +615,50 @@ struct OverlayView: View {
             source: source
         )
         let primaryTranslatedText = usesFallback ? source : translated
+        let showsTranslatedLine = showsTranslatedSubtitle && primaryTranslatedText.isEmpty == false
         let showsSourceLine = showsOriginalSubtitle && source.isEmpty == false && usesFallback == false
 
         return VStack(spacing: Self.captionPairSpacing) {
-            if model.overlayStyle.translatedFirst {
-                if showsTranslatedSubtitle {
-                    translatedText(
-                        primaryTranslatedText,
-                        color: translatedColor
+            inLayoutOrder(
+                translated: {
+                    Group {
+                        if showsTranslatedLine {
+                            translatedText(
+                                primaryTranslatedText,
+                                color: translatedColor
+                            )
+                        }
+                    }
+                    .environment(
+                        \.layoutDirection,
+                        usesFallback ? originalCaptionLayoutDirection : translatedCaptionLayoutDirection
                     )
+                },
+                original: {
+                    Group {
+                        if showsSourceLine {
+                            sourceText(
+                                source,
+                                color: sourceColor
+                            )
+                        }
+                    }
+                    .environment(\.layoutDirection, originalCaptionLayoutDirection)
                 }
-
-                if showsSourceLine {
-                    sourceText(
-                        source,
-                        color: sourceColor
-                    )
-                }
-            } else {
-                if showsSourceLine {
-                    sourceText(
-                        source,
-                        color: sourceColor
-                    )
-                }
-
-                if showsTranslatedSubtitle {
-                    translatedText(
-                        primaryTranslatedText,
-                        color: translatedColor
-                    )
-                }
-            }
+            )
         }
     }
 
     /// usesSourceAsTranslationFallback
     /// Returns true when a translated slot should show source text while translation is pending.
     private func usesSourceAsTranslationFallback(translated: String, source: String) -> Bool {
-        showsTranslatedSubtitle && translated.isEmpty && source.isEmpty == false
+        showsTranslatedSubtitle
+            && translated.isEmpty
+            && source.isEmpty == false
+            && (
+                showsOriginalSubtitle == false
+                    || (usesColumnCaptions == false && captionLayout.leadsWithTranslation)
+            )
     }
 
     private var showsOriginalSubtitle: Bool {
@@ -572,8 +701,126 @@ struct OverlayView: View {
     ) -> CGFloat {
         let translatedHeight = showsTranslated ? translatedLineHeight : 0
         let sourceHeight = showsSource ? sourceLineHeight : 0
+
+        if usesColumnCaptions {
+            return max(translatedHeight, sourceHeight)
+        }
+
         let spacingHeight = (showsTranslated && showsSource) ? Self.captionPairSpacing : 0
         return translatedHeight + spacingHeight + sourceHeight
+    }
+
+    private var captionLayout: OverlayCaptionLayout {
+        model.overlayStyle.captionLayout
+    }
+
+    private var translatedCaptionLayoutDirection: LayoutDirection {
+        captionLayoutDirection(for: model.outputLanguageID)
+    }
+
+    private var draftTranslatedCaptionLayoutDirection: LayoutDirection {
+        model.shouldReserveDraftTranslationSlot && showsOriginalSubtitle == false
+            ? originalCaptionLayoutDirection
+            : translatedCaptionLayoutDirection
+    }
+
+    private var originalCaptionLayoutDirection: LayoutDirection {
+        captionLayoutDirection(for: model.inputLanguageID)
+    }
+
+    private func captionLayoutDirection(for languageID: String) -> LayoutDirection {
+        Locale.Language(identifier: languageID).characterDirection == .rightToLeft
+            ? .rightToLeft
+            : .leftToRight
+    }
+
+    private var interfaceLabelLayoutDirection: LayoutDirection {
+        captionLayoutDirection(for: model.resolvedInterfaceLanguageID)
+    }
+
+    /// Columns only make sense with both languages on screen, so a column layout
+    /// falls back to its row rendering whenever one side is switched off.
+    private var usesColumnCaptions: Bool {
+        captionLayout.usesColumns
+            && showsTranslatedSubtitle
+            && showsOriginalSubtitle
+    }
+
+    private var captionTextAlignment: TextAlignment {
+        usesColumnCaptions ? .leading : .center
+    }
+
+    private var captionFrameAlignment: Alignment {
+        usesColumnCaptions ? .leading : .center
+    }
+
+    private var captionColumnHeaderHeight: CGFloat {
+        usesColumnCaptions ? Self.columnHeaderHeight : 0
+    }
+
+    @ViewBuilder
+    private var captionColumnDivider: some View {
+        if usesColumnCaptions {
+            LinearGradient(
+                stops: [
+                    .init(color: EasyBrand.peach.opacity(0.0), location: 0.0),
+                    .init(color: EasyBrand.peach.opacity(0.30), location: 0.16),
+                    .init(color: EasyBrand.peach.opacity(0.30), location: 0.94),
+                    .init(color: EasyBrand.peach.opacity(0.0), location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: 1)
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private var captionColumnHeader: some View {
+        if usesColumnCaptions {
+            HStack(alignment: .firstTextBaseline, spacing: Self.captionColumnSpacing) {
+                inLayoutOrder(
+                    translated: {
+                        captionColumnLabel(
+                            role: model.localized(.subtitleShort),
+                            language: model.languageName(for: model.outputLanguageID)
+                        )
+                        .environment(\.layoutDirection, interfaceLabelLayoutDirection)
+                    },
+                    original: {
+                        captionColumnLabel(
+                            role: model.localized(.inputShort),
+                            language: model.languageName(for: model.inputLanguageID)
+                        )
+                        .environment(\.layoutDirection, interfaceLabelLayoutDirection)
+                    }
+                )
+            }
+            .frame(height: Self.columnHeaderHeight, alignment: .center)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+    }
+
+    private func captionColumnLabel(role: String, language: String) -> some View {
+        Text(verbatim: "\(role) · \(language)")
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.5)
+            .foregroundStyle(EasyBrand.cream.opacity(0.92))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background {
+                Capsule()
+                    .fill(EasyBrand.plum.opacity(0.94))
+                    .overlay {
+                        Capsule()
+                            .stroke(EasyBrand.peach.opacity(0.32), lineWidth: 0.5)
+                    }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var continuousFlowMask: some View {
@@ -613,10 +860,10 @@ struct OverlayView: View {
 
             Text(attributedText)
                 .font(.system(size: fontSize, weight: weight))
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(captionTextAlignment)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: captionFrameAlignment)
         }
     }
 
@@ -661,10 +908,10 @@ struct OverlayView: View {
                 Text(text)
                     .font(.system(size: fontSize, weight: weight))
                     .foregroundStyle(baseTextOutlineColor)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(captionTextAlignment)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: captionFrameAlignment)
                     .offset(x: offset.width, y: offset.height)
             }
         }
@@ -756,6 +1003,10 @@ private extension OverlayView {
     static let draftBottomInset: CGFloat = 3.0
     static let draftHeightJitterTolerance: CGFloat = 6.0
     static let captionPairSpacing: CGFloat = 4.0
+    /// Gap between the two 50/50 caption columns, and the height reserved for their
+    /// role labels above the flow.
+    static let captionColumnSpacing: CGFloat = 24.0
+    static let columnHeaderHeight: CGFloat = 24.0
     static let textOutlineOffsets: [CGSize] = [
         CGSize(width: -1, height: 0),
         CGSize(width: 1, height: 0),

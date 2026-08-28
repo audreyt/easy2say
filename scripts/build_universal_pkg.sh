@@ -6,7 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/v2s.xcodeproj"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT_DIR/.build/universal-pkg}"
 DERIVED_DATA="$BUILD_ROOT/DerivedData"
-APP_PATH="$DERIVED_DATA/Build/Products/Release/v2s.app"
+APP_PATH="$DERIVED_DATA/Build/Products/Release/Easy2say.app"
+PACKAGE_SCRIPTS_DIR="$ROOT_DIR/packaging/macos/scripts"
+STABLE_OUTPUT_PATH="${STABLE_OUTPUT_PATH:-$BUILD_ROOT/Easy2say-universal.pkg}"
 OUTPUT_PATH="${OUTPUT_PATH:-}"
 INSTALLER_IDENTITY="${INSTALLER_IDENTITY:-}"
 
@@ -74,6 +76,7 @@ require_cmd shasum
 require_cmd xcodebuild
 
 [[ -d "$PROJECT_PATH" ]] || fail "Xcode project not found: $PROJECT_PATH"
+[[ -x "$PACKAGE_SCRIPTS_DIR/preinstall" ]] || fail "Executable preinstall migration script not found: $PACKAGE_SCRIPTS_DIR/preinstall"
 
 mkdir -p "$BUILD_ROOT"
 rm -rf "$DERIVED_DATA/Build"
@@ -99,9 +102,15 @@ codesign --verify --deep --strict "$APP_PATH"
 
 version="$(plutil -extract CFBundleShortVersionString raw "$APP_PATH/Contents/Info.plist")"
 [[ -n "$version" ]] || fail "Could not read CFBundleShortVersionString"
+bundle_name="$(plutil -extract CFBundleName raw "$APP_PATH/Contents/Info.plist")"
+bundle_executable="$(plutil -extract CFBundleExecutable raw "$APP_PATH/Contents/Info.plist")"
+bundle_identifier="$(plutil -extract CFBundleIdentifier raw "$APP_PATH/Contents/Info.plist")"
+[[ "$bundle_name" == "Easy2say" ]] || fail "Unexpected CFBundleName: $bundle_name"
+[[ "$bundle_executable" == "Easy2say" ]] || fail "Unexpected CFBundleExecutable: $bundle_executable"
+[[ "$bundle_identifier" == "com.franklioxygen.v2s" ]] || fail "Unexpected bundle identifier: $bundle_identifier"
 
 if [[ -z "$OUTPUT_PATH" ]]; then
-  OUTPUT_PATH="$BUILD_ROOT/v2s-${version}-universal.pkg"
+  OUTPUT_PATH="$BUILD_ROOT/Easy2say-${version}-universal.pkg"
 fi
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 rm -f "$OUTPUT_PATH"
@@ -111,6 +120,7 @@ pkg_args=(
   --install-location /Applications
   --identifier com.franklioxygen.v2s.pkg
   --version "$version"
+  --scripts "$PACKAGE_SCRIPTS_DIR"
 )
 if [[ -n "$INSTALLER_IDENTITY" ]]; then
   pkg_args+=(--sign "$INSTALLER_IDENTITY")
@@ -123,7 +133,12 @@ case "$payload_files" in
     fail "Installer payload contains a forbidden model asset"
     ;;
 esac
+if [[ "$OUTPUT_PATH" != "$STABLE_OUTPUT_PATH" ]]; then
+  mkdir -p "$(dirname "$STABLE_OUTPUT_PATH")"
+  ln -f "$OUTPUT_PATH" "$STABLE_OUTPUT_PATH"
+fi
 
 checksum="$(shasum -a 256 "$OUTPUT_PATH" | cut -d ' ' -f 1)"
 printf 'Built %s\n' "$OUTPUT_PATH"
+printf 'Stable asset %s\n' "$STABLE_OUTPUT_PATH"
 printf 'SHA-256: %s\n' "$checksum"

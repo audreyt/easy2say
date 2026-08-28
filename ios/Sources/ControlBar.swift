@@ -12,9 +12,9 @@ struct ControlBar: View {
     @State private var languageSwapDragOffset: CGFloat = 0
     @State private var languageSwapIsOnRight = false
 
-    private var accent: Color {
-        IOSTheme.color(model.iOSCaptionAccentColor)
-    }
+    /// Chrome is always brand peach; the reader's caption colour stays in the
+    /// captions themselves.
+    private let accent = IOSTheme.brand
 
     private var canSwapLanguages: Bool {
         let inputID = model.iOSEffectiveInputLanguageID
@@ -92,13 +92,13 @@ struct ControlBar: View {
 
             HStack {
                 Circle()
-                    .fill(Color.white.opacity(languageSwapIsOnRight ? 0.16 : 0.34))
+                    .fill(IOSTheme.primaryText.opacity(languageSwapIsOnRight ? 0.16 : 0.34))
                     .frame(width: 3, height: 3)
 
                 Spacer()
 
                 Circle()
-                    .fill(Color.white.opacity(languageSwapIsOnRight ? 0.34 : 0.16))
+                    .fill(IOSTheme.primaryText.opacity(languageSwapIsOnRight ? 0.34 : 0.16))
                     .frame(width: 3, height: 3)
             }
             .frame(width: 50)
@@ -215,20 +215,20 @@ struct ControlBar: View {
                         ? "exclamationmark.triangle.fill"
                         : "arrow.down.circle.fill"
                 )
-                .foregroundStyle(resourceStatus.isError ? Color.red.opacity(0.92) : accent)
+                .foregroundStyle(resourceStatus.isError ? IOSTheme.alert : accent)
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(resourceStatus.title)
                         .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.88))
+                        .foregroundStyle(IOSTheme.primaryText.opacity(0.90))
                         .lineLimit(1)
 
                     Text(resourceStatus.detail)
                         .font(.system(.caption2, design: .rounded))
                         .foregroundStyle(
                             resourceStatus.isError
-                                ? Color.red.opacity(0.88)
+                                ? IOSTheme.alert
                                 : IOSTheme.secondaryText
                         )
                         .lineLimit(2)
@@ -253,14 +253,10 @@ struct ControlBar: View {
             .transition(.opacity)
         } else {
             HStack(spacing: 9) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 7, height: 7)
-                    .shadow(
-                        color: statusColor.opacity(0.8),
-                        radius: model.sessionState == .running ? 5 : 0
-                    )
-                    .accessibilityHidden(true)
+                BrandStatusMark(
+                    isLive: model.sessionState == .running,
+                    isError: model.sessionState == .error
+                )
 
                 Text(
                     model.statusMessage.isEmpty
@@ -268,7 +264,7 @@ struct ControlBar: View {
                         : model.statusMessage
                 )
                 .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(IOSTheme.secondaryText)
                 .lineLimit(2)
 
                 Spacer(minLength: 4)
@@ -283,17 +279,6 @@ struct ControlBar: View {
     private var prioritizedResourceStatus: LanguageResourceStatus? {
         model.languageResourceStatuses.first(where: \.isError)
             ?? model.languageResourceStatuses.first
-    }
-
-    private var statusColor: Color {
-        switch model.sessionState {
-        case .idle:
-            return Color.white.opacity(0.34)
-        case .running:
-            return accent
-        case .error:
-            return .red
-        }
     }
 
     private var selectedSourceDisplay: String {
@@ -408,12 +393,12 @@ private struct LanguagePill: View {
                 Text(role.uppercased())
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .tracking(0.7)
-                    .foregroundStyle(Color.white.opacity(0.42))
+                    .foregroundStyle(IOSTheme.tertiaryText)
                     .lineLimit(1)
 
                 Text(value)
                     .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(IOSTheme.primaryText.opacity(0.92))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
@@ -421,7 +406,7 @@ private struct LanguagePill: View {
 
             Image(systemName: "chevron.down")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.34))
+                .foregroundStyle(IOSTheme.primaryText.opacity(0.38))
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 11)
@@ -451,13 +436,13 @@ private struct MicrophoneChip: View {
 
             Text(value)
                 .font(.system(.caption2, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(IOSTheme.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
             Image(systemName: "chevron.down")
                 .font(.system(size: 7, weight: .bold))
-                .foregroundStyle(Color.white.opacity(0.30))
+                .foregroundStyle(IOSTheme.primaryText.opacity(0.34))
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 10)
@@ -465,11 +450,11 @@ private struct MicrophoneChip: View {
         .frame(maxWidth: 144)
         .background(
             Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.055))
+                .fill(IOSTheme.primaryText.opacity(0.055))
         )
         .overlay {
             Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.085), lineWidth: 0.5)
+                .stroke(IOSTheme.hairline, lineWidth: 0.5)
         }
         .contentShape(Capsule(style: .continuous))
     }
@@ -484,15 +469,15 @@ struct ControlIconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.86))
+                .foregroundStyle(IOSTheme.primaryText.opacity(0.88))
                 .frame(width: 48, height: 48)
                 .background(
                     Circle()
-                        .fill(Color.white.opacity(0.065))
+                        .fill(IOSTheme.primaryText.opacity(0.065))
                 )
                 .overlay {
                     Circle()
-                        .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                        .stroke(IOSTheme.hairline, lineWidth: 0.5)
                 }
         }
         .buttonStyle(.plain)
@@ -537,7 +522,7 @@ struct SessionCapsuleButton: View {
                         Circle()
                             .fill(
                                 isLive
-                                    ? AnyShapeStyle(Color.white.opacity(0.075))
+                                    ? AnyShapeStyle(IOSTheme.primaryText.opacity(0.075))
                                     : AnyShapeStyle(
                                         LinearGradient(
                                             colors: [accent.opacity(0.98), accent.opacity(0.72)],
@@ -549,7 +534,7 @@ struct SessionCapsuleButton: View {
                             .frame(width: buttonSize, height: buttonSize)
                             .overlay {
                                 Circle()
-                                    .stroke(Color.white.opacity(isLive ? 0.14 : 0.30), lineWidth: 0.5)
+                                    .stroke(IOSTheme.primaryText.opacity(isLive ? 0.14 : 0.30), lineWidth: 0.5)
                             }
                             .shadow(
                                 color: accent.opacity(isLive ? 0.18 + pulse * 0.22 : 0.16),
@@ -560,10 +545,10 @@ struct SessionCapsuleButton: View {
                         if showsActivity {
                             ProgressView()
                                 .controlSize(usesCompactDock ? .small : .regular)
-                                .tint(Color.black.opacity(0.78))
+                                .tint(EasyBrand.plum)
                         } else if isLive {
                             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.red.opacity(0.92))
+                                .fill(IOSTheme.alert)
                                 .frame(
                                     width: usesCompactDock ? 16 : 19,
                                     height: usesCompactDock ? 16 : 19
@@ -577,7 +562,7 @@ struct SessionCapsuleButton: View {
                                         weight: .bold
                                     )
                                 )
-                                .foregroundStyle(Color.black.opacity(0.80))
+                                .foregroundStyle(EasyBrand.plum)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -586,7 +571,7 @@ struct SessionCapsuleButton: View {
                     if usesCompactDock == false {
                         Text(title)
                             .font(.system(.caption2, design: .rounded, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.68))
+                            .foregroundStyle(IOSTheme.secondaryText.opacity(0.94))
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                             .frame(maxWidth: 116)

@@ -31,12 +31,12 @@ private enum AppBuildInfo {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
     static var buildNumber: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "50"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "51"
     }
 #else
-    static let marketingVersion = "0.3.37"
-    static let buildNumber = "41"
-    static let repositoryURLString = "https://github.com/franklioxygen/v2s"
+    static let marketingVersion = "0.3.38"
+    static let buildNumber = "42"
+    static let repositoryURLString = "https://github.com/audreyt/easy2say"
     static let repositoryURL = URL(string: repositoryURLString)
 #endif
 }
@@ -3480,31 +3480,31 @@ final class AppModel: ObservableObject {
     private func sampleText(for languageID: String) -> String {
         switch languageID {
         case "zh-Hans":
-            return "欢迎使用 v2s，顶部字幕条已经准备好了。"
+            return "欢迎使用 Easy2say，顶部字幕条已经准备好了。"
         case "zh-Hant":
-            return "歡迎使用 v2s，頂部字幕列已經準備好了。"
+            return "歡迎使用 Easy2say，頂部字幕列已經準備好了。"
         case "es":
-            return "Bienvenido a v2s. La barra de subtitulos ya esta lista."
+            return "Bienvenido a Easy2say. La barra de subtitulos ya esta lista."
         case "de":
-            return "Willkommen bei v2s. Die Untertitel-Leiste ist bereit."
+            return "Willkommen bei Easy2say. Die Untertitel-Leiste ist bereit."
         case "ja":
-            return "v2s へようこそ。字幕バーの準備ができました。"
+            return "Easy2say へようこそ。字幕バーの準備ができました。"
         case "fr":
-            return "Bienvenue dans v2s. La barre de sous-titres est prete."
+            return "Bienvenue dans Easy2say. La barre de sous-titres est prete."
         case "it":
-            return "Benvenuto in v2s. La barra dei sottotitoli e pronta."
+            return "Benvenuto in Easy2say. La barra dei sottotitoli e pronta."
         case "ko":
-            return "v2s에 오신 것을 환영합니다. 자막 바가 준비되었습니다."
+            return "Easy2say에 오신 것을 환영합니다. 자막 바가 준비되었습니다."
         case "yue":
-            return "歡迎使用 v2s，字幕列已經準備好。"
+            return "歡迎使用 Easy2say，字幕列已經準備好。"
         case "ar":
-            return "مرحبا بك في v2s. شريط الترجمة جاهز."
+            return "مرحبا بك في Easy2say. شريط الترجمة جاهز."
         case "pt":
-            return "Bem-vindo ao v2s. A barra de legendas esta pronta."
+            return "Bem-vindo ao Easy2say. A barra de legendas esta pronta."
         case "ru":
-            return "Добро пожаловать в v2s. Строка субтитров готова."
+            return "Добро пожаловать в Easy2say. Строка субтитров готова."
         default:
-            return "Welcome to v2s. The subtitle bar is ready."
+            return "Welcome to Easy2say. The subtitle bar is ready."
         }
     }
 

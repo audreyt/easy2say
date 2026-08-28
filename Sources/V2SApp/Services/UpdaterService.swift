@@ -52,14 +52,23 @@ final class UpdaterService: ObservableObject {
 
 @MainActor
 final class LaunchAtLoginService: ObservableObject {
+    private static let pathMigrationDefaultsKey = "easy2sayLaunchAtLoginPathMigrationV1"
+    private static let pathMigrationPendingKey = "easy2sayLaunchAtLoginPathMigrationPendingV1"
+
     private let appService = SMAppService.mainApp
     private var cancellables = Set<AnyCancellable>()
+    private let userDefaults: UserDefaults
 
     @Published private(set) var launchesAtLogin = false
     @Published private(set) var requiresApproval = false
     @Published private(set) var updateErrorMessage: String?
 
-    init(notificationCenter: NotificationCenter = .default) {
+    init(
+        notificationCenter: NotificationCenter = .default,
+        userDefaults: UserDefaults = .standard
+    ) {
+        self.userDefaults = userDefaults
+        migrateLegacyRegistrationIfNeeded()
         refreshStatus()
 
         notificationCenter.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -68,6 +77,55 @@ final class LaunchAtLoginService: ObservableObject {
                 self?.refreshStatus()
             }
             .store(in: &cancellables)
+    }
+
+    private func migrateLegacyRegistrationIfNeeded() {
+        guard userDefaults.bool(forKey: Self.pathMigrationDefaultsKey) == false else {
+            return
+        }
+
+        let registrationWasEnabled = userDefaults.bool(forKey: Self.pathMigrationPendingKey)
+        if registrationWasEnabled {
+            refreshMigratedRegistration()
+            return
+        }
+
+        switch appService.status {
+        case .enabled, .requiresApproval:
+            userDefaults.set(true, forKey: Self.pathMigrationPendingKey)
+            refreshMigratedRegistration()
+        case .notRegistered, .notFound:
+            userDefaults.set(true, forKey: Self.pathMigrationDefaultsKey)
+        @unknown default:
+            break
+        }
+    }
+
+    private func refreshMigratedRegistration() {
+        switch appService.status {
+        case .enabled, .requiresApproval:
+            do {
+                try appService.unregister()
+            } catch {
+                Logger.launchAtLogin.warning(
+                    "Could not remove the legacy launch-at-login registration: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        case .notRegistered, .notFound:
+            break
+        @unknown default:
+            return
+        }
+
+        do {
+            try appService.register()
+            userDefaults.set(true, forKey: Self.pathMigrationDefaultsKey)
+            userDefaults.removeObject(forKey: Self.pathMigrationPendingKey)
+        } catch {
+            Logger.launchAtLogin.warning(
+                "Could not register Easy2say at its new application path: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     func setLaunchesAtLogin(_ shouldLaunchAtLogin: Bool) {

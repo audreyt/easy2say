@@ -119,7 +119,7 @@ struct ConversationView: View {
         ConversationControlStrip(
             model: model,
             engine: engine,
-            accent: accent,
+            accent: IOSTheme.brand,
             warning: warning,
             isToggleDisabled: isToggleDisabled,
             toggleSession: toggleSession,
@@ -158,7 +158,7 @@ struct ConversationModeSwitch: View {
                 .frame(width: 32, height: 32)
                 .background(
                     Circle()
-                        .fill(Color.white.opacity(0.055))
+                        .fill(IOSTheme.primaryText.opacity(0.055))
                 )
                 .overlay {
                     Circle()
@@ -255,18 +255,18 @@ private struct ConversationHalf: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
                     holdsFloor
-                        ? accent.opacity(0.085)
-                        : IOSTheme.elevated.opacity(0.74)
+                        ? IOSTheme.brand.opacity(0.10)
+                        : IOSTheme.elevated.opacity(0.78)
                 )
         )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(
-                    holdsFloor ? accent.opacity(0.46) : IOSTheme.hairline,
+                    holdsFloor ? IOSTheme.brand.opacity(0.52) : IOSTheme.hairline,
                     lineWidth: holdsFloor ? 1 : 0.5
                 )
         }
-        .shadow(color: accent.opacity(holdsFloor ? 0.18 : 0.0), radius: 16)
+        .shadow(color: IOSTheme.brand.opacity(holdsFloor ? 0.20 : 0.0), radius: 16)
         .animation(.easeOut(duration: 0.22), value: holdsFloor)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -284,12 +284,12 @@ private struct ConversationHalf: View {
         HStack(spacing: 7) {
             Image(systemName: "mic.fill")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.88))
+                .foregroundStyle(IOSTheme.brand)
                 .accessibilityHidden(true)
 
             Text(model.localized(.conversationSpeakingFormat, languageName))
                 .font(.system(.caption2, design: .rounded, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.88))
+                .foregroundStyle(IOSTheme.brand)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .transition(.opacity)
@@ -328,13 +328,13 @@ private struct ConversationHalf: View {
             // The rule tells "my words" from "their words" without repeating a
             // language name on every line.
             Capsule(style: .continuous)
-                .fill(turn.side == side ? accent.opacity(0.34) : Color.white.opacity(0.16))
+                .fill(turn.side == side ? IOSTheme.brand.opacity(0.38) : IOSTheme.primaryText.opacity(0.16))
                 .frame(width: 2)
                 .accessibilityHidden(true)
 
             Text(engine.text(of: turn, readBy: side))
                 .font(.system(size: baseHistorySize * scale, weight: .regular, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.42))
+                .foregroundStyle(IOSTheme.tertiaryText)
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .multilineTextAlignment(.leading)
@@ -344,29 +344,36 @@ private struct ConversationHalf: View {
     }
 
     private var emptyHint: some View {
-        Text(
-            AppLocalization.string(
-                .conversationEmptyHint,
-                languageID: readerInterfaceLanguageID
+        VStack(spacing: 14) {
+            Easy2sayMark()
+                .fill(IOSTheme.brand.opacity(0.42))
+                .frame(width: 46, height: 46 / Easy2sayMark().aspectRatio)
+                .accessibilityHidden(true)
+
+            Text(
+                AppLocalization.string(
+                    .conversationEmptyHint,
+                    languageID: readerInterfaceLanguageID
+                )
             )
-        )
             .font(.system(.subheadline, design: .rounded))
             .foregroundStyle(IOSTheme.secondaryText)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func failureContent(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.red.opacity(0.90))
+                .foregroundStyle(IOSTheme.alert)
                 .accessibilityHidden(true)
 
             Text(message)
                 .font(.system(.subheadline, design: .rounded, weight: .medium))
-                .foregroundStyle(Color.red.opacity(0.88))
+                .foregroundStyle(IOSTheme.alert)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -451,19 +458,19 @@ private struct ConversationControlStrip: View {
             Button(action: showSettings) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Color.red.opacity(0.92))
+                        .foregroundStyle(IOSTheme.alert)
                         .accessibilityHidden(true)
 
                     Text(warning)
                         .font(.system(.caption, design: .rounded, weight: .medium))
-                        .foregroundStyle(Color.red.opacity(0.88))
+                        .foregroundStyle(IOSTheme.alert)
                         .lineLimit(2)
 
                     Spacer(minLength: 0)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color.red.opacity(0.62))
+                        .foregroundStyle(IOSTheme.alert.opacity(0.66))
                         .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
@@ -473,15 +480,14 @@ private struct ConversationControlStrip: View {
             .transition(.opacity)
         } else if let phaseTitle {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(engine.phase == .listening ? accent : Color.white.opacity(0.34))
-                    .frame(width: 6, height: 6)
-                    .shadow(color: accent.opacity(engine.phase == .listening ? 0.8 : 0.0), radius: 5)
-                    .accessibilityHidden(true)
+                BrandStatusMark(
+                    isLive: engine.phase == .listening,
+                    isError: phaseIsFailed
+                )
 
                 Text(phaseTitle)
                     .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .foregroundStyle(IOSTheme.secondaryText)
                     .lineLimit(2)
 
                 Spacer(minLength: 0)
@@ -510,6 +516,13 @@ private struct ConversationControlStrip: View {
         }
     }
 
+    private var phaseIsFailed: Bool {
+        if case .failed = engine.phase {
+            return true
+        }
+        return false
+    }
+
     private var languagePairLine: some View {
         HStack(spacing: 8) {
             languagePill(for: .primary)
@@ -533,7 +546,7 @@ private struct ConversationControlStrip: View {
     private func languagePill(for side: ConversationSide) -> some View {
         Text(LanguageCatalog.autonym(for: engine.languageID(for: side)))
             .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(0.74))
+            .foregroundStyle(IOSTheme.primaryText.opacity(0.78))
             .lineLimit(1)
             .minimumScaleFactor(0.72)
             .padding(.horizontal, 10)

@@ -1,11 +1,17 @@
+import AppKit
 import SwiftUI
 
 struct StatusBarPopoverView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var model: AppModel
     let closePopover: () -> Void
     let openAdvancedSettings: () -> Void
     let showTranscript: () -> Void
     let quitApp: () -> Void
+
+    private var isLive: Bool {
+        model.sessionState == .running
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,11 +44,9 @@ struct StatusBarPopoverView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
-                Image(systemName: "captions.bubble.fill")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
+                BrandMarkBadge(size: 26)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("v2s")
+                    Text(verbatim: "Easy2say")
                         .font(.headline)
                     Text(model.statusMessage)
                         .font(.caption)
@@ -58,9 +62,16 @@ struct StatusBarPopoverView: View {
                     )
                     Text(model.sessionBadgeText)
                         .font(.caption2.weight(.medium))
+                        .foregroundStyle(isLive ? EasyBrand.plum : Color.primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(.fill.tertiary, in: Capsule())
+                        .background {
+                            if isLive {
+                                Capsule().fill(EasyBrand.peach)
+                            } else {
+                                Capsule().fill(.fill.tertiary)
+                            }
+                        }
                 }
             }
             Button {
@@ -77,6 +88,7 @@ struct StatusBarPopoverView: View {
             .controlSize(.large)
             .disabled(model.isSessionButtonDisabled)
         }
+        .tint(EasyBrand.controlTint(for: colorScheme))
         .padding(16)
     }
 
@@ -171,6 +183,12 @@ struct StatusBarPopoverView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+            }
+            SettingsControlRow(label: model.localized(.captionLayout)) {
+                CaptionLayoutMenuPicker(
+                    interfaceLanguageID: model.resolvedInterfaceLanguageID,
+                    selection: model.overlayCaptionLayoutSelectionBinding
+                )
             }
             VStack(spacing: 6) {
                 SettingsControlRow(label: model.localized(.textOutline)) {
@@ -295,6 +313,27 @@ struct StatusBarPopoverView: View {
             get: { model.overlayStyle.sourceFontSize },
             set: { v in model.updateOverlayStyle { $0.sourceFontSize = v } }
         )
+    }
+}
+
+/// The shipped app icon, reused as the brand chip so the menu-bar UI and the Dock
+/// show one paired-voice mark rather than two drawings of it.
+struct BrandMarkBadge: View {
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let icon = NSApp.applicationIconImage {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                EasyBrand.plum
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 

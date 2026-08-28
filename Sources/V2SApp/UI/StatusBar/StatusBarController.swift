@@ -40,7 +40,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         button.action = #selector(togglePopover(_:))
         button.target = self
         button.imagePosition = .imageOnly
-        button.toolTip = "v2s"
+        button.toolTip = "Easy2say"
     }
 
     private func configurePopover() {
@@ -60,31 +60,87 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func bindModel() {
-        model.$sessionState
-            .sink { [weak self] state in
+        Publishers.CombineLatest(model.$sessionState, model.$interfaceLanguageID)
+            .sink { [weak self] state, _ in
                 self?.updateStatusIcon(for: state)
             }
             .store(in: &cancellables)
     }
 
+    /// The menu-bar glyph is the brand mark itself, not an SF bubble, so the tray,
+    /// the Dock icon and the in-app marks are one drawing. Each state remains a
+    /// system-tinted template for contrast: live adds a round badge and error adds
+    /// a diamond badge without changing the underlying bubble.
     private func updateStatusIcon(for state: SessionState) {
-        let symbolName: String
+        guard let button = statusItem.button else { return }
+        let stateDescription = state.displayName(in: model.resolvedInterfaceLanguageID)
+        let description = "Easy2say — \(stateDescription)"
 
+        button.image = Self.statusGlyph(for: state)
+        button.contentTintColor = nil
+        button.toolTip = description
+        button.setAccessibilityLabel(description)
+    }
+
+    private enum StatusBadge {
+        case none
+        case live
+        case error
+    }
+
+    private static func statusGlyph(for state: SessionState) -> NSImage {
         switch state {
         case .idle:
-            symbolName = "captions.bubble"
+            return idleStatusGlyph
         case .running:
-            symbolName = "captions.bubble.fill"
+            return liveStatusGlyph
         case .error:
-            symbolName = "exclamationmark.bubble"
+            return errorStatusGlyph
         }
+    }
 
-        let image = NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: "v2s status icon"
-        )
-        image?.isTemplate = true
-        statusItem.button?.image = image
+    private static let idleStatusGlyph = makeStatusGlyph(badge: .none)
+    private static let liveStatusGlyph = makeStatusGlyph(badge: .live)
+    private static let errorStatusGlyph = makeStatusGlyph(badge: .error)
+
+    private static func makeStatusGlyph(badge: StatusBadge) -> NSImage {
+        let mark = Easy2sayMark()
+        let height: CGFloat = 19
+        let size = NSSize(width: (height * mark.aspectRatio).rounded(), height: height)
+
+        let image = NSImage(size: size, flipped: true) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setFillColor(.black)
+            context.addPath(mark.path(in: rect).cgPath)
+            context.fillPath()
+
+            switch badge {
+            case .none:
+                break
+            case .live:
+                context.fillEllipse(
+                    in: CGRect(x: rect.maxX - 4.5, y: 0.5, width: 4, height: 4)
+                )
+            case .error:
+                let badgeRect = CGRect(x: rect.maxX - 4.8, y: 0.4, width: 4.2, height: 4.2)
+                context.saveGState()
+                context.translateBy(x: badgeRect.midX, y: badgeRect.midY)
+                context.rotate(by: .pi / 4)
+                context.fill(
+                    CGRect(
+                        x: -badgeRect.width / 2,
+                        y: -badgeRect.height / 2,
+                        width: badgeRect.width,
+                        height: badgeRect.height
+                    )
+                )
+                context.restoreGState()
+            }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Easy2say status icon"
+        return image
     }
 
     /// Screen rect of the status bar button, for animation targeting.

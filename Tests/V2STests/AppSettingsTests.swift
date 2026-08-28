@@ -138,6 +138,58 @@ final class AppSettingsTests: XCTestCase {
 
         XCTAssertTrue(decoded.invisibleInRecording)
     }
+
+    func testCaptionLayoutPreservesLegacyTranslationFirstOrder() throws {
+        let data = try JSONEncoder().encode(OverlayStyle.default)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object.removeValue(forKey: "captionLayout")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(OverlayStyle.self, from: legacyData)
+
+        XCTAssertEqual(decoded.captionLayout, .topDown)
+    }
+
+    func testCaptionLayoutPreservesLegacyOriginalFirstOrder() throws {
+        var style = OverlayStyle.default
+        style.translatedFirst = false
+        let data = try JSONEncoder().encode(style)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object.removeValue(forKey: "captionLayout")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(OverlayStyle.self, from: legacyData)
+
+        XCTAssertEqual(decoded.captionLayout, .bottomUp)
+    }
+
+    func testEveryCaptionLayoutSurvivesRoundTrip() throws {
+        for layout in OverlayCaptionLayout.allCases {
+            var style = OverlayStyle.default
+            style.captionLayout = layout
+
+            let data = try JSONEncoder().encode(style)
+            let decoded = try JSONDecoder().decode(OverlayStyle.self, from: data)
+
+            XCTAssertEqual(decoded.captionLayout, layout)
+        }
+    }
+
+    func testCaptionLayoutDirectionsMapToAxesAndLeadingLanguage() {
+        XCTAssertFalse(OverlayCaptionLayout.topDown.usesColumns)
+        XCTAssertTrue(OverlayCaptionLayout.topDown.leadsWithTranslation)
+        XCTAssertFalse(OverlayCaptionLayout.bottomUp.usesColumns)
+        XCTAssertFalse(OverlayCaptionLayout.bottomUp.leadsWithTranslation)
+        XCTAssertTrue(OverlayCaptionLayout.leftToRight.usesColumns)
+        XCTAssertTrue(OverlayCaptionLayout.leftToRight.leadsWithTranslation)
+        XCTAssertTrue(OverlayCaptionLayout.rightToLeft.usesColumns)
+        XCTAssertFalse(OverlayCaptionLayout.rightToLeft.leadsWithTranslation)
+    }
+
     func testHansPrimarySeedsEnglishHansPair() {
         let settings = AppSettings.seeded(primaryLanguage: "zh-Hans-CN")
 

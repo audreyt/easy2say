@@ -14,13 +14,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/audreyt/easy2say/releases/latest/download/v2s-universal.pkg"><strong>Download macOS</strong></a><br>
+  <a href="https://github.com/audreyt/easy2say/releases/latest/download/Easy2say-universal.pkg"><strong>Download macOS</strong></a><br>
   <sub>macOS 26 or later · Apple silicon and Intel</sub>
 </p>
 
 <p align="center">
   <a href="https://easy2say.ai/">
-    <img src="docs/assets/v2s-hero.png" alt="Easy2say showing English and Traditional Chinese captions together on an iPhone">
+    <img src="docs/assets/easy2say-hero.png" alt="Easy2say showing English and Traditional Chinese captions together on an iPhone">
   </a>
 </p>
 
@@ -29,14 +29,14 @@
 
 ## The conversation, not the chrome
 
-`v2s-ios` listens through the device microphone, transcribes with Apple Speech, translates with Apple Translation, and gives the original speech and its translation equal space.
+Easy2say listens through the device microphone, transcribes with Apple Speech, translates with Apple Translation, and gives the original speech and its translation equal space.
 
 - **One screen, two languages.** The source and translation each receive half the display.
 - **Made for either orientation.** Portrait stacks both halves; landscape places them side by side.
 - **Made to share.** Flip the other person’s half 180° to read naturally across a table.
 - **Two-way by design.** Two people can speak their own languages into one microphone and read each utterance in the language they understand.
 - **Private by construction.** No account, network client, cloud transcription, analytics, or telemetry.
-- **A transcript when you need it.** Review the session and adjust settings without leaving the app.
+- **Scroll back without stopping.** Use the overlay scrollbar on Mac or the transcript sheet on iPhone and iPad while captions continue.
 
 ### How two-way conversation works
 
@@ -65,7 +65,7 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 - No accounts or network client.
 - No cloud transcription, analytics, or telemetry.
 - No updater in the iOS target.
-- Microphone audio and captions are never sent to a v2s server; there is no v2s server.
+- Microphone audio and captions are never sent to an Easy2say server; there is no Easy2say server.
 - Apple may initially download language assets required by Speech and Translation. Processing then uses those assets on device.
 - Voice activity detection runs the [Silero VAD](THIRD_PARTY_NOTICES.md) model through Apple’s system Core ML framework.
 - The app bundles no ONNX Runtime, and the [Silero conversion is reproducible](scripts/convert_silero_vad_coreml.py).
@@ -73,13 +73,13 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 
 ## iOS and macOS at a glance
 
-| Capability | `v2s-ios` on iPhone/iPad | `v2s` on macOS |
+| Capability | Easy2say on iPhone/iPad | Easy2say on macOS |
 | --- | --- | --- |
 | Live microphone captions | Yes | Yes |
 | On-device speech recognition and translation | Yes | Yes |
-| Caption presentation | Equal source and translation halves | Floating two-line subtitle bar |
+| Caption presentation | Equal source and translation halves | Translucent vertical or side-by-side overlay; either direction |
 | Capture another app’s audio | No; iOS is microphone-only | Yes |
-| Float captions over other apps | No; captions stay inside `v2s-ios` | Yes |
+| Float captions over other apps | No; captions stay inside Easy2say | Yes |
 
 The iOS app cannot capture another app’s audio and does not provide a cross-app floating overlay. The macOS package preserves that desktop workflow in this fork; the [upstream project](https://github.com/franklioxygen/v2s) remains the original macOS source and release line.
 
@@ -94,6 +94,8 @@ The iOS app cannot capture another app’s audio and does not provide a cross-ap
 ### Universal macOS package
 
 The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. The app is ad-hoc signed and the installer is currently unsigned, so macOS may require **Control-click → Open** or approval under **System Settings → Privacy & Security**.
+
+Version 0.3.38 is the first macOS build under the Easy2say name and update feed. Existing `v2s` users must install this package once manually because older builds still follow the upstream feed and signing key. The installer removes `/Applications/v2s.app` only when its bundle identifier matches this app, installs `/Applications/Easy2say.app`, and preserves the existing settings and model cache paths.
 
 To rebuild the same package locally:
 

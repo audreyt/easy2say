@@ -72,7 +72,7 @@ struct HomeView: View {
                                     title: model.localized(.iosNoMicrophonesTitle),
                                     message: model.localized(.iosNoMicrophonesMessage),
                                     refreshTitle: model.localized(.refreshSources),
-                                    accent: accent,
+                                    accent: IOSTheme.brand,
                                     refresh: model.refreshSources
                                 )
                                 .padding(24)
@@ -88,7 +88,7 @@ struct HomeView: View {
                                 title: model.localized(.microphone),
                                 message: model.localized(.microphonePermissionDenied),
                                 settingsTitle: model.localized(.iosOpenSettings),
-                                accent: accent,
+                                accent: IOSTheme.brand,
                                 openSettings: openSystemSettings
                             )
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -112,7 +112,7 @@ struct HomeView: View {
         }
         .v2sConversationTranslationHost(engine: conversation)
         .environment(\.locale, model.interfaceLocale)
-        .tint(accent)
+        .tint(IOSTheme.brand)
         .animation(.easeInOut(duration: 0.24), value: microphoneAccessDenied)
         .animation(.easeInOut(duration: 0.24), value: hasNoMicrophones)
         .onAppear {
@@ -285,15 +285,15 @@ private struct MicrophonePermissionCallout: View {
         HStack(spacing: 12) {
             Image(systemName: "mic.slash.fill")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.red.opacity(0.90))
+                .foregroundStyle(IOSTheme.alert)
                 .frame(width: 34, height: 34)
-                .background(Circle().fill(Color.red.opacity(0.10)))
+                .background(Circle().fill(IOSTheme.alert.opacity(0.12)))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.90))
+                    .foregroundStyle(IOSTheme.primaryText.opacity(0.92))
 
                 Text(message)
                     .font(.system(.caption, design: .rounded))
@@ -329,7 +329,7 @@ private struct NoMicrophoneCard: View {
 
             Text(title)
                 .font(.system(.title3, design: .rounded, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.92))
+                .foregroundStyle(IOSTheme.primaryText.opacity(0.94))
                 .multilineTextAlignment(.center)
 
             Text(message)

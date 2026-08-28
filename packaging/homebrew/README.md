@@ -1,53 +1,27 @@
 # Homebrew distribution
 
-Users install v2s with:
+`easy2say.rb.template` describes the direct macOS package published from
+`audreyt/easy2say`. Replace `__VERSION__` and `__SHA256__` with the GitHub
+release values before placing it in a tap.
 
-```bash
-brew install --cask franklioxygen/v2s/v2s
-```
+The cask downloads `Easy2say-universal.pkg`, installs `Easy2say.app` under
+`/Applications`, and uninstalls the retained package identifier
+`com.franklioxygen.v2s.pkg`. Bundle identifiers and Application Support paths
+remain unchanged so existing users keep their settings and model caches.
 
-That name resolves to the cask `Casks/v2s.rb` in the tap repository
-`franklioxygen/homebrew-v2s`. Homebrew taps it automatically on first install.
+`scripts/build_universal_pkg.sh` emits both the versioned package and the stable
+`Easy2say-universal.pkg` hard link used by the cask and website.
 
-`v2s.rb.template` in this directory is the source of truth for that cask. The
-`Update Homebrew tap` step in `.github/workflows/release.yml` fills in
-`__VERSION__` and `__SHA256__` from the release it just published, writes the
-result to `Casks/v2s.rb` in the tap, and pushes.
+No Homebrew tap automation is configured in this fork. GitHub Releases is the
+source of truth.
 
-Because the workflow can also be dispatched manually against an existing tag,
-that step first compares the version already in the tap against the one being
-published and skips the push if the tap is newer — re-running the workflow for
-an old tag must not downgrade what `brew install` hands users. Publishing the
-same version again is allowed, so a rebuilt asset can correct a checksum.
+## Gatekeeper
 
-## Setup
+The app is ad-hoc signed and the installer is unsigned until Developer ID
+Application and Developer ID Installer identities are available. A quarantined
+download is therefore expected to be rejected by Gatekeeper. Users must
+Control-click the package and choose **Open**, or approve it under
+**System Settings → Privacy & Security**.
 
-Setup is complete: the tap repository is seeded with the cask for v0.3.35, and
-the `HOMEBREW_TAP_TOKEN` secret is set, so releases update the tap on their own.
-
-That secret is a fine-grained personal access token scoped to `homebrew-v2s`
-with `Contents: Read and write` permission. If it is ever removed or expires,
-the release workflow logs a skip instead of failing, and the tap simply stops
-receiving new versions until it is replaced.
-
-To regenerate the cask by hand, from a checkout of the tap:
-
-```bash
-VERSION=0.3.35
-SHA256=$(curl -fsSL "https://github.com/franklioxygen/v2s/releases/download/v${VERSION}/v2s-${VERSION}.sha256" | awk '{print $1}')
-sed -e "s/__VERSION__/${VERSION}/g" -e "s/__SHA256__/${SHA256}/g" \
-  ../v2s/packaging/homebrew/v2s.rb.template > Casks/v2s.rb
-```
-
-## Notarization
-
-The release build is ad-hoc signed (`CODE_SIGN_IDENTITY = "-"`), so macOS
-quarantines the app and refuses to launch it until the user runs
-`xattr -dr com.apple.quarantine /Applications/v2s.app`. Homebrew 6 removed the
-`--no-quarantine` install flag, so there is no way to avoid this from the cask.
-
-Signing with a Developer ID certificate and notarizing in the release workflow
-would remove that step, and is also a prerequisite for `brew audit --new`, which
-currently fails with "not signed by a distributor that meets the system
-Gatekeeper requirements" — the check that gates submission to the official
-`homebrew/cask` repository.
+Removing `com.apple.quarantine` from `/Applications/Easy2say.app` is a
+command-line bypass, not proof that the normal **Open Anyway** flow works.

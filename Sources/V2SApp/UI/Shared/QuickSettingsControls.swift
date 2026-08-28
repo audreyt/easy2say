@@ -5,6 +5,184 @@ import UIKit
 #endif
 import SwiftUI
 
+/// Easy2say brand palette, shared by every platform surface.
+///
+/// Plum is the ground the paired-voice mark sits on, peach is the voice itself, and
+/// everything else is derived from those two so the app cannot drift into a second
+/// accent family. Neutrals are tinted, never pure black or white.
+enum EasyBrand {
+    /// #4d2a33 — the mark's background.
+    static let plum = Color(.sRGB, red: 0.302, green: 0.165, blue: 0.200, opacity: 1.0)
+    /// #f4a499 — the mark's bubble; recording and other live affordances.
+    static let peach = Color(.sRGB, red: 0.957, green: 0.643, blue: 0.600, opacity: 1.0)
+    /// Deep plum-black app canvas.
+    static let ink = Color(.sRGB, red: 0.086, green: 0.055, blue: 0.067, opacity: 1.0)
+    /// Warm cocoa panel, one step above the canvas.
+    static let cocoa = Color(.sRGB, red: 0.165, green: 0.102, blue: 0.125, opacity: 1.0)
+    /// Warm off-white for primary text.
+    static let cream = Color(.sRGB, red: 0.988, green: 0.957, blue: 0.949, opacity: 1.0)
+    /// Warm red that still clears 4.5:1 against ``cocoa``.
+    static let alert = Color(.sRGB, red: 1.000, green: 0.451, blue: 0.427, opacity: 1.0)
+
+    /// Controls need opposite brand poles across system appearances: dark plum is
+    /// legible on light surfaces, while peach stays legible on dark materials.
+    static func controlTint(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? peach : plum
+    }
+}
+
+/// The one Easy2say mark: a rounded speech bubble with an integrated lower-left
+/// tail, carrying a 2-column × 3-row field of rounded slots knocked out of it. The
+/// two columns, split by a clear central gutter, are the conversation hint the app
+/// icon has always had; the bubble is what makes the tray glyph read at 18 pt.
+///
+/// This is the single source of the geometry. The app icons, the in-app
+/// ``BrandStatusMark`` and the menu-bar template image all render this one path, so
+/// they cannot drift apart. Units below are the mark's own design box.
+struct Easy2sayMark: Shape {
+    /// Bubble body, excluding the tail.
+    private static let bodySize = CGSize(width: 720, height: 632)
+    private static let cornerRadius: CGFloat = 132
+    /// How far the tail hangs below the body.
+    private static let tailDrop: CGFloat = 132
+    /// The tail: where its two edges leave the body's bottom edge, and the corner
+    /// its point turns around.
+    private static let tailLeftX: CGFloat = 148
+    private static let tailRightX: CGFloat = 300
+    private static let tailCornerX: CGFloat = 172
+    /// Radius of the tail's point.
+    private static let tailTipRadius: CGFloat = 44
+    /// The slot field is centred in the bubble body, not in the full bounding box:
+    /// the tail is localised to one corner and does not carry the whole width.
+    private static let fieldDrop: CGFloat = 0
+    /// Slot field: two columns of three, mirrored about the gutter.
+    private static let slotHeight: CGFloat = 72
+    private static let slotRowPitch: CGFloat = 128
+    private static let fieldInset: CGFloat = 132
+    private static let gutter: CGFloat = 56
+    /// The bottom row is a little shorter on its outer end, the way a last line of
+    /// text is — enough to hint at speech, not enough to hollow out the lower band.
+    private static let shortRowTrim: CGFloat = 30
+
+    private static let designSize = CGSize(
+        width: bodySize.width,
+        height: bodySize.height + tailDrop
+    )
+
+    var aspectRatio: CGFloat {
+        Self.designSize.width / Self.designSize.height
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let scale = min(
+            rect.width / Self.designSize.width,
+            rect.height / Self.designSize.height
+        )
+        let drawnSize = CGSize(
+            width: Self.designSize.width * scale,
+            height: Self.designSize.height * scale
+        )
+
+        return Self.markPath
+            .applying(CGAffineTransform(scaleX: scale, y: scale))
+            .applying(
+                CGAffineTransform(
+                    translationX: rect.midX - drawnSize.width / 2,
+                    y: rect.midY - drawnSize.height / 2
+                )
+            )
+    }
+
+    private static let markPath: Path = envelope.subtracting(slotField)
+
+    /// Rounded bubble plus tail, unioned so the tail reads as part of the shell
+    /// rather than a triangle parked underneath it.
+    private static let envelope: Path = {
+        let body = Path(
+            roundedRect: CGRect(origin: .zero, size: bodySize),
+            cornerRadius: cornerRadius,
+            style: .continuous
+        )
+
+        // The tail is two straight edges — steep on the outside, diagonal on the
+        // inside — turning through one rounded point. Its last leg runs back through
+        // the body's interior, where the union hides it: no seam, no stray outline.
+        let attachLeft = CGPoint(x: tailLeftX, y: bodySize.height)
+        let attachRight = CGPoint(x: tailRightX, y: bodySize.height)
+        let tip = CGPoint(x: tailCornerX, y: bodySize.height + tailDrop)
+        let shelf = bodySize.height - cornerRadius
+
+        var tail = Path()
+        tail.move(to: attachLeft)
+        tail.addLine(to: point(from: tip, toward: attachLeft, distance: tailTipRadius))
+        tail.addQuadCurve(
+            to: point(from: tip, toward: attachRight, distance: tailTipRadius),
+            control: tip
+        )
+        tail.addLine(to: attachRight)
+        tail.addLine(to: CGPoint(x: attachRight.x, y: shelf))
+        tail.addLine(to: CGPoint(x: attachLeft.x, y: shelf))
+        tail.closeSubpath()
+
+        return body.union(tail)
+    }()
+
+    private static let slotField: Path = {
+        let radius = slotHeight / 2
+        let columnWidth = (bodySize.width - fieldInset * 2 - gutter) / 2
+        let fieldHeight = slotRowPitch * 2 + slotHeight
+        let firstRowTop = (bodySize.height - fieldHeight) / 2 + fieldDrop
+
+        var field = Path()
+        for row in 0 ..< 3 {
+            let trim = row == 2 ? shortRowTrim : 0
+            let top = firstRowTop + CGFloat(row) * slotRowPitch
+
+            // Outer ends vary, inner ends stay pinned to the gutter so it reads as
+            // one clean channel down the middle.
+            field.addPath(
+                Path(
+                    roundedRect: CGRect(
+                        x: fieldInset + trim,
+                        y: top,
+                        width: columnWidth - trim,
+                        height: slotHeight
+                    ),
+                    cornerRadius: radius,
+                    style: .circular
+                )
+            )
+            field.addPath(
+                Path(
+                    roundedRect: CGRect(
+                        x: fieldInset + columnWidth + gutter,
+                        y: top,
+                        width: columnWidth - trim,
+                        height: slotHeight
+                    ),
+                    cornerRadius: radius,
+                    style: .circular
+                )
+            )
+        }
+        return field
+    }()
+
+    private static func point(
+        from origin: CGPoint,
+        toward target: CGPoint,
+        distance: CGFloat
+    ) -> CGPoint {
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        let length = max((dx * dx + dy * dy).squareRoot(), 0.0001)
+        return CGPoint(
+            x: origin.x + dx / length * distance,
+            y: origin.y + dy / length * distance
+        )
+    }
+}
+
 struct SettingsControlRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
@@ -360,6 +538,22 @@ struct SubtitleDisplayModeMenuPicker: View {
     }
 }
 
+struct CaptionLayoutMenuPicker: View {
+    let interfaceLanguageID: String
+    @Binding var selection: OverlayCaptionLayout
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(OverlayCaptionLayout.allCases, id: \.self) { layout in
+                Text(layout.displayName(in: interfaceLanguageID)).tag(layout)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .accessibilityLabel(AppLocalization.string(.captionLayout, languageID: interfaceLanguageID))
+    }
+}
+
 struct SecondaryRefreshButton: View {
     let title: String
     let action: () -> Void
@@ -485,6 +679,13 @@ extension AppModel {
         Binding(
             get: { self.subtitleDisplayMode },
             set: { self.subtitleDisplayMode = $0 }
+        )
+    }
+
+    var overlayCaptionLayoutSelectionBinding: Binding<OverlayCaptionLayout> {
+        Binding(
+            get: { self.overlayStyle.captionLayout },
+            set: { layout in self.updateOverlayStyle { $0.captionLayout = layout } }
         )
     }
 
