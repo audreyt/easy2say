@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "languages": {
+    "en": {
+      "corrections": [
+        { "canonical": "ss", "aliases": ["ß"] }
+      ]
+    }
+  }
+}

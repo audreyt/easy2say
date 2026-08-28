@@ -2,6 +2,20 @@ import Foundation
 import XCTest
 @testable import v2s
 
+private final class RecordingGlossaryTranslator {
+    private(set) var inputs: [String] = []
+    private let response: (String) -> String
+
+    init(response: @escaping (String) -> String) {
+        self.response = response
+    }
+
+    func translate(_ input: String) async throws -> String {
+        inputs.append(input)
+        return response(input)
+    }
+}
+
 final class GlossaryServiceTests: XCTestCase {
     private let service = GlossaryService()
 
@@ -77,5 +91,87 @@ final class GlossaryServiceTests: XCTestCase {
             service.apply(to: "وسلامة الجميع", glossary: ["سلام": "peace"]),
             "وسلامة الجميع"
         )
+    }
+
+    func testForwardAndReverseGlossariesDoNotCorruptEachOther() {
+        let forward = ["資料": "data", "人工智慧": "AI"]
+        let inverse = GlossaryService.buildInverseGlossary(forward)
+
+        XCTAssertEqual(service.apply(to: "資料與人工智慧", glossary: forward), "data與AI")
+        XCTAssertEqual(service.apply(to: "data and AI", glossary: inverse), "資料 and 人工智慧")
+        XCTAssertEqual(service.apply(to: "資料與人工智慧", glossary: inverse), "資料與人工智慧")
+    }
+
+    func testInverseGlossaryOmitsIdentityAndNormalizedDuplicateValues() {
+        let inverse = GlossaryService.buildInverseGlossary([
+            "API": "API",
+            "甲": "Shared",
+            "乙": "shared",
+            "資料": "data",
+        ])
+
+        XCTAssertNil(inverse["API"])
+        XCTAssertNil(inverse["Shared"])
+        XCTAssertNil(inverse["shared"])
+        XCTAssertEqual(inverse["data"], "資料")
+    }
+
+    func testInverseGlossaryDedupesIdenticalNormalizedSourceTargetPairs() {
+        let inverse = GlossaryService.buildInverseGlossary([
+            "AI": "人工智慧",
+            "ai": "人工智慧",
+            "ML": "機器學習",
+        ])
+        XCTAssertNotNil(inverse["人工智慧"])
+        XCTAssertTrue(["AI", "ai"].contains(inverse["人工智慧"]!))
+        XCTAssertEqual(inverse["機器學習"], "ML")
+    }
+
+    func testForwardTranslationPreparesLongestNonOverlappingInputAndPreservesSourceText() async throws {
+        let forward = ["資料": "data", "資料庫": "database"]
+        let translator = RecordingGlossaryTranslator { _ in "Review 資料庫 and 資料" }
+        let original = "資料庫與資料"
+
+        let result = try await service.translating(
+            sourceText: original,
+            glossary: forward,
+            with: translator.translate
+        )
+
+        XCTAssertEqual(translator.inputs, ["database與data"])
+        XCTAssertEqual(result.sourceText, original)
+        XCTAssertEqual(result.translatedText, "Review database and data")
+    }
+
+    func testReverseTranslationUsesOnlyInverseMapAndPreservesSourceText() async throws {
+        let forward = ["資料": "data", "資料庫": "database"]
+        let inverse = GlossaryService.buildInverseGlossary(forward)
+        let translator = RecordingGlossaryTranslator { $0 }
+        let original = "database and data with 資料"
+
+        let result = try await service.translating(
+            sourceText: original,
+            glossary: inverse,
+            with: translator.translate
+        )
+
+        XCTAssertEqual(translator.inputs, ["資料庫 and 資料 with 資料"])
+        XCTAssertEqual(result.sourceText, original)
+        XCTAssertEqual(result.translatedText, "資料庫 and 資料 with 資料")
+    }
+
+    func testTranslationWithNoGlossaryMatchIsIdentityForInputAndSourceText() async throws {
+        let translator = RecordingGlossaryTranslator { $0 }
+        let original = "An ordinary sentence."
+
+        let result = try await service.translating(
+            sourceText: original,
+            glossary: ["資料": "data"],
+            with: translator.translate
+        )
+
+        XCTAssertEqual(translator.inputs, [original])
+        XCTAssertEqual(result.sourceText, original)
+        XCTAssertEqual(result.translatedText, original)
     }
 }

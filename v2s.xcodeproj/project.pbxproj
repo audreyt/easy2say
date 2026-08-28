@@ -65,6 +65,10 @@
 		A000000000000000000000CE /* CaptionFlowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CF /* CaptionFlowContentView.swift */; };
 		A000000000000000000000D0 /* AudienceDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000D1 /* AudienceDisplayView.swift */; };
 		A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000D3 /* AudienceDisplayWindowController.swift */; };
+		A000000000000000000000E0 /* SpeechCorrectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E1 /* SpeechCorrectionService.swift */; };
+		A000000000000000000000E2 /* CaptionLanguagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E3 /* CaptionLanguagePolicy.swift */; };
+		A000000000000000000000E4 /* DualLanePairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E5 /* DualLanePairing.swift */; };
+		A000000000000000000000E6 /* DualLaneCaptionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -126,6 +130,10 @@
 		A000000000000000000000CF /* CaptionFlowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionFlowContentView.swift; sourceTree = "<group>"; };
 		A000000000000000000000D1 /* AudienceDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceDisplayView.swift; sourceTree = "<group>"; };
 		A000000000000000000000D3 /* AudienceDisplayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceDisplayWindowController.swift; sourceTree = "<group>"; };
+		A000000000000000000000E1 /* SpeechCorrectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCorrectionService.swift; sourceTree = "<group>"; };
+		A000000000000000000000E3 /* CaptionLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLanguagePolicy.swift; sourceTree = "<group>"; };
+		A000000000000000000000E5 /* DualLanePairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLanePairing.swift; sourceTree = "<group>"; };
+		A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLaneCaptionRuntime.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -233,6 +241,10 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000046 /* GlossaryService.swift */,
+				A000000000000000000000E1 /* SpeechCorrectionService.swift */,
+				A000000000000000000000E3 /* CaptionLanguagePolicy.swift */,
+				A000000000000000000000E5 /* DualLanePairing.swift */,
+				A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */,
 				A00000000000000000000093 /* TranslationCoordinator.swift */,
 				A00000000000000000000041 /* LiveTranscriptionSession.swift */,
 				A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */,
@@ -468,6 +480,10 @@
 				A000000000000000000000CE /* CaptionFlowContentView.swift in Sources */,
 				A000000000000000000000D0 /* AudienceDisplayView.swift in Sources */,
 				A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */,
+				A000000000000000000000E0 /* SpeechCorrectionService.swift in Sources */,
+				A000000000000000000000E2 /* CaptionLanguagePolicy.swift in Sources */,
+				A000000000000000000000E4 /* DualLanePairing.swift in Sources */,
+				A000000000000000000000E6 /* DualLaneCaptionRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

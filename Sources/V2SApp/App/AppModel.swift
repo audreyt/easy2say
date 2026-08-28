@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     private let settingsStore: SettingsStore
     private let sourceCatalogService: SourceCatalogService
     private let translationCoordinator = TranslationCoordinator()
+    private let reverseTranslationCoordinator = TranslationCoordinator()
 #if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
     private let translateGemmaService = TranslateGemmaTranslationService()
 #endif
@@ -53,8 +54,11 @@ final class AppModel: ObservableObject {
     private let melongOmlxService = MelongOmlxTranslationService()
 #endif
     private let glossaryService = GlossaryService()
+    private var speechCorrections = SpeechCorrectionTable.empty
     private let speedMonitor = SpeedMonitor()
     private var liveTranscriptionSession: LiveTranscriptionSession?
+    private var liveCaptionConfiguredSourceLanguageID = ""
+    private var liveCaptionConfiguredTargetLanguageID = ""
     private var liveTranscriptionSessions: [LiveTranscriptionSession] = []
     /// Sessions whose async model/resource setup has begun but whose capture has not
     /// yet been published. Stop must reach these too — Taigi's first Core ML
@@ -80,6 +84,7 @@ final class AppModel: ObservableObject {
     private var isRefreshingLanguageCatalogs = false
     private var activeDraftSourceLanguageID: String?
     private var activeDraftTargetLanguageID: String?
+    private var activeDraftUsesInverseGlossary = false
     private var lastDraftSourceID: String?
     private var lastDraftStablePrefix = ""
     private var lastDraftTranslationSource = ""
@@ -92,11 +97,13 @@ final class AppModel: ObservableObject {
     // displayed text that still matches what this pipeline committed.
     private var translationRevisions: [UUID: String] = [:]
     private var recentRecognizedCaptionTexts: [RecentRecognizedCaption] = []
+    private var inverseGlossaryCaptionIDs: Set<UUID> = []
     private var recentArchivedCaption: RecentArchivedCaption?
     private var finalizedDraftPromotionIDs: [(id: UUID, time: Date)] = []
     private var transcriptInputLanguageID: String?
     private var transcriptOutputLanguageID: String?
     private var statusDescriptor: StatusDescriptor = .ready
+    private var cachedInverseGlossary: [String: String] = [:]
     @Published private(set) var applicationSources: [InputSource] = []
     @Published private(set) var microphoneSources: [InputSource] = []
     @Published private(set) var sessionState: SessionState = .idle
@@ -108,6 +115,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var onDeviceSpeechLanguageIDs: Set<String> = []
     @Published private(set) var translationLanguageOptions = LanguageCatalog.common
     @Published private(set) var translationHostConfiguration: TranslationSession.Configuration?
+    @Published private(set) var reverseTranslationHostConfiguration: TranslationSession.Configuration?
     @Published private(set) var transcriptEntries: [TranscriptEntry] = []
     @Published private(set) var transcriptGeneration: Int = 0
     @Published var isOverlayVisible = false
@@ -212,6 +220,7 @@ final class AppModel: ObservableObject {
 
     @Published var glossary: [String: String] {
         didSet {
+            cachedInverseGlossary = GlossaryService.buildInverseGlossary(glossary)
             persistSettings()
         }
     }
@@ -247,7 +256,9 @@ final class AppModel: ObservableObject {
         self.subtitleMode = settings.subtitleMode
         self.subtitleDisplayMode = settings.subtitleDisplayMode
         self.glossary = settings.glossary
+        self.cachedInverseGlossary = GlossaryService.buildInverseGlossary(settings.glossary)
         self.translationHostConfiguration = nil
+        self.reverseTranslationHostConfiguration = nil
         AppLocalization.updateEmbeddedBundleLocalizationLanguageID(self.interfaceLanguageID)
 
         translationCoordinator.onConfigurationChange = { [weak self] configuration in
@@ -257,7 +268,16 @@ final class AppModel: ObservableObject {
             self?.translationLocaleIdentifier(for: languageID)
                 ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
         }
+        reverseTranslationCoordinator.onConfigurationChange = { [weak self] configuration in
+            self?.reverseTranslationHostConfiguration = configuration
+        }
+        reverseTranslationCoordinator.localeIdentifierForLanguageID = { [weak self] languageID in
+            self?.translationLocaleIdentifier(for: languageID)
+                ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
+        }
         installTranslationFallbacks(on: translationCoordinator)
+        installTranslationFallbacks(on: reverseTranslationCoordinator)
+        reloadSpeechCorrections()
 
         isBootstrapping = false
         applyStatusMessage()
@@ -281,6 +301,16 @@ final class AppModel: ObservableObject {
             }
             return try await self.translateWithFallback(text, from: source, to: target)
         }
+    }
+    @available(iOS 26.0, macOS 26.0, *)
+    func applySpeechSupport(to engine: ConversationEngine) {
+        reloadSpeechCorrections()
+        engine.speechCorrections = speechCorrections
+        engine.glossary = glossary
+        engine.recognitionContextualStrings = recognitionContextualStrings(
+            for: [engine.primaryLanguageID, engine.secondaryLanguageID],
+            glossaryPhrases: Array(glossary.keys)
+        )
     }
 
     @available(iOS 26.0, macOS 26.0, *)
@@ -771,12 +801,10 @@ final class AppModel: ObservableObject {
         setStatus(.preparing(sourceName: selectedSourceName))
 
         let config = ModeConfig.config(for: subtitleMode)
-        let recognitionHints = recognitionContextualStrings()
+        reloadSpeechCorrections()
         var startedSessions: [LiveTranscriptionSession] = []
         var startedSources: [InputSource] = []
         var startupFailures: [Error] = []
-        // Every source can raise one, and several can land in the window between two
-        // startup attempts, so they accumulate rather than overwrite each other.
         var fatalSessionErrors: [(message: String, sessionID: ObjectIdentifier, sourceName: String)] = []
         var isStartingSession = true
 
@@ -789,6 +817,19 @@ final class AppModel: ObservableObject {
             // language as Taigi.
             let translationSourceLanguageID =
                 translationSourceLanguageID(for: sourceLanguageID)
+            let primaryRecognitionHints = recognitionContextualStrings(
+                for: [translationSourceLanguageID],
+                glossaryPhrases: Array(glossary.keys)
+            )
+            let secondaryRecognitionHints = CaptionLanguagePolicy.shouldEnableDualLane(
+                sourceLanguageID: translationSourceLanguageID,
+                targetLanguageID: targetLanguageID
+            ) ? recognitionContextualStrings(
+                for: ["en"],
+                glossaryPhrases: Array(glossary.values)
+            ) : []
+            liveCaptionConfiguredSourceLanguageID = translationSourceLanguageID
+            liveCaptionConfiguredTargetLanguageID = targetLanguageID
             let session = LiveTranscriptionSession()
             // Identity only. Capturing the session in the handler it is about to own
             // would retain it for the session's own lifetime.
@@ -809,21 +850,51 @@ final class AppModel: ObservableObject {
                     localeIdentifier: speechLocaleIdentifier(for: sourceLanguageID),
                     interfaceLanguageID: resolvedInterfaceLanguageID,
                     modeConfig: config,
-                    contextualStrings: recognitionHints,
+                    contextualStrings: primaryRecognitionHints,
+                    secondaryContextualStrings: secondaryRecognitionHints,
+                    sourceLanguageID: translationSourceLanguageID,
+                    targetLanguageID: targetLanguageID,
+                    speechCorrections: speechCorrections,
                     transcriptHandler: { [weak self] sentence in
+                        let heardLanguageID = sentence.heardLanguageID.isEmpty
+                            ? translationSourceLanguageID
+                            : sentence.heardLanguageID
+                        let usesInverseGlossary = CaptionLanguagePolicy.shouldReverse(
+                            configuredSourceLanguageID: translationSourceLanguageID,
+                            configuredTargetLanguageID: targetLanguageID,
+                            heardLanguageID: heardLanguageID,
+                            heardText: sentence.text,
+                            evidence: sentence.dualLaneEvidence
+                        )
                         self?.enqueueRecognizedSentence(
                             sentence,
                             source: source,
-                            sourceLanguageID: translationSourceLanguageID,
-                            targetLanguageID: targetLanguageID
+                            sourceLanguageID: heardLanguageID,
+                            targetLanguageID: CaptionLanguagePolicy.translationTarget(
+                                heardLanguageID: heardLanguageID,
+                                configuredSourceLanguageID: translationSourceLanguageID,
+                                configuredTargetLanguageID: targetLanguageID,
+                                heardText: sentence.text,
+                                evidence: sentence.dualLaneEvidence
+                            ),
+                            usesInverseGlossary: usesInverseGlossary
                         )
                     },
                     partialHandler: { [weak self] draft in
+                        let heardLanguageID = draft?.heardLanguageID.isEmpty == false
+                            ? (draft?.heardLanguageID ?? translationSourceLanguageID)
+                            : translationSourceLanguageID
                         self?.handlePartialDraft(
                             draft,
                             source: source,
-                            sourceLanguageID: translationSourceLanguageID,
-                            targetLanguageID: targetLanguageID
+                            sourceLanguageID: heardLanguageID,
+                            targetLanguageID: CaptionLanguagePolicy.translationTarget(
+                                heardLanguageID: heardLanguageID,
+                                configuredSourceLanguageID: translationSourceLanguageID,
+                                configuredTargetLanguageID: targetLanguageID,
+                                heardText: draft?.sourceText ?? "",
+                                evidence: nil
+                            )
                         )
                     },
                     errorHandler: { [weak self] message in
@@ -1152,16 +1223,45 @@ final class AppModel: ObservableObject {
         return normalized
     }
 
-    private func recognitionContextualStrings() -> [String] {
-        glossary.keys
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-            .sorted { lhs, rhs in
-                if lhs.count == rhs.count {
-                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
-                }
-                return lhs.count < rhs.count
-            }
+    private func reloadSpeechCorrections() {
+        do {
+            speechCorrections = try SpeechCorrectionService.loadDefault()
+        } catch {
+            speechCorrections = .empty
+            setStatus(.custom(String(describing: error)))
+        }
+    }
+
+    private func recognitionContextualStrings(
+        for languageIDs: [String],
+        glossaryPhrases: [String]
+    ) -> [String] {
+        SpeechCorrectionService.recognitionPhrases(
+            corrections: speechCorrections,
+            languageIDs: languageIDs,
+            glossaryKeys: glossaryPhrases
+        )
+    }
+
+    private func translationCoordinator(from sourceLanguageID: String, to targetLanguageID: String) -> TranslationCoordinator {
+        if LanguageIdentity.isEnglish(sourceLanguageID),
+           CaptionLanguagePolicy.shouldEnableDualLane(
+            sourceLanguageID: liveCaptionConfiguredSourceLanguageID,
+            targetLanguageID: liveCaptionConfiguredTargetLanguageID
+           ) {
+            return reverseTranslationCoordinator
+        }
+        return translationCoordinator
+    }
+
+    private func languagePanes(
+        heard: String,
+        translated: String,
+        usesInverseGlossary: Bool
+    ) -> (sourceText: String, translatedText: String) {
+        usesInverseGlossary
+            ? (sourceText: translated, translatedText: heard)
+            : (sourceText: heard, translatedText: translated)
     }
 
     func languageName(for identifier: String) -> String {
@@ -1366,24 +1466,49 @@ final class AppModel: ObservableObject {
             return (speechLanguages, translationPairs)
         }
 
-        let speechLanguageIDs = Set(
+        var speechLanguageIDs = Set(
             selectedSources
                 .map { languageID(for: $0) }
                 .filter { $0 != "nan" && $0 != "bo" }
-        ).sorted()
+        )
+        for source in selectedSources {
+            let sourceLanguageID = languageID(for: source)
+            let targetLanguageID = outputLanguageIDForSource(source)
+            if CaptionLanguagePolicy.shouldEnableDualLane(
+                sourceLanguageID: sourceLanguageID,
+                targetLanguageID: targetLanguageID
+            ) {
+                speechLanguageIDs.insert("en")
+            }
+        }
+        let sortedSpeechLanguageIDs = speechLanguageIDs.sorted()
         let translationPairs = Set(
-            selectedSources.compactMap { source -> LanguagePairRequirement? in
+            selectedSources.flatMap { source -> [LanguagePairRequirement] in
                 let sourceLanguageID = translationSourceLanguageID(
                     for: languageID(for: source)
                 )
                 let targetLanguageID = outputLanguageIDForSource(source)
                 guard sourceLanguageID != targetLanguageID else {
-                    return nil
+                    return []
                 }
-                return LanguagePairRequirement(
+                var pairs = [
+                    LanguagePairRequirement(
+                        sourceLanguageID: sourceLanguageID,
+                        targetLanguageID: targetLanguageID
+                    )
+                ]
+                if CaptionLanguagePolicy.shouldEnableDualLane(
                     sourceLanguageID: sourceLanguageID,
                     targetLanguageID: targetLanguageID
-                )
+                ) {
+                    pairs.append(
+                        LanguagePairRequirement(
+                            sourceLanguageID: targetLanguageID,
+                            targetLanguageID: sourceLanguageID
+                        )
+                    )
+                }
+                return pairs
             }
         )
         .sorted {
@@ -1393,12 +1518,17 @@ final class AppModel: ObservableObject {
             return $0.sourceLanguageID < $1.sourceLanguageID
         }
 
-        return (speechLanguageIDs, translationPairs)
+        return (sortedSpeechLanguageIDs, translationPairs)
     }
 
-    @available(macOS 15.0, *)
+    @available(iOS 18.0, macOS 15.0, *)
     func runTranslationHost(using session: TranslationSession) async {
         await translationCoordinator.run(using: session)
+    }
+
+    @available(iOS 18.0, macOS 15.0, *)
+    func runReverseTranslationHost(using session: TranslationSession) async {
+        await reverseTranslationCoordinator.run(using: session)
     }
 
     func refreshLanguageResources() {
@@ -2027,15 +2157,26 @@ final class AppModel: ObservableObject {
         cancelPendingDraftClear()
         activeDraftSourceLanguageID = sourceLanguageID
         activeDraftTargetLanguageID = targetLanguageID
-        overlayState?.draftSourceText = draftText
+        let isReversed = CaptionLanguagePolicy.shouldReverse(
+            configuredSourceLanguageID: liveCaptionConfiguredSourceLanguageID,
+            configuredTargetLanguageID: liveCaptionConfiguredTargetLanguageID,
+            heardLanguageID: sourceLanguageID,
+            heardText: draftText
+        )
+        activeDraftUsesInverseGlossary = isReversed
+        if isReversed {
+            overlayState?.draftTranslatedText = draftText
+            overlayState?.draftSourceText = nil
+        } else {
+            overlayState?.draftSourceText = draftText
+            overlayState?.clearDraftTranslationIfMismatched(
+                sourceText: draftText,
+                promotionID: draftPromotionID
+            )
+        }
         overlayState?.draftStablePrefixLength = min(draft?.stablePrefixLength ?? 0, draftText.count)
         overlayState?.draftPromotionID = draftPromotionID
         overlayState?.sourceName = source.name
-        overlayState?.clearDraftTranslationIfMismatched(
-            sourceText: draftText,
-            promotionID: draftPromotionID
-        )
-
         dismissListeningPlaceholderIfNeeded()
 
         let stablePrefix = String(draftText.prefix(min(draft?.stablePrefixLength ?? 0, draftText.count)))
@@ -2058,20 +2199,25 @@ final class AppModel: ObservableObject {
                 for: draftText,
                 promotionID: draftPromotionID,
                 sourceLanguageID: sourceLanguageID,
-                targetLanguageID: targetLanguageID
+                targetLanguageID: targetLanguageID,
+                usesInverseGlossary: isReversed
             )
         } else {
             draftTranslationTask?.cancel()
             draftTranslationTask = nil
             draftTranslationGeneration &+= 1
-            overlayState?.setDraftTranslation(
-                draftText,
-                sourceText: draftText,
-                promotionID: draftPromotionID
-            )
+            if isReversed {
+                overlayState?.draftTranslatedText = draftText
+                overlayState?.draftSourceText = draftText
+            } else {
+                overlayState?.setDraftTranslation(
+                    draftText,
+                    sourceText: draftText,
+                    promotionID: draftPromotionID
+                )
+            }
         }
     }
-
     private func scheduleDraftClear() {
         draftClearTask?.cancel()
         draftClearGeneration &+= 1
@@ -2110,6 +2256,7 @@ final class AppModel: ObservableObject {
         overlayState?.clearDraftTranslation()
         activeDraftSourceLanguageID = nil
         activeDraftTargetLanguageID = nil
+        activeDraftUsesInverseGlossary = false
         lastDraftSourceID = nil
         lastDraftStablePrefix = ""
         lastDraftTranslationSource = ""
@@ -2118,12 +2265,12 @@ final class AppModel: ObservableObject {
         draftTranslationTask = nil
         draftTranslationGeneration &+= 1
     }
-
     private func scheduleDraftTranslation(
         for text: String,
         promotionID: UUID?,
         sourceLanguageID: String,
-        targetLanguageID: String
+        targetLanguageID: String,
+        usesInverseGlossary: Bool
     ) {
         draftTranslationTask?.cancel()
         draftTranslationGeneration &+= 1
@@ -2137,17 +2284,21 @@ final class AppModel: ObservableObject {
             guard generation == draftTranslationGeneration else { return }
 
             guard sourceLanguageID != targetLanguageID else {
-                guard overlayState?.draftSourceText == text,
-                      overlayState?.draftPromotionID == promotionID,
+                guard overlayState?.draftPromotionID == promotionID,
                       activeDraftSourceLanguageID == sourceLanguageID,
                       activeDraftTargetLanguageID == targetLanguageID else {
                     return
                 }
-                overlayState?.setDraftTranslation(
-                    text,
-                    sourceText: text,
-                    promotionID: promotionID
-                )
+                if usesInverseGlossary {
+                    overlayState?.draftTranslatedText = text
+                    overlayState?.draftSourceText = text
+                } else {
+                    overlayState?.setDraftTranslation(
+                        text,
+                        sourceText: text,
+                        promotionID: promotionID
+                    )
+                }
                 return
             }
 
@@ -2156,30 +2307,38 @@ final class AppModel: ObservableObject {
             // guards below drop results whose draft is no longer visible. A slow
             // translation that lands while the draft is still current is more
             // useful applied late than discarded on a fixed deadline.
-            let translated = try? await translationCoordinator.translate(
-                text,
-                from: sourceLanguageID,
-                to: targetLanguageID
-            )
+            let effectiveGlossary = usesInverseGlossary ? cachedInverseGlossary : glossary
+            let translation = try? await glossaryService.translating(
+                sourceText: text,
+                glossary: effectiveGlossary
+            ) { preparedInput in
+                try await self.translationCoordinator(
+                    from: sourceLanguageID,
+                    to: targetLanguageID
+                ).translate(
+                    preparedInput,
+                    from: sourceLanguageID,
+                    to: targetLanguageID
+                )
+            }
 
             guard !Task.isCancelled,
                   liveTranscriptionSession != nil,
                   generation == draftTranslationGeneration,
-                  overlayState?.draftSourceText == text,
                   overlayState?.draftPromotionID == promotionID,
                   activeDraftSourceLanguageID == sourceLanguageID,
                   activeDraftTargetLanguageID == targetLanguageID else { return }
-            if let translated {
-                let resolvedTranslation = glossaryService.apply(to: translated, glossary: glossary)
+            if let translation {
+                let resolvedTranslation = translation.translatedText
                 if shouldTreatAsMissingTranslation(
                     resolvedTranslation,
-                    sourceText: text,
+                    sourceText: translation.sourceText,
                     sourceLanguageID: sourceLanguageID,
                     targetLanguageID: targetLanguageID
                 ) == false {
                     overlayState?.setDraftTranslation(
                         resolvedTranslation,
-                        sourceText: text,
+                        sourceText: translation.sourceText,
                         promotionID: promotionID
                     )
                 }
@@ -2285,7 +2444,8 @@ final class AppModel: ObservableObject {
                     for: draftText,
                     promotionID: overlayState?.draftPromotionID,
                     sourceLanguageID: activeDraftSourceLanguageID,
-                    targetLanguageID: activeDraftTargetLanguageID
+                    targetLanguageID: activeDraftTargetLanguageID,
+                    usesInverseGlossary: activeDraftUsesInverseGlossary
                 )
             } else {
                 draftTranslationTask?.cancel()
@@ -2332,7 +2492,8 @@ final class AppModel: ObservableObject {
         _ sentence: RecognizedSentence,
         source: InputSource,
         sourceLanguageID: String,
-        targetLanguageID: String
+        targetLanguageID: String,
+        usesInverseGlossary: Bool
     ) {
         let sourceText = sanitizedDisplayText(sentence.text)
         guard sourceText.isEmpty == false else {
@@ -2359,8 +2520,12 @@ final class AppModel: ObservableObject {
                 sourceName: source.name,
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
+                usesInverseGlossary: usesInverseGlossary,
                 promotedDraftTranslation: promotedDraftTranslation
             )
+            if usesInverseGlossary {
+                inverseGlossaryCaptionIDs.insert(caption.id)
+            }
 
             rememberRecognizedSentence(sourceText)
             pendingCaptions.append(caption)
@@ -2379,8 +2544,12 @@ final class AppModel: ObservableObject {
                 sourceName: source.name,
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
+                usesInverseGlossary: usesInverseGlossary,
                 promotedDraftTranslation: nil
             )
+            if usesInverseGlossary {
+                inverseGlossaryCaptionIDs.insert(caption.id)
+            }
 
             rememberRecognizedSentence(sourceText)
             pendingCaptions.append(caption)
@@ -2439,9 +2608,14 @@ final class AppModel: ObservableObject {
                     ? (translatedText ?? "")
                     : displayedCaption.sourceText
 
+                let panes = languagePanes(
+                    heard: displayedCaption.sourceText,
+                    translated: resolvedTranslation,
+                    usesInverseGlossary: displayedCaption.usesInverseGlossary
+                )
                 updateCommittedOverlay(
-                    translatedText: resolvedTranslation,
-                    sourceText: displayedCaption.sourceText,
+                    translatedText: panes.translatedText,
+                    sourceText: panes.sourceText,
                     lateTranslation: translationExpected && resolvedTranslation.isEmpty == false
                 )
                 upsertTranscriptEntry(
@@ -2518,6 +2692,7 @@ final class AppModel: ObservableObject {
         committedCaptionArchiveTask = nil
         activeDraftSourceLanguageID = nil
         activeDraftTargetLanguageID = nil
+        activeDraftUsesInverseGlossary = false
         lastDraftSourceID = nil
         lastDraftStablePrefix = ""
         lastDraftTranslationSource = ""
@@ -2529,6 +2704,7 @@ final class AppModel: ObservableObject {
         pendingCaptions.removeAll()
         readyCaptionTranslations.removeAll()
         translationRevisions.removeAll()
+        inverseGlossaryCaptionIDs.removeAll()
         recentRecognizedCaptionTexts.removeAll()
         recentArchivedCaption = nil
         finalizedDraftPromotionIDs.removeAll()
@@ -2539,6 +2715,8 @@ final class AppModel: ObservableObject {
 
         translationCoordinator.invalidateSession()
         translationCoordinator.reset()
+        reverseTranslationCoordinator.invalidateSession()
+        reverseTranslationCoordinator.reset()
 
         Task {
             await speedMonitor.reset()
@@ -2598,9 +2776,14 @@ final class AppModel: ObservableObject {
             let hadDraftTranslation = initialTranslation?.isEmpty == false
 
             overlayState?.skipCommittedFadeIn = hadDraftTranslation
+            let panes = languagePanes(
+                heard: caption.sourceText,
+                translated: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
+                usesInverseGlossary: caption.usesInverseGlossary
+            )
             updateCommittedOverlay(
-                translatedText: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
-                sourceText: caption.sourceText,
+                translatedText: panes.translatedText,
+                sourceText: panes.sourceText,
                 promotionID: caption.promotionID,
                 bumpEpoch: true
             )
@@ -2660,9 +2843,14 @@ final class AppModel: ObservableObject {
                 }
             }
 
+            let finalPanes = languagePanes(
+                heard: caption.sourceText,
+                translated: resolvedTranslation,
+                usesInverseGlossary: caption.usesInverseGlossary
+            )
             updateCommittedOverlay(
-                translatedText: resolvedTranslation,
-                sourceText: caption.sourceText,
+                translatedText: finalPanes.translatedText,
+                sourceText: finalPanes.sourceText,
                 lateTranslation: translationExpected && resolvedTranslation.isEmpty == false
             )
             upsertTranscriptEntry(
@@ -2703,7 +2891,7 @@ final class AppModel: ObservableObject {
     private func comparableCaptionText(_ text: String) -> String {
         normalizedCaptionText(text)
             .trimmingCharacters(in: Self.captionComparisonTrimCharacterSet)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private func relaxedComparableCaptionText(_ text: String) -> String {
@@ -2736,8 +2924,8 @@ final class AppModel: ObservableObject {
             return false
         }
 
-        let distanceRatio = levenshteinDistanceRatio(lhsComparable, rhsComparable)
-        return distanceRatio <= Self.recentRecognizedNearDuplicateSimilarityThreshold
+        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(lhsComparable, rhsComparable)
+        return (1.0 - similarity) <= Self.recentRecognizedNearDuplicateSimilarityThreshold
     }
 
     private func sanitizedDisplayText(_ text: String) -> String {
@@ -2903,13 +3091,13 @@ final class AppModel: ObservableObject {
             return false
         }
 
-        let distanceRatio = levenshteinDistanceRatio(
+        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(
             recentArchivedCaption.comparableText,
             comparableText
         )
 
         // Suppress only very close revisions of the just-archived sentence.
-        return distanceRatio <= Self.archivedCaptionReplaySimilarityThreshold
+        return (1.0 - similarity) <= Self.archivedCaptionReplaySimilarityThreshold
     }
 
     private func waitForTranslatedCaption(id: UUID, timeout: Double = 1.5) async -> String? {
@@ -2986,7 +3174,6 @@ final class AppModel: ObservableObject {
             captionTranslationTasks[caption.id] = nil
         }
     }
-
     private func updateReadyCaptionTranslation(_ translatedText: String?, for captionID: UUID) {
         if let translatedText {
             if shouldCacheReadyCaptionTranslation(for: captionID) {
@@ -3021,24 +3208,35 @@ final class AppModel: ObservableObject {
         var didApplyDisplayedTranslation = false
 
         if displayedCaption?.id == captionID,
-           let state = overlayState,
-           shouldReplaceCommittedTranslation(state.translatedText, for: captionID),
-           state.sourceText.isEmpty == false {
+           let caption = displayedCaption {
+            let panes = languagePanes(
+                heard: caption.sourceText,
+                translated: translatedText,
+                usesInverseGlossary: caption.usesInverseGlossary
+            )
             updateCommittedOverlay(
-                translatedText: translatedText,
-                sourceText: state.sourceText,
+                translatedText: panes.translatedText,
+                sourceText: panes.sourceText,
                 lateTranslation: true
             )
             didApplyTranslation = true
             didApplyDisplayedTranslation = true
         }
 
-        if let index = overlayState?.history.lastIndex(where: { $0.id == captionID }),
-           shouldReplaceCommittedTranslation(overlayState?.history[index].translatedText ?? "", for: captionID) {
-            overlayState?.history[index].translatedText = translatedText
+        if let index = overlayState?.history.lastIndex(where: { $0.id == captionID }) {
+            if let transcriptEntry = transcriptEntries.first(where: { $0.id == captionID }) {
+                let panes = languagePanes(
+                    heard: transcriptEntry.sourceText,
+                    translated: translatedText,
+                    usesInverseGlossary: inverseGlossaryCaptionIDs.contains(captionID)
+                )
+                overlayState?.history[index].translatedText = panes.translatedText
+                overlayState?.history[index].sourceText = panes.sourceText
+            } else {
+                overlayState?.history[index].translatedText = translatedText
+            }
             didApplyTranslation = true
         }
-
         if let index = transcriptEntries.firstIndex(where: { $0.id == captionID }),
            shouldReplaceCommittedTranslation(transcriptEntries[index].translatedText, for: captionID) {
             transcriptEntries[index].translatedText = translatedText
@@ -3154,28 +3352,37 @@ final class AppModel: ObservableObject {
         // The committed caption display path has its own wait timeout. Keep this
         // request alive so a slow translation can still backfill overlay history
         // and transcript entries instead of being dropped permanently.
-        let raw: String?
+        // Forward zh→en uses the configured map; affirmative reverse en→zh uses
+        // the collision-safe inverse compiled when the glossary changes.
+        let effectiveGlossary = caption.usesInverseGlossary ? cachedInverseGlossary : glossary
+        let translation: (sourceText: String, translatedText: String)?
         do {
-            raw = try await translationCoordinator.translate(
-                caption.sourceText,
-                from: caption.sourceLanguageID,
-                to: caption.targetLanguageID
-            )
+            translation = try await glossaryService.translating(
+                sourceText: caption.sourceText,
+                glossary: effectiveGlossary
+            ) { preparedInput in
+                try await self.translationCoordinator(
+                    from: caption.sourceLanguageID,
+                    to: caption.targetLanguageID
+                ).translate(
+                    preparedInput,
+                    from: caption.sourceLanguageID,
+                    to: caption.targetLanguageID
+                )
+            }
         } catch {
-            raw = nil
+            translation = nil
         }
 
-        guard let raw else {
+        guard let translation else {
             return nil
         }
 
-        // Apply user glossary on top of raw translation
-        let currentGlossary = glossary
-        let translated = sanitizedDisplayText(glossaryService.apply(to: raw, glossary: currentGlossary))
+        let translated = sanitizedDisplayText(translation.translatedText)
         guard translated.isEmpty == false,
               shouldTreatAsMissingTranslation(
                   translated,
-                  sourceText: caption.sourceText,
+                  sourceText: translation.sourceText,
                   sourceLanguageID: caption.sourceLanguageID,
                   targetLanguageID: caption.targetLanguageID
               ) == false else {
@@ -3283,34 +3490,6 @@ final class AppModel: ObservableObject {
         } else {
             transcriptEntries.append(entry)
         }
-    }
-
-    private func levenshteinDistanceRatio(_ a: String, _ b: String) -> Double {
-        let maxLen = max(a.count, b.count)
-        guard maxLen > 0 else { return 0.0 }
-        return Double(levenshteinDistance(Array(a), Array(b))) / Double(maxLen)
-    }
-
-    private func levenshteinDistance(_ a: [Character], _ b: [Character]) -> Int {
-        let m = a.count
-        let n = b.count
-        guard m > 0 else { return n }
-        guard n > 0 else { return m }
-
-        var dp = Array(0...n)
-
-        for i in 1...m {
-            var prev = dp[0]
-            dp[0] = i
-
-            for j in 1...n {
-                let temp = dp[j]
-                dp[j] = a[i - 1] == b[j - 1] ? prev : 1 + min(prev, dp[j], dp[j - 1])
-                prev = temp
-            }
-        }
-
-        return dp[n]
     }
 
     private func cancelCaptionTranslations() {
@@ -3593,6 +3772,7 @@ private struct QueuedCaption: Identifiable, Equatable {
     let sourceName: String
     let sourceLanguageID: String
     let targetLanguageID: String
+    let usesInverseGlossary: Bool
     let promotedDraftTranslation: String?
 }
 
@@ -3659,10 +3839,14 @@ struct LanguageResourceStatus: Identifiable, Equatable {
 extension View {
     @ViewBuilder
     func v2sTranslationHost(model: AppModel) -> some View {
-        if #available(macOS 15.0, *) {
-            self.translationTask(model.translationHostConfiguration) { session in
-                await model.runTranslationHost(using: session)
-            }
+        if #available(iOS 18.0, macOS 15.0, *) {
+            self
+                .translationTask(model.translationHostConfiguration) { session in
+                    await model.runTranslationHost(using: session)
+                }
+                .translationTask(model.reverseTranslationHostConfiguration) { session in
+                    await model.runReverseTranslationHost(using: session)
+                }
         } else {
             self
         }

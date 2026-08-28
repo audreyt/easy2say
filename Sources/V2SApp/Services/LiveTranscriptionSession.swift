@@ -15,10 +15,19 @@ import WhisperKit
 struct RecognizedSentence: Equatable, Sendable {
     let text: String
     let promotionSegmentID: UUID?
+    let heardLanguageID: String
+    let dualLaneEvidence: DualLaneEvidence?
 
-    init(text: String, promotionSegmentID: UUID? = nil) {
+    init(
+        text: String,
+        promotionSegmentID: UUID? = nil,
+        heardLanguageID: String = "",
+        dualLaneEvidence: DualLaneEvidence? = nil
+    ) {
         self.text = text
         self.promotionSegmentID = promotionSegmentID
+        self.heardLanguageID = heardLanguageID
+        self.dualLaneEvidence = dualLaneEvidence
     }
 }
 
@@ -62,6 +71,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private struct CommittedEmission {
         let text: String
         let promotionSegmentID: UUID?
+        let heardLanguageID: String
+        let dualLaneEvidence: DualLaneEvidence?
+
+        init(
+            text: String,
+            promotionSegmentID: UUID? = nil,
+            heardLanguageID: String = "",
+            dualLaneEvidence: DualLaneEvidence? = nil
+        ) {
+            self.text = text
+            self.promotionSegmentID = promotionSegmentID
+            self.heardLanguageID = heardLanguageID
+            self.dualLaneEvidence = dualLaneEvidence
+        }
     }
 
 #if os(macOS)
@@ -174,9 +197,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var committedSegmentCount = 0
     private let committedBoundaryToleranceSec: TimeInterval = 0.08
     private var committedAudioBoundaryTime: TimeInterval?
+    private var primaryRecognitionContextualStrings: [String] = []
+    private var secondaryRecognitionContextualStrings: [String] = []
     private var recognitionContextualStrings: [String] = []
     private var recognitionBackend: RecognitionBackend = .legacy
     private var activeLocaleIdentifier: String?
+    private var configuredSourceLanguageID = ""
+    private var configuredTargetLanguageID = ""
+    private var currentHeardLanguageID = ""
+    private var speechCorrections = SpeechCorrectionTable.empty
+    private var dualLaneRuntime: AnyObject?
     private var interfaceLanguageID = "en"
     private var modernAnalyzerTask: Task<Void, Never>?
     private var modernResultsTask: Task<Void, Never>?
@@ -287,6 +317,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         interfaceLanguageID: String,
         modeConfig: ModeConfig = .balanced,
         contextualStrings: [String] = [],
+        secondaryContextualStrings: [String] = [],
+        sourceLanguageID: String = "",
+        targetLanguageID: String = "",
+        speechCorrections: SpeechCorrectionTable = .empty,
         transcriptHandler: @escaping @MainActor (RecognizedSentence) -> Void,
         partialHandler: @escaping @MainActor (DraftSegment?) -> Void,
         errorHandler: @escaping @MainActor (String) -> Void,
@@ -295,8 +329,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         self.transcriptHandler = transcriptHandler
         self.partialHandler = partialHandler
         self.modeConfig = modeConfig
-        self.recognitionContextualStrings = sanitizeContextualStrings(contextualStrings)
+        self.primaryRecognitionContextualStrings = sanitizeContextualStrings(contextualStrings)
+        self.secondaryRecognitionContextualStrings = sanitizeContextualStrings(secondaryContextualStrings)
+        self.recognitionContextualStrings = self.primaryRecognitionContextualStrings
         self.activeLocaleIdentifier = localeIdentifier
+        self.configuredSourceLanguageID = sourceLanguageID
+        self.configuredTargetLanguageID = targetLanguageID
+        self.currentHeardLanguageID = sourceLanguageID
+        self.speechCorrections = speechCorrections
         self.interfaceLanguageID = interfaceLanguageID
         self.errorHandler = errorHandler
         self.fatalErrorHandler = fatalErrorHandler
@@ -625,7 +665,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     /// to `ru_RU` on a Mac whose supported list holds no Russian — so its answer only
     /// counts when it appears in `supportedLocales`. Without this check the modern path
     /// is entered for languages only the legacy recognizer can serve.
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     static func modernSpeechLocale(equivalentTo requestedLocale: Locale) async -> Locale? {
         guard SpeechTranscriber.isAvailable,
               let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
@@ -637,7 +677,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     private func configureModernSpeechRecognizer(localeIdentifier: String) async throws -> Bool {
-        guard #available(macOS 26.0, *), SpeechTranscriber.isAvailable else {
+        guard #available(iOS 26.0, macOS 26.0, *), SpeechTranscriber.isAvailable else {
             return false
         }
 
@@ -649,32 +689,74 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func configureSpeechAnalyzerRecognizer(localeIdentifier: String) async throws -> Bool {
         let requestedLocale = Locale(identifier: localeIdentifier)
         guard let resolvedLocale = await Self.modernSpeechLocale(equivalentTo: requestedLocale) else {
             return false
         }
 
-        let transcriber = SpeechTranscriber(
+        let primaryTranscriber = SpeechTranscriber(
             locale: resolvedLocale,
             transcriptionOptions: [],
             reportingOptions: [.volatileResults, .fastResults],
             attributeOptions: [.audioTimeRange, .transcriptionConfidence]
         )
 
-        try await ensureSpeechAnalyzerAssetsIfNeeded(for: transcriber, locale: resolvedLocale)
+        var transcribers: [SpeechTranscriber] = [primaryTranscriber]
+        var secondaryTranscriber: SpeechTranscriber?
+        var resolvedEnglishLocale: Locale?
+        let wantsDualLane = CaptionLanguagePolicy.shouldEnableDualLane(
+            sourceLanguageID: configuredSourceLanguageID,
+            targetLanguageID: configuredTargetLanguageID
+        )
+        if wantsDualLane {
+            let englishLocale = Locale(
+                identifier: LanguageCatalog.speechLocaleIdentifier(for: "en")
+            )
+            if let resolvedEnglish = await Self.modernSpeechLocale(equivalentTo: englishLocale) {
+                let englishTranscriber = SpeechTranscriber(
+                    locale: resolvedEnglish,
+                    transcriptionOptions: [],
+                    reportingOptions: [.volatileResults, .fastResults],
+                    attributeOptions: [.audioTimeRange, .transcriptionConfidence]
+                )
+                transcribers.append(englishTranscriber)
+                secondaryTranscriber = englishTranscriber
+                resolvedEnglishLocale = resolvedEnglish
+            }
+        }
+
+        if let secondaryTranscriber, let resolvedEnglishLocale {
+            try await ConversationLane.installAssetsIfNeeded(
+                for: [
+                    (transcriber: primaryTranscriber, locale: resolvedLocale),
+                    (transcriber: secondaryTranscriber, locale: resolvedEnglishLocale),
+                ]
+            )
+        } else {
+            try await ensureSpeechAnalyzerAssetsIfNeeded(for: primaryTranscriber, locale: resolvedLocale)
+        }
 
         let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .whileInUse)
-        let analyzer = SpeechAnalyzer(modules: [transcriber], options: options)
+        let analyzer = SpeechAnalyzer(modules: transcribers, options: options)
         let context = AnalysisContext()
-        if recognitionContextualStrings.isEmpty == false {
-            context.contextualStrings[.general] = recognitionContextualStrings
+        if secondaryTranscriber != nil {
+            let sharedNeutral = SpeechCorrectionService.neutralRecognitionPhrases(
+                corrections: speechCorrections,
+                languageIDs: [configuredSourceLanguageID, "en"],
+                glossaryKeys: primaryRecognitionContextualStrings + secondaryRecognitionContextualStrings
+            )
+            if sharedNeutral.isEmpty == false {
+                context.contextualStrings[.general] = sharedNeutral
+            }
+        } else if primaryRecognitionContextualStrings.isEmpty == false {
+            context.contextualStrings[.general] = primaryRecognitionContextualStrings
         }
         try await analyzer.setContext(context)
 
         let preferredFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-            compatibleWith: [transcriber],
+            compatibleWith: transcribers,
             considering: processingFormat
         ) ?? processingFormat
         try await analyzer.prepareToAnalyze(in: preferredFormat)
@@ -684,17 +766,39 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         modernResultsTask?.cancel()
-        modernResultsTask = Task { [weak self] in
-            do {
-                for try await result in transcriber.results {
-                    self?.captureQueue.async { [weak self] in
-                        self?.processModernRecognitionResult(result)
-                    }
+        if let secondaryTranscriber {
+            let runtime = DualLaneCaptionRuntime(
+                primaryLanguageID: configuredSourceLanguageID,
+                secondaryLanguageID: "en"
+            )
+            runtime.onStep = { [weak self] step, heardLanguageID in
+                self?.captureQueue.async { [weak self] in
+                    self?.processDualLaneStep(
+                        step,
+                        heardLanguageID: heardLanguageID
+                    )
                 }
-            } catch is CancellationError {
-                return
-            } catch {
+            }
+            runtime.onFailure = { [weak self] error in
                 self?.fallbackFromSpeechAnalyzer(error)
+            }
+            runtime.start(primary: primaryTranscriber, secondary: secondaryTranscriber)
+            dualLaneRuntime = runtime
+            modernResultsTask = nil
+        } else {
+            dualLaneRuntime = nil
+            modernResultsTask = Task { [weak self] in
+                do {
+                    for try await result in primaryTranscriber.results {
+                        self?.captureQueue.async { [weak self] in
+                            self?.processModernRecognitionResult(result)
+                        }
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self?.fallbackFromSpeechAnalyzer(error)
+                }
             }
         }
 
@@ -710,7 +814,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         speechAnalyzerState = analyzer
-        speechTranscriberState = transcriber
+        speechTranscriberState = primaryTranscriber
         analyzerInputFormat = preferredFormat
         recognitionBackend = .speechAnalyzer
         recognitionRequest = nil
@@ -725,7 +829,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         resetDraftState()
         lastModernCommittedResultIdentity = nil
 
-        // Initialize Silero VAD engine for draft confidence / silence scoring only.
         do {
             vadEngine = try SileroVADEngine()
         } catch {
@@ -735,7 +838,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return true
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func ensureSpeechAnalyzerAssetsIfNeeded(
         for transcriber: SpeechTranscriber,
         locale: Locale
@@ -760,8 +863,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         modernAudioConverter = nil
         modernAudioConverterInputSignature = nil
         resetModernTranscriptionState()
+        if #available(iOS 26.0, macOS 26.0, *) {
+            (dualLaneRuntime as? DualLaneCaptionRuntime)?.finish()
+        }
+        dualLaneRuntime = nil
 
-        if #available(macOS 26.0, *) {
+        if #available(iOS 26.0, macOS 26.0, *) {
             (analyzerInputContinuationState as? AsyncStream<AnalyzerInput>.Continuation)?.finish()
             analyzerInputContinuationState = nil
             let analyzer = speechAnalyzerState as? SpeechAnalyzer
@@ -818,17 +925,17 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         for candidate in candidates {
             let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.isEmpty == false,
-                  trimmed.count <= 40 else {
+                  trimmed.count <= SpeechCorrectionService.maximumRecognitionPhraseLength else {
                 continue
             }
 
-            let normalized = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            let normalized = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             guard seen.insert(normalized).inserted else {
                 continue
             }
 
             result.append(trimmed)
-            if result.count >= 60 {
+            if result.count >= SpeechCorrectionService.maximumRecognitionPhrases {
                 break
             }
         }
@@ -1502,7 +1609,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             emitRecognizedSentence(
                 RecognizedSentence(
                     text: sentenceText,
-                    promotionSegmentID: index == 0 ? promotionSegmentID : nil
+                    promotionSegmentID: index == 0 ? promotionSegmentID : nil,
+                    heardLanguageID: currentHeardLanguageID
                 )
             )
         }
@@ -1518,16 +1626,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         for emission in emissions {
             let sentenceTexts = splitCommittedEmissionUnits(in: emission.text)
             var pendingPromotionID = emission.promotionSegmentID
+            let emissionLang = emission.heardLanguageID.isEmpty
+                ? currentHeardLanguageID
+                : emission.heardLanguageID
 
             for sentenceText in sentenceTexts {
-                guard let preparedSentence = prepareCommittedSentenceForEmission(sentenceText) else {
+                let corrected = speechCorrections.apply(sentenceText, languageID: emissionLang)
+                guard let preparedSentence = prepareCommittedSentenceForEmission(corrected) else {
                     continue
                 }
-
                 emitRecognizedSentence(
                     RecognizedSentence(
                         text: preparedSentence,
-                        promotionSegmentID: pendingPromotionID
+                        promotionSegmentID: pendingPromotionID,
+                        heardLanguageID: emissionLang,
+                        dualLaneEvidence: emission.dualLaneEvidence
                     )
                 )
                 rememberCommittedSentence(preparedSentence)
@@ -1601,6 +1714,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     @MainActor
     private func emitPartialDraft(_ draft: DraftSegment?) {
+        guard var draft else {
+            partialHandler?(nil)
+            return
+        }
+        let languageID = currentHeardLanguageID.isEmpty
+            ? configuredSourceLanguageID
+            : currentHeardLanguageID
+        draft.sourceText = speechCorrections.apply(draft.sourceText, languageID: languageID)
         partialHandler?(draft)
     }
 
@@ -2203,12 +2324,117 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
+    private func processDualLaneStep(
+        _ step: DualLaneStep,
+        heardLanguageID: String
+    ) {
+        if let commitText = step.commitText {
+            let resolved = resolveHeardCaption(
+                text: commitText,
+                heardLanguageID: heardLanguageID,
+                evidence: step.evidence
+            )
+            currentHeardLanguageID = resolved.languageID
+            let text = resolved.text
+            cancelSilenceTimer()
+            cancelVADSilenceTimer()
+            resetModernTranscriptionState()
+            let committedDraftID = currentDraftId
+            resetDraftState()
+            guard text.isEmpty == false else {
+                Task { await emitPartialDraft(nil) }
+                return
+            }
+            Task {
+                await emitCommittedSequence(
+                    [
+                        CommittedEmission(
+                            text: text,
+                            promotionSegmentID: committedDraftID,
+                            heardLanguageID: resolved.languageID,
+                            dualLaneEvidence: step.evidence
+                        )
+                    ],
+                    clearDraftAfter: true
+                )
+            }
+            return
+        }
+
+        guard let draftText = step.draftText, draftText.isEmpty == false else {
+            return
+        }
+        let resolved = resolveHeardCaption(
+            text: draftText,
+            heardLanguageID: heardLanguageID,
+            evidence: nil
+        )
+        currentHeardLanguageID = resolved.languageID
+        latestModernText = resolved.text
+        emitCorrectedDraft(resolved.text)
+    }
+
+    private func resolveHeardCaption(
+        text: String,
+        heardLanguageID: String,
+        evidence: DualLaneEvidence? = nil
+    ) -> (text: String, languageID: String) {
+        var languageID = heardLanguageID.isEmpty ? configuredSourceLanguageID : heardLanguageID
+        if LanguageIdentity.isEnglish(languageID),
+           CaptionLanguagePolicy.shouldReverse(
+            configuredSourceLanguageID: configuredSourceLanguageID,
+            configuredTargetLanguageID: configuredTargetLanguageID,
+            heardLanguageID: languageID,
+            heardText: text,
+            evidence: evidence
+           ) == false {
+            languageID = configuredSourceLanguageID
+        }
+        return (text, languageID)
+    }
+
+    private func emitCorrectedDraft(_ text: String) {
+        let now = Date()
+        lastRecognitionResultTime = now
+        observeDraftText(text, at: now)
+        latestModernText = text
+        let draftStability = currentDraftStability(at: now)
+        let boundaryScore: Float = SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) ? 0.9 : 0.45
+        let draft = DraftSegment(
+            segmentId: currentDraftId,
+            sourceText: text,
+            stablePrefixLength: computeStablePrefixLength(text: text, now: now),
+            mutableTailText: String(text.dropFirst(min(computeStablePrefixLength(text: text, now: now), text.count))),
+            avgConfidence: 0.82,
+            startMs: 0,
+            lastUpdateMs: Int(now.timeIntervalSinceReferenceDate * 1000),
+            silenceMs: draftStability.silenceMs,
+            stabilityScore: draftStability.stabilityScore,
+            boundaryScore: boundaryScore,
+            chunkScore: ChunkScorer.score(
+                vadProbability: lastVADProbability,
+                stabilityScore: draftStability.stabilityScore,
+                boundaryScore: boundaryScore,
+                lengthFitScore: draftLengthFitScore(for: text),
+                confidenceScore: 0.82
+            ),
+            vadProbability: lastVADProbability,
+            words: [],
+            heardLanguageID: currentHeardLanguageID
+        )
+        Task { await emitPartialDraft(draft) }
+        scheduleSilenceCommit()
+    }
+
+    @available(iOS 26.0, macOS 26.0, *)
     private func processModernRecognitionResult(_ result: SpeechTranscriber.Result) {
         let now = Date()
         lastRecognitionResultTime = now
         let fullText = normalizedTranscriberText(result.text)
         let pendingRawText = pendingModernText(from: fullText)
+        currentHeardLanguageID = configuredSourceLanguageID
+        // Keep raw — corrections applied once at emitCommittedSequence / emitPartialDraft.
         let text = pendingRawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if result.isFinal {
@@ -2228,7 +2454,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         [
                             CommittedEmission(
                                 text: text,
-                                promotionSegmentID: committedDraftID
+                                promotionSegmentID: committedDraftID,
+                                heardLanguageID: currentHeardLanguageID
                             )
                         ],
                         clearDraftAfter: true
@@ -2374,7 +2601,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             .lowercased()
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func emitDraftUpdate(from result: SpeechTranscriber.Result, text: String) {
         let now = Date()
         observeDraftText(text, at: now)
@@ -2418,14 +2645,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         Task { await emitPartialDraft(draft) }
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func normalizedTranscriberText(_ text: AttributedString) -> String {
         String(text.characters)
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func transcriberAverageConfidence(_ text: AttributedString) -> Float {
         var total: Double = 0
         var count = 0
@@ -2441,7 +2668,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return Float(total / Double(count))
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func transcriberTimeRange(_ text: AttributedString) -> CMTimeRange? {
         for run in text.runs {
             if let timeRange = run.audioTimeRange {
@@ -2452,7 +2679,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return nil
     }
 
-    @available(macOS 26.0, *)
+    @available(iOS 26.0, macOS 26.0, *)
     private func modernResultIdentity(for result: SpeechTranscriber.Result) -> String {
         let startMs = cmTimeMilliseconds(result.range.start)
         let durationMs = cmTimeMilliseconds(result.range.duration)
@@ -2607,7 +2834,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                     [
                         CommittedEmission(
                             text: text,
-                            promotionSegmentID: committedDraftID
+                            promotionSegmentID: committedDraftID,
+                            heardLanguageID: currentHeardLanguageID
                         )
                     ],
                     clearDraftAfter: remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2643,7 +2871,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                     [
                         CommittedEmission(
                             text: sentenceText,
-                            promotionSegmentID: committedDraftID
+                            promotionSegmentID: committedDraftID,
+                            heardLanguageID: currentHeardLanguageID
                         )
                     ],
                     clearDraftAfter: true
@@ -2653,7 +2882,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             Task { await emitPartialDraft(nil) }
         }
     }
-
     private func requiredCommitDelayMs(
         trigger: SilenceCommitTrigger,
         pendingSegments: [SFTranscriptionSegment]

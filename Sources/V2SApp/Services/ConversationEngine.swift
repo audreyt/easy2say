@@ -56,6 +56,13 @@ final class ConversationEngine: ObservableObject {
 
     /// Language used for engine-produced messages. Set before `start()`.
     var interfaceLanguageID = "en"
+    var speechCorrections = SpeechCorrectionTable.empty
+    var recognitionContextualStrings: [String] = []
+    var glossary: [String: String] = [:] {
+        didSet {
+            cachedInverseGlossary = GlossaryService.buildInverseGlossary(glossary)
+        }
+    }
 
     private(set) var primaryLanguageID = "zh-Hant"
     private(set) var secondaryLanguageID = "en"
@@ -77,6 +84,8 @@ final class ConversationEngine: ObservableObject {
         .primary: TranslationCoordinator(),
         .secondary: TranslationCoordinator(),
     ]
+    private let glossaryService = GlossaryService()
+    private var cachedInverseGlossary: [String: String] = [:]
 
     private var arbiter = ConversationFloorArbiter()
     private var lanes: [ConversationSide: ConversationLane] = [:]
@@ -99,12 +108,11 @@ final class ConversationEngine: ObservableObject {
 
     private struct LaneHypothesis {
         var volatileText = ""
-        var confidence: Double = 0
+        var confidence: Double?
         var finalizedText: String?
         /// Range of the pending, already-trimmed audio in the shared timeline.
         var startSeconds: Double = 0
         var endSeconds: Double = 0
-
         var arbiterObservation: ConversationFloorArbiter.Observation {
             ConversationFloorArbiter.Observation(
                 confidence: confidence,
@@ -373,6 +381,16 @@ final class ConversationEngine: ObservableObject {
                 modelRetention: .whileInUse
             )
         )
+        let sharedNeutral = SpeechCorrectionService.neutralRecognitionPhrases(
+            corrections: speechCorrections,
+            languageIDs: [primaryLanguageID, secondaryLanguageID],
+            glossaryKeys: recognitionContextualStrings
+        )
+        if sharedNeutral.isEmpty == false {
+            let context = AnalysisContext()
+            context.contextualStrings[.general] = sharedNeutral
+            try? await analyzer.setContext(context)
+        }
         do {
             try await analyzer.prepareToAnalyze(in: analyzerFormat)
         } catch is CancellationError {
@@ -630,9 +648,10 @@ final class ConversationEngine: ObservableObject {
     }
 
     private func publishDraft(for side: ConversationSide, generation: Int) {
-        guard let text = hypotheses[side]?.volatileText, text.isEmpty == false else {
+        guard let rawText = hypotheses[side]?.volatileText, rawText.isEmpty == false else {
             return
         }
+        let text = speechCorrections.apply(rawText, languageID: languageID(for: side))
 
         var updated = draft(for: side)
         guard updated.sourceText != text else {
@@ -654,7 +673,7 @@ final class ConversationEngine: ObservableObject {
         draftID = UUID()
         clearDrafts()
 
-        guard let text = hypotheses[side]?.volatileText, text.isEmpty == false else {
+        guard let rawText = hypotheses[side]?.volatileText, rawText.isEmpty == false else {
             // The winning lane has no words yet: keep the losing lane's text visible
             // for one more beat rather than flashing an empty pane.
             if carried.sourceText.isEmpty == false {
@@ -663,6 +682,7 @@ final class ConversationEngine: ObservableObject {
             return
         }
 
+        let text = speechCorrections.apply(rawText, languageID: languageID(for: side))
         setDraft(ConversationDraft(id: draftID, sourceText: text), for: side)
         scheduleDraftTranslation(
             text: text,
@@ -693,11 +713,17 @@ final class ConversationEngine: ObservableObject {
                     return
                 }
 
-                let translated = try await self.translators[side]!.translate(
-                    text,
-                    from: source,
-                    to: target
-                )
+                let effectiveGlossary = self.effectiveGlossary(from: source, to: target)
+                let translation = try await self.glossaryService.translating(
+                    sourceText: text,
+                    glossary: effectiveGlossary
+                ) { preparedInput in
+                    try await self.translators[side]!.translate(
+                        preparedInput,
+                        from: source,
+                        to: target
+                    )
+                }
                 guard Task.isCancelled == false,
                       generation == self.runGeneration,
                       self.draftID == draftID,
@@ -707,7 +733,7 @@ final class ConversationEngine: ObservableObject {
                 }
 
                 var updated = self.draft(for: side)
-                updated.translatedText = translated
+                updated.translatedText = translation.translatedText
                 self.setDraft(updated, for: side)
             } catch is CancellationError {
                 return
@@ -726,16 +752,15 @@ final class ConversationEngine: ObservableObject {
     private func commitTurn(text: String, side: ConversationSide) {
         let sourceLanguageID = languageID(for: side)
         let targetLanguageID = languageID(for: side.opposite)
-        // A draft translation that already landed for exactly this text is the same
-        // work; carry it so the committed turn is readable immediately.
+        let correctedText = speechCorrections.apply(text, languageID: sourceLanguageID)
         let carriedTranslation: String = {
             let current = draft(for: side)
-            return current.sourceText == text ? current.translatedText : ""
+            return current.sourceText == correctedText ? current.translatedText : ""
         }()
 
         let turn = ConversationTurn(
             side: side,
-            sourceText: text,
+            sourceText: correctedText,
             translatedText: carriedTranslation,
             sourceLanguageID: sourceLanguageID,
             targetLanguageID: targetLanguageID
@@ -771,18 +796,27 @@ final class ConversationEngine: ObservableObject {
             guard let self else { return }
             defer { self.turnTranslationTasks[turnID] = nil }
             do {
-                let translated = try await self.translators[side]!.translate(
-                    text,
+                let effectiveGlossary = self.effectiveGlossary(
                     from: sourceLanguageID,
                     to: targetLanguageID
                 )
+                let translation = try await self.glossaryService.translating(
+                    sourceText: correctedText,
+                    glossary: effectiveGlossary
+                ) { preparedInput in
+                    try await self.translators[side]!.translate(
+                        preparedInput,
+                        from: sourceLanguageID,
+                        to: targetLanguageID
+                    )
+                }
                 guard Task.isCancelled == false,
                       let index = self.turns.firstIndex(where: { $0.id == turnID }) else {
                     return
                 }
                 // A stopped run retains its turns, so a pending listener translation
                 // is still valuable and safe to backfill by immutable turn ID.
-                self.turns[index].translatedText = translated
+                self.turns[index].translatedText = translation.translatedText
             } catch is CancellationError {
                 return
             } catch {
@@ -796,6 +830,17 @@ final class ConversationEngine: ObservableObject {
     }
 
     // MARK: - Helpers
+    private func effectiveGlossary(
+        from sourceLanguageID: String,
+        to targetLanguageID: String
+    ) -> [String: String] {
+        if LanguageIdentity.isEnglish(sourceLanguageID),
+           LanguageIdentity.isTraditionalChinese(targetLanguageID) {
+            return cachedInverseGlossary
+        }
+        return glossary
+    }
+
 
     /// Both permissions are required before either lane can produce a word, so ask
     /// once here rather than letting a lane fail opaquely.

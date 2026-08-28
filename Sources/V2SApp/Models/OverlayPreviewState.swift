@@ -22,9 +22,9 @@ struct OverlayPreviewState: Equatable {
     var draftSourceText: String? = nil
     var draftStablePrefixLength: Int = 0
     /// Incremental translation of the current draft text (updates as stable prefix grows).
-    private(set) var draftTranslatedText: String? = nil
-    private(set) var draftTranslationSourceText: String? = nil
-    private(set) var draftTranslationPromotionID: UUID? = nil
+    var draftTranslatedText: String? = nil
+    var draftTranslationSourceText: String? = nil
+    var draftTranslationPromotionID: UUID? = nil
     var draftPromotionID: UUID? = nil
 
     // MARK: History layer — committed captions the user can scroll back through
@@ -41,7 +41,7 @@ struct OverlayPreviewState: Equatable {
     // MARK: Derived helpers
 
     var hasActiveDraftLayer: Bool {
-        draftSourceText?.isEmpty == false
+        (draftSourceText?.isEmpty == false) || (draftTranslatedText?.isEmpty == false)
     }
 
     var hasHistory: Bool {

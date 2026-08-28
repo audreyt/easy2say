@@ -250,6 +250,7 @@ struct HomeView: View {
                 primaryLanguageID: model.conversationPrimaryLanguageID,
                 secondaryLanguageID: model.conversationSecondaryLanguageID
             )
+            model.applySpeechSupport(to: conversation)
             await conversation.start()
             refreshMicrophoneAuthorization()
         }

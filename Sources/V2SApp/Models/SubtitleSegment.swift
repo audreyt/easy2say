@@ -22,6 +22,7 @@ struct DraftSegment: Equatable, Sendable {
     var chunkScore: Float
     var vadProbability: Float
     var words: [WordToken]
+    var heardLanguageID: String = ""
 
     var stablePrefixText: String {
         String(sourceText.prefix(stablePrefixLength))

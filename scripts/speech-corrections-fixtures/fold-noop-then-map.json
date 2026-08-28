@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "languages": {
+    "en": {
+      "corrections": [
+        { "canonical": "Cafe", "aliases": ["cafe"] },
+        { "canonical": "Other", "aliases": ["cafe"] }
+      ]
+    }
+  }
+}

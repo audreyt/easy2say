@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "languages": {
+    "en": {
+      "hints": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "corrections": [
+        { "canonical": "Riverton", "aliases": ["rivertin"], "status": "safe" }
+      ]
+    },
+    "zh-Hant": {
+      "corrections": [
+        { "canonical": "甲乙", "aliases": ["甲已"] }
+      ]
+    }
+  }
+}

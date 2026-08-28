@@ -36,7 +36,8 @@ final class ConversationLaneTests: XCTestCase {
         XCTAssertEqual(pending.text, "new")
         XCTAssertEqual(pending.startSeconds, 1.1, accuracy: 0.001)
         XCTAssertEqual(pending.endSeconds, 2, accuracy: 0.001)
-        XCTAssertEqual(pending.confidence, 0.7, accuracy: 0.001)
+        let conf = try XCTUnwrap(pending.confidence)
+        XCTAssertEqual(conf, 0.7, accuracy: 0.001)
     }
 
     func testTrimDropsResultWhoseRunsAreEntirelyCommitted() {

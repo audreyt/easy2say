@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "languages": {
+    "en": {
+      "corrections": [
+        {
+          "canonical": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "aliases": ["short"],
+          "status": "unsafe"
+        }
+      ]
+    }
+  }
+}

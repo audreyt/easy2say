@@ -3,6 +3,52 @@ import Foundation
 /// Applies a user-defined glossary table to a translated string.
 /// Source terms are matched case-insensitively and replaced with the target term.
 struct GlossaryService: Sendable {
+    /// Builds a collision-safe inverse glossary (target -> source) for reverse translations.
+    ///
+    /// - Normalizes target values using a stable `en_US_POSIX` locale to detect collisions.
+    /// - Groups all entries by normalized target first, then omits ambiguous multi-source groups.
+    /// - Omits identity mappings (source == target).
+    static func buildInverseGlossary(
+        _ glossary: [String: String],
+        locale: Locale = Locale(identifier: "en_US_POSIX")
+    ) -> [String: String] {
+        guard glossary.isEmpty == false else { return [:] }
+
+        // Collect unique (normSource, normTarget) pairs, keeping the first original
+        // target string encountered for each normalized pair. Distinct dictionary keys
+        // that normalize to the same source→target pair (e.g. "AI" and "ai" → same
+        // target) are a single inverse entry, not a target-ambiguity collision.
+        var seenPairs = Set<String>()
+        var deduped: [(source: String, trimmedTarget: String, normSource: String, normTarget: String)] = []
+        for (source, target) in glossary {
+            let trimmedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmedSource.isEmpty == false, trimmedTarget.isEmpty == false else { continue }
+            let normSource = trimmedSource.folding(options: [.caseInsensitive], locale: locale)
+            let normTarget = trimmedTarget.folding(options: [.caseInsensitive], locale: locale)
+            let pairKey = normSource + "\u{0}" + normTarget
+            guard seenPairs.insert(pairKey).inserted else { continue }
+            deduped.append((source: trimmedSource, trimmedTarget: trimmedTarget, normSource: normSource, normTarget: normTarget))
+        }
+
+        // Group by normalized target; keep only entries whose target maps to a single
+        // normalized source (no ambiguity) and is not an identity mapping.
+        var grouped: [String: [(source: String, originalTarget: String, normSource: String)]] = [:]
+        for entry in deduped {
+            grouped[entry.normTarget, default: []].append(
+                (source: entry.source, originalTarget: entry.trimmedTarget, normSource: entry.normSource)
+            )
+        }
+
+        var inverse: [String: String] = [:]
+        for (normTarget, entries) in grouped {
+            guard entries.count == 1, let unique = entries.first else { continue }
+            guard unique.normSource != normTarget else { continue }
+            inverse[unique.originalTarget] = unique.source
+        }
+        return inverse
+    }
+
     func apply(to text: String, glossary: [String: String]) -> String {
         guard !glossary.isEmpty else { return text }
 
@@ -10,14 +56,12 @@ struct GlossaryService: Sendable {
             .map { (source: $0.key.trimmingCharacters(in: .whitespacesAndNewlines), target: $0.value) }
             .filter { !$0.source.isEmpty }
             .sorted { lhs, rhs in
-                if lhs.source.count == rhs.source.count {
-                    let caseInsensitiveOrder = lhs.source.localizedCaseInsensitiveCompare(rhs.source)
-                    if caseInsensitiveOrder != .orderedSame {
-                        return caseInsensitiveOrder == .orderedAscending
-                    }
+                let lhsCount = lhs.source.count
+                let rhsCount = rhs.source.count
+                if lhsCount == rhsCount {
                     return lhs.source < rhs.source
                 }
-                return lhs.source.count > rhs.source.count
+                return lhsCount > rhsCount
             }
 
         guard !entries.isEmpty else { return text }
@@ -30,7 +74,7 @@ struct GlossaryService: Sendable {
             return text
         }
 
-        let locale = Locale.current
+        let locale = Locale(identifier: "en_US_POSIX")
         let replacements = entries.reduce(into: [String: String]()) { replacements, entry in
             let key = normalizedKey(entry.source, locale: locale)
             if replacements[key] == nil {
@@ -67,6 +111,22 @@ struct GlossaryService: Sendable {
         return result
     }
 
+    /// Applies the direction-effective glossary before translation, then applies the
+    /// same map to the translated output as a fallback. The caller's source text is
+    /// returned verbatim so display and transcript storage never see the prepared input.
+    func translating(
+        sourceText: String,
+        glossary: [String: String],
+        with translate: (String) async throws -> String
+    ) async rethrows -> (sourceText: String, translatedText: String) {
+        let preparedInput = apply(to: sourceText, glossary: glossary)
+        let rawTranslation = try await translate(preparedInput)
+        return (
+            sourceText: sourceText,
+            translatedText: apply(to: rawTranslation, glossary: glossary)
+        )
+    }
+
     private func normalizedKey(_ text: String, locale: Locale) -> String {
         text.folding(options: [.caseInsensitive], locale: locale)
     }
@@ -78,13 +138,20 @@ struct GlossaryService: Sendable {
     /// when directly adjacent to CJK characters (e.g. "使用AI模型").
     private static func boundaryAwarePattern(for source: String) -> String {
         let escaped = NSRegularExpression.escapedPattern(for: source)
-        let leading = source.unicodeScalars.first.map(isBoundaryRelevantScalar) == true
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.unicodeScalars.first,
+              let last = trimmed.unicodeScalars.last else {
+            return escaped
+        }
+
+        let leadingBoundary = isBoundaryRelevantScalar(first)
             ? "(?<!\(nonCJKWordCharacterClass))"
             : ""
-        let trailing = source.unicodeScalars.last.map(isBoundaryRelevantScalar) == true
+        let trailingBoundary = isBoundaryRelevantScalar(last)
             ? "(?!\(nonCJKWordCharacterClass))"
             : ""
-        return leading + escaped + trailing
+
+        return "\(leadingBoundary)\(escaped)\(trailingBoundary)"
     }
 
     private static let nonCJKWordCharacterClass =
@@ -95,20 +162,6 @@ struct GlossaryService: Sendable {
     }
 
     private static func isCJKScalar(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.value {
-        case 0x1100...0x11FF, // Hangul Jamo
-             0x2E80...0x2FFF, // CJK Radicals and punctuation
-             0x3000...0x30FF, // Hiragana, Katakana, and CJK punctuation
-             0x3400...0x4DBF, // CJK Extension A
-             0x4E00...0x9FFF, // CJK Unified Ideographs
-             0xA960...0xA97F, // Hangul Jamo Extended-A
-             0xAC00...0xD7FF, // Hangul syllables and Jamo Extended-B
-             0xF900...0xFAFF, // CJK Compatibility Ideographs
-             0xFE30...0xFE6F, // CJK Compatibility Forms
-             0xFF00...0xFFEF: // Fullwidth forms
-            return true
-        default:
-            return false
-        }
+        LanguageIdentity.isCJKScalar(scalar)
     }
 }

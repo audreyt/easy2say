@@ -11,7 +11,7 @@ import Speech
 final class ConversationLane: @unchecked Sendable {
     struct TimedSpan: Equatable, Sendable {
         let text: String
-        let confidence: Double
+        let confidence: Double?
         let startSeconds: Double
         let endSeconds: Double
     }
@@ -19,8 +19,8 @@ final class ConversationLane: @unchecked Sendable {
     struct Update: Sendable {
         let side: ConversationSide
         let text: String
-        /// Mean `transcriptionConfidence` over the result's runs, in `0...1`.
-        let confidence: Double
+        /// Mean `transcriptionConfidence` over the result's runs in `0...1`, or `nil` if unmeasured.
+        let confidence: Double?
         let isFinal: Bool
         /// Position of this result in the shared capture timeline.
         let startSeconds: Double
@@ -45,10 +45,13 @@ final class ConversationLane: @unchecked Sendable {
                 )
                 guard pendingText.isEmpty == false else { return nil }
 
+                let confidences = pending.compactMap(\.confidence)
+                let meanConfidence = confidences.isEmpty ? nil : (confidences.reduce(0, +) / Double(confidences.count))
+
                 return Update(
                     side: side,
                     text: pendingText,
-                    confidence: pending.map(\.confidence).reduce(0, +) / Double(pending.count),
+                    confidence: meanConfidence,
                     isFinal: isFinal,
                     startSeconds: pending.map(\.startSeconds).min() ?? startSeconds,
                     endSeconds: pending.map(\.endSeconds).max() ?? endSeconds,
@@ -56,9 +59,6 @@ final class ConversationLane: @unchecked Sendable {
                 )
             }
 
-            // `audioTimeRange` was requested, but preserve a wholly-new result if an
-            // OS build omits run-level attributes. An overlapping result cannot be
-            // safely split and is dropped instead of duplicating committed speech.
             guard startSeconds + tolerance >= boundary else { return nil }
             return self
         }
@@ -69,10 +69,6 @@ final class ConversationLane: @unchecked Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
-
-    /// Confidence assumed when a run carries no `transcriptionConfidence`.
-    /// Neutral by construction: an absent score must not decide the floor.
-    private static let assumedConfidence: Double = 0.82
 
     let side: ConversationSide
     let transcriber: SpeechTranscriber
@@ -88,9 +84,6 @@ final class ConversationLane: @unchecked Sendable {
     }
 
     /// Downloads the on-device assets both lanes need, in one request.
-    ///
-    /// Asking per lane would serialize two downloads and could leave the session half
-    /// usable — a conversation with one working language is not a conversation.
     static func installAssetsIfNeeded(
         for modules: [(transcriber: SpeechTranscriber, locale: Locale)]
     ) async throws {
@@ -165,8 +158,6 @@ final class ConversationLane: @unchecked Sendable {
         for run in text.runs {
             let fragment = String(text[run.range].characters)
             guard fragment.isEmpty == false else { continue }
-            // One untimed fragment makes the result unsplittable. Return no spans so
-            // `trimmingAudio` takes its conservative whole-result overlap fallback.
             guard let timeRange = run.audioTimeRange else { return [] }
             let start = CMTimeGetSeconds(timeRange.start)
             let end = CMTimeGetSeconds(timeRange.end)
@@ -174,7 +165,7 @@ final class ConversationLane: @unchecked Sendable {
             spans.append(
                 TimedSpan(
                     text: fragment,
-                    confidence: run.transcriptionConfidence ?? Self.assumedConfidence,
+                    confidence: run.transcriptionConfidence,
                     startSeconds: start,
                     endSeconds: end
                 )
@@ -183,10 +174,10 @@ final class ConversationLane: @unchecked Sendable {
         return spans
     }
 
-    private func averageConfidence(of text: AttributedString) -> Double {
+    private func averageConfidence(of text: AttributedString) -> Double? {
         let values = text.runs.compactMap { $0.transcriptionConfidence }
         guard values.isEmpty == false else {
-            return Self.assumedConfidence
+            return nil
         }
         return values.reduce(0, +) / Double(values.count)
     }

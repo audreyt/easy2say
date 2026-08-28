@@ -177,18 +177,19 @@ struct CaptionFlowContentView: View {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if let draftText = state.draftSourceText, !draftText.isEmpty {
+            if state.hasActiveDraftLayer {
+                let draftSource = state.draftSourceText ?? ""
                 let visibleDraftTranslatedText = displayedDraftTranslatedText(
                     for: state,
-                    draftText: draftText
+                    draftText: draftSource
                 )
                 applyingPromotionTransition(
-                    to: draftBody(state: state, draftText: draftText, translated: visibleDraftTranslatedText)
+                    to: draftBody(state: state, draftText: draftSource, translated: visibleDraftTranslatedText)
                         .background(draftSlotHeightReader),
                     key: promotionKey(
                         promotionID: state.draftPromotionID,
-                        sourceText: draftText,
-                        translatedText: visibleDraftTranslatedText ?? draftText
+                        sourceText: draftSource.isEmpty ? (visibleDraftTranslatedText ?? "") : draftSource,
+                        translatedText: visibleDraftTranslatedText ?? draftSource
                     )
                 )
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -433,7 +434,11 @@ struct CaptionFlowContentView: View {
         draftText: String
     ) -> String? {
         if model.shouldReserveDraftTranslationSlot && showsOriginalSubtitle == false {
-            return draftText
+            return draftText.isEmpty ? state.draftTranslatedText : draftText
+        }
+
+        if let explicit = state.draftTranslatedText, explicit.isEmpty == false {
+            return explicit
         }
 
         guard let draftTranslated = state.visibleDraftTranslatedText(

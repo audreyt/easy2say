@@ -83,20 +83,24 @@ private struct CaptionPane: View {
     }
 
     private var draftText: String? {
-        guard let state = model.overlayState,
-              let sourceDraft = state.draftSourceText,
-              sourceDraft.isEmpty == false else {
+        guard let state = model.overlayState, state.hasActiveDraftLayer else {
             return nil
         }
 
         switch role {
         case .source:
-            return sourceDraft
+            return state.draftSourceText
         case .translation:
-            return state.visibleDraftTranslatedText(
-                for: sourceDraft,
-                promotionID: state.draftPromotionID
-            )
+            if let explicit = state.draftTranslatedText, explicit.isEmpty == false {
+                return explicit
+            }
+            if let sourceDraft = state.draftSourceText {
+                return state.visibleDraftTranslatedText(
+                    for: sourceDraft,
+                    promotionID: state.draftPromotionID
+                )
+            }
+            return nil
         }
     }
 

@@ -4,36 +4,32 @@ import Foundation
 ///
 /// Apple's Speech stack has no spoken-language identification API: `SpeechTranscriber`
 /// is pinned to exactly one `Locale`, and a transcriber fed audio in a language it was
-/// not built for still emits confident-looking text in its own script. A conversation
-/// session therefore runs both of the session's languages over the same microphone
-/// capture and arbitrates between their hypotheses.
+/// not built for may emit text in its own script. A conversation session runs both of
+/// the session's languages over the same capture and arbitrates between their hypotheses.
 ///
-/// Both lanes report a mean `transcriptionConfidence` for the same audio, so the
-/// discriminating signal is the confidence gap. Raw comparison flickers — the two lanes
-/// trade the lead several times per second early in an utterance — so a challenger must
-/// clear `margin` for `requiredWins` consecutive observations before the floor moves.
-/// Once a lane has produced a finalized result the floor is sticky until the next
-/// utterance starts, which keeps a finished turn from being retroactively reassigned.
+/// When transcribers report `transcriptionConfidence`, a challenger must clear `margin`
+/// for `requiredWins` consecutive observations before the floor moves. Absent confidence
+/// does not flip the floor. Once an incumbent finalizes the floor is sticky until commit.
 ///
 /// This type is a value type with no dependencies so the policy is unit-testable
 /// without audio, a recognizer, or a main actor.
 struct ConversationFloorArbiter: Equatable, Sendable {
     /// What one lane heard for the audio observed so far.
     struct Observation: Equatable, Sendable {
-        /// Mean transcription confidence in `0...1`.
-        let confidence: Double
+        /// Mean transcription confidence in `0...1`, or `nil` if unmeasured.
+        let confidence: Double?
         /// The lane's current hypothesis. An empty hypothesis never wins the floor.
         let text: String
         /// Whether the lane has finalized this utterance.
         let isFinal: Bool
 
-        init(confidence: Double, text: String, isFinal: Bool = false) {
+        init(confidence: Double?, text: String, isFinal: Bool = false) {
             self.confidence = confidence
             self.text = text
             self.isFinal = isFinal
         }
 
-        static let silent = Observation(confidence: 0, text: "", isFinal: false)
+        static let silent = Observation(confidence: nil, text: "", isFinal: false)
 
         var hasSpeech: Bool {
             text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -77,7 +73,7 @@ struct ConversationFloorArbiter: Equatable, Sendable {
         floor = side
         challenger = nil
         challengerWins = 0
-        isFloorSticky = false
+        isFloorSticky = true
     }
 
     /// Clears per-utterance state. Called when a turn commits or the session resets,
@@ -130,7 +126,10 @@ struct ConversationFloorArbiter: Equatable, Sendable {
             return moveFloor()
         }
 
-        guard contender.confidence >= incumbent.confidence + margin else {
+        // Require both measured confidences to clear margin; absent confidence resets challenger.
+        guard let contenderConf = contender.confidence,
+              let incumbentConf = incumbent.confidence,
+              contenderConf >= incumbentConf + margin else {
             challenger = nil
             challengerWins = 0
             return false
@@ -166,9 +165,14 @@ struct ConversationFloorArbiter: Equatable, Sendable {
 
         let incumbent = floor == .primary ? primary : secondary
         let contender = floor == .primary ? secondary : primary
+        let contenderWinsConfidence: Bool
+        if let contenderConf = contender.confidence, let incumbentConf = incumbent.confidence {
+            contenderWinsConfidence = contenderConf >= incumbentConf + margin
+        } else {
+            contenderWinsConfidence = false
+        }
         let shouldMove = contender.hasSpeech
-            && (incumbent.hasSpeech == false
-                || contender.confidence >= incumbent.confidence + margin)
+            && (incumbent.hasSpeech == false || contenderWinsConfidence)
         let moved = shouldMove ? moveFloor() : false
         isFloorSticky = true
         return moved
