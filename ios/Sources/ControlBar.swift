@@ -7,6 +7,7 @@ struct ControlBar: View {
     let toggleSession: () -> Void
     let showTranscript: () -> Void
     let showSettings: () -> Void
+    let showFullscreen: () -> Void
     let selectConversationMode: (Bool) -> Void
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var languageSwapDragOffset: CGFloat = 0
@@ -181,12 +182,24 @@ struct ControlBar: View {
         model.setIOSOutputLanguageID(inputID)
     }
 
+    private var usesCompactDock: Bool {
+        verticalSizeClass == .compact
+    }
+
     private var recordingDock: some View {
-        HStack(alignment: .center, spacing: 28) {
+        HStack(alignment: .center, spacing: usesCompactDock ? 14 : 18) {
             ControlIconButton(
                 symbol: "gearshape.fill",
                 title: model.localized(.iosSettings),
+                accessibilityIdentifier: "settings-button",
                 action: showSettings
+            )
+
+            ControlIconButton(
+                symbol: "arrow.up.left.and.arrow.down.right",
+                title: model.localized(.iosFullscreen),
+                accessibilityIdentifier: "fullscreen-button",
+                action: showFullscreen
             )
 
             SessionCapsuleButton(
@@ -201,6 +214,7 @@ struct ControlBar: View {
             ControlIconButton(
                 symbol: "doc.text",
                 title: model.localized(.transcript),
+                accessibilityIdentifier: "transcript-button",
                 action: showTranscript
             )
         }
@@ -463,10 +477,11 @@ private struct MicrophoneChip: View {
 struct ControlIconButton: View {
     let symbol: String
     let title: String
+    var accessibilityIdentifier: String? = nil
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        let button = Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(IOSTheme.primaryText.opacity(0.88))
@@ -482,6 +497,12 @@ struct ControlIconButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+
+        if let accessibilityIdentifier {
+            button.accessibilityIdentifier(accessibilityIdentifier)
+        } else {
+            button
+        }
     }
 }
 

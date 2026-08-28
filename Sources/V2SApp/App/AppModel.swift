@@ -31,11 +31,11 @@ private enum AppBuildInfo {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
     static var buildNumber: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "51"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "52"
     }
 #else
-    static let marketingVersion = "0.3.39"
-    static let buildNumber = "43"
+    static let marketingVersion = "0.3.40"
+    static let buildNumber = "44"
     static let repositoryURLString = "https://github.com/audreyt/easy2say"
     static let repositoryURL = URL(string: repositoryURLString)
 #endif
@@ -111,6 +111,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var transcriptEntries: [TranscriptEntry] = []
     @Published private(set) var transcriptGeneration: Int = 0
     @Published var isOverlayVisible = false
+    @Published var isAudienceDisplayVisible = false
     @Published private(set) var overlayHistoryVisibleCount = 0
     @Published private(set) var overlayHistoryScrollOffset = 0
 
@@ -656,7 +657,7 @@ final class AppModel: ObservableObject {
 
         if liveTranscriptionSession == nil,
            sessionState != .error,
-           isOverlayVisible {
+           (isOverlayVisible || isAudienceDisplayVisible) {
             syncOverlayPreviewIfNeeded()
         }
 
@@ -1057,11 +1058,41 @@ final class AppModel: ObservableObject {
     func toggleOverlayVisibility() {
         if isOverlayVisible {
             isOverlayVisible = false
-            if sessionState != .running {
+            if sessionState != .running && isAudienceDisplayVisible == false {
                 overlayState = nil
+                setStatus(allSources.isEmpty ? .noInputSourcesDetected : .ready)
             }
         } else {
             showOverlayPreview()
+        }
+    }
+
+    func showAudienceDisplay() {
+        if overlayState == nil {
+            let source = selectedSource ?? previewInputSource
+            overlayState = makePreviewState(for: source)
+            overlayHistoryScrollOffset = 0
+        }
+        isAudienceDisplayVisible = true
+        if sessionState != .running {
+            setStatus(.showingOverlayPreview)
+        }
+    }
+
+    func hideAudienceDisplay() {
+        guard isAudienceDisplayVisible else { return }
+        isAudienceDisplayVisible = false
+        if sessionState != .running && isOverlayVisible == false {
+            overlayState = nil
+            setStatus(allSources.isEmpty ? .noInputSourcesDetected : .ready)
+        }
+    }
+
+    func toggleAudienceDisplayVisibility() {
+        if isAudienceDisplayVisible {
+            hideAudienceDisplay()
+        } else {
+            showAudienceDisplay()
         }
     }
 
@@ -2223,7 +2254,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        guard isOverlayVisible || sessionState == .running else {
+        guard isOverlayVisible || isAudienceDisplayVisible || sessionState == .running else {
             return
         }
 

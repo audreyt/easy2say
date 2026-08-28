@@ -34,6 +34,7 @@ Easy2say listens through the device microphone, transcribes with Apple Speech, t
 - **One screen, two languages.** The source and translation each receive half the display.
 - **Made for either orientation.** Portrait stacks both halves; landscape places them side by side.
 - **Made to share.** Flip the other person’s half 180° to read naturally across a table.
+- **Fullscreen and audience display.** Fullscreen captions fill the iPhone or iPad screen. On Mac, open an audience view on any display or projector.
 - **Two-way by design.** Two people can speak their own languages into one microphone and read each utterance in the language they understand.
 - **Private by construction.** No account, network client, cloud transcription, analytics, or telemetry.
 - **Scroll back without stopping.** Use the overlay scrollbar on Mac or the transcript sheet on iPhone and iPad while captions continue.
@@ -78,10 +79,9 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 | Live microphone captions | Yes | Yes |
 | On-device speech recognition and translation | Yes | Yes |
 | Caption presentation | Equal source and translation halves | Translucent vertical or side-by-side overlay; either direction |
+| Fullscreen presentation | Full-screen captions; tap to show controls | Audience Display on any selected screen |
 | Capture another app’s audio | No; iOS is microphone-only | Yes |
 | Float captions over other apps | No; captions stay inside Easy2say | Yes |
-
-The iOS app cannot capture another app’s audio and does not provide a cross-app floating overlay. The macOS package preserves that desktop workflow in this fork; the [upstream project](https://github.com/franklioxygen/v2s) remains the original macOS source and release line.
 
 ## Requirements
 
@@ -93,11 +93,11 @@ The iOS app cannot capture another app’s audio and does not provide a cross-ap
 
 ### Universal macOS package
 
-The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. The app is ad-hoc signed and the installer is currently unsigned, so macOS may require **Control-click → Open** or approval under **System Settings → Privacy & Security**.
+The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. Starting with 0.3.39, the app and installer are signed with Developer ID, notarized by Apple, and stapled. Gatekeeper accepts the download without a manual override.
 
 Version 0.3.38 is the first macOS build under the Easy2say name and update feed. Existing `v2s` users must install this package once manually because older builds still follow the upstream feed and signing key. The installer removes `/Applications/v2s.app` only when its bundle identifier matches this app, installs `/Applications/Easy2say.app`, and preserves the existing settings and model cache paths.
 
-To rebuild the same package locally:
+To build a local package:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \

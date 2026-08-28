@@ -425,9 +425,9 @@ private struct ConversationControlStrip: View {
                 ControlIconButton(
                     symbol: "gearshape.fill",
                     title: model.localized(.iosSettings),
+                    accessibilityIdentifier: "conversation-settings-button",
                     action: showSettings
                 )
-
                 SessionCapsuleButton(
                     title: toggleTitle,
                     isLive: engine.phase == .listening,
@@ -440,6 +440,7 @@ private struct ConversationControlStrip: View {
                 ControlIconButton(
                     symbol: "arrow.counterclockwise",
                     title: model.localized(.conversationClear),
+                    accessibilityIdentifier: "conversation-clear-button",
                     action: engine.clearTurns
                 )
                 .disabled(hasContent == false)

@@ -11,8 +11,10 @@ struct HomeView: View {
 
     @State private var showsTranscript = false
     @State private var showsSettings = false
+    @State private var isFullscreen = false
+    @State private var showsFullscreenChrome = true
+    @State private var fullscreenHideTask: Task<Void, Never>? = nil
     @State private var microphoneAuthorization = AVCaptureDevice.authorizationStatus(for: .audio)
-
     // The engine lives here so both of its `.translationTask` hosts stay attached
     // to the live view tree for the whole session, not just while the
     // conversation surface is on screen.
@@ -49,70 +51,80 @@ struct HomeView: View {
                 IOSTheme.background(accent: accent)
                     .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    if model.isConversationModeActive {
-                        ConversationView(
-                            model: model,
-                            engine: conversation,
-                            isStartDisabled: isConversationStartDisabled,
-                            toggleSession: toggleConversation,
-                            showSettings: { showsSettings = true },
-                            showCaptions: { setConversationMode(false) }
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ZStack {
-                            CaptionHalves(
+                if isFullscreen {
+                    fullscreenView(isHorizontal: usesSideBySideCaptions)
+                        .transition(.opacity)
+                } else {
+                    VStack(spacing: 0) {
+                        if model.isConversationModeActive {
+                            ConversationView(
                                 model: model,
-                                isHorizontal: usesSideBySideCaptions
+                                engine: conversation,
+                                isStartDisabled: isConversationStartDisabled,
+                                toggleSession: toggleConversation,
+                                showSettings: { showsSettings = true },
+                                showCaptions: { setConversationMode(false) }
                             )
-
-                            if hasNoMicrophones && microphoneAccessDenied == false {
-                                NoMicrophoneCard(
-                                    title: model.localized(.iosNoMicrophonesTitle),
-                                    message: model.localized(.iosNoMicrophonesMessage),
-                                    refreshTitle: model.localized(.refreshSources),
-                                    accent: IOSTheme.brand,
-                                    refresh: model.refreshSources
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ZStack {
+                                CaptionHalves(
+                                    model: model,
+                                    isHorizontal: usesSideBySideCaptions
                                 )
-                                .padding(24)
-                                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+
+                                if hasNoMicrophones && microphoneAccessDenied == false {
+                                    NoMicrophoneCard(
+                                        title: model.localized(.iosNoMicrophonesTitle),
+                                        message: model.localized(.iosNoMicrophonesMessage),
+                                        refreshTitle: model.localized(.refreshSources),
+                                        accent: IOSTheme.brand,
+                                        refresh: model.refreshSources
+                                    )
+                                    .padding(24)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+
+                        VStack(spacing: 10) {
+                            if microphoneAccessDenied {
+                                MicrophonePermissionCallout(
+                                    title: model.localized(.microphone),
+                                    message: model.localized(.microphonePermissionDenied),
+                                    settingsTitle: model.localized(.iosOpenSettings),
+                                    accent: IOSTheme.brand,
+                                    openSettings: openSystemSettings
+                                )
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+
+                            if model.isConversationModeActive == false {
+                                ControlBar(
+                                    model: model,
+                                    isStartDisabled: isStartDisabled,
+                                    toggleSession: toggleSession,
+                                    showTranscript: { showsTranscript = true },
+                                    showSettings: { showsSettings = true },
+                                    showFullscreen: enterFullscreen,
+                                    selectConversationMode: setConversationMode
+                                )
                             }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 14)
                     }
-
-                    VStack(spacing: 10) {
-                        if microphoneAccessDenied {
-                            MicrophonePermissionCallout(
-                                title: model.localized(.microphone),
-                                message: model.localized(.microphonePermissionDenied),
-                                settingsTitle: model.localized(.iosOpenSettings),
-                                accent: IOSTheme.brand,
-                                openSettings: openSystemSettings
-                            )
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        if model.isConversationModeActive == false {
-                            ControlBar(
-                                model: model,
-                                isStartDisabled: isStartDisabled,
-                                toggleSession: toggleSession,
-                                showTranscript: { showsTranscript = true },
-                                showSettings: { showsSettings = true },
-                                selectConversationMode: setConversationMode
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 14)
+                    .transition(.opacity)
                 }
             }
         }
         .v2sConversationTranslationHost(engine: conversation)
         .environment(\.locale, model.interfaceLocale)
         .tint(IOSTheme.brand)
+        .statusBarHidden(isFullscreen)
+        .persistentSystemOverlays(isFullscreen ? .hidden : .automatic)
+        .animation(.easeInOut(duration: 0.28), value: isFullscreen)
         .animation(.easeInOut(duration: 0.24), value: microphoneAccessDenied)
         .animation(.easeInOut(duration: 0.24), value: hasNoMicrophones)
         .onAppear {
@@ -122,6 +134,7 @@ struct HomeView: View {
             updateIdleTimer()
         }
         .onDisappear {
+            fullscreenHideTask?.cancel()
             #if canImport(UIKit)
             UIApplication.shared.isIdleTimerDisabled = false
             #endif
@@ -137,6 +150,14 @@ struct HomeView: View {
         }
         .onChange(of: conversation.phase) { _, _ in
             updateIdleTimer()
+        }
+        .onChange(of: isFullscreen) { _, _ in
+            updateIdleTimer()
+        }
+        .onChange(of: model.isConversationModeActive) { _, isActive in
+            if isActive && isFullscreen {
+                exitFullscreen()
+            }
         }
         .onChange(of: model.conversationPrimaryLanguageID) { _, _ in
             restartConversationIfRunning()
@@ -263,7 +284,157 @@ struct HomeView: View {
             model.sessionState == .running
             || model.isSessionStarting
             || conversation.isRunning
+            || isFullscreen
         #endif
+    }
+
+    private func enterFullscreen() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.72)
+        #endif
+        withAnimation(.easeInOut(duration: 0.28)) {
+            isFullscreen = true
+            showsFullscreenChrome = true
+        }
+        scheduleFullscreenChromeAutoHide()
+        updateIdleTimer()
+    }
+
+    private func exitFullscreen() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.72)
+        #endif
+        fullscreenHideTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.28)) {
+            isFullscreen = false
+        }
+        updateIdleTimer()
+    }
+
+    private func toggleFullscreenChrome() {
+        #if canImport(UIKit)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showsFullscreenChrome.toggle()
+        }
+        if showsFullscreenChrome {
+            scheduleFullscreenChromeAutoHide()
+        } else {
+            fullscreenHideTask?.cancel()
+        }
+    }
+
+    private func scheduleFullscreenChromeAutoHide() {
+        fullscreenHideTask?.cancel()
+        fullscreenHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                showsFullscreenChrome = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fullscreenView(isHorizontal: Bool) -> some View {
+        ZStack {
+            CaptionHalves(
+                model: model,
+                isHorizontal: isHorizontal
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                toggleFullscreenChrome()
+            }
+
+            if showsFullscreenChrome || UIAccessibility.isVoiceOverRunning {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        fullscreenStatusChip
+
+                        Spacer(minLength: 8)
+
+                        Button(action: exitFullscreen) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .accessibilityHidden(true)
+                                Text(model.localized(.iosExitFullscreen))
+                                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            }
+                            .foregroundStyle(IOSTheme.primaryText.opacity(0.92))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(IOSTheme.elevated.opacity(0.88))
+                            )
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(IOSTheme.hairline, lineWidth: 0.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(model.localized(.iosExitFullscreen))
+                        .accessibilityIdentifier("exit-fullscreen-button")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+
+                    Spacer()
+
+                    HStack {
+                        Spacer()
+                        SessionCapsuleButton(
+                            title: model.sessionButtonTitle,
+                            isLive: model.sessionState == .running,
+                            showsActivity: model.showsSessionWaitIndicator,
+                            isDisabled: isStartDisabled,
+                            accent: accent,
+                            action: toggleSession
+                        )
+                        Spacer()
+                    }
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.easeInOut(duration: 0.24), value: showsFullscreenChrome)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityAction(named: model.localized(.iosExitFullscreen)) {
+            exitFullscreen()
+        }
+    }
+
+    private var fullscreenStatusChip: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(model.sessionState == .running ? IOSTheme.alert : accent.opacity(0.65))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+
+            Text(
+                "\(LanguageCatalog.autonym(for: model.iOSEffectiveInputLanguageID)) → \(LanguageCatalog.autonym(for: model.iOSEffectiveOutputLanguageID))"
+            )
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(IOSTheme.primaryText.opacity(0.88))
+            .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            Capsule(style: .continuous)
+                .fill(IOSTheme.elevated.opacity(0.88))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(IOSTheme.hairline, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func openSystemSettings() {

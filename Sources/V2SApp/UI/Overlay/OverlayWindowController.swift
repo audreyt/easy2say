@@ -1297,13 +1297,3 @@ private extension NSRect {
         return width * height
     }
 }
-
-private extension NSScreen {
-    var displayIDString: String? {
-        guard let screenNumber = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-            return nil
-        }
-
-        return screenNumber.stringValue
-    }
-}

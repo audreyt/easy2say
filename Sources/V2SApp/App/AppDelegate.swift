@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var settingsWindowController: SettingsWindowController?
     private var overlayWindowController: OverlayWindowController?
+    private var audienceDisplayWindowController: AudienceDisplayWindowController?
     private var singleInstanceWakeObserver: NSObjectProtocol?
     private var singleInstanceLockDescriptor: Int32 = -1
     private var sourceRefreshTimer: Timer?
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.transcriptWindowController.showTranscript()
             }
         )
+        let audienceDisplayWindowController = AudienceDisplayWindowController(model: appModel)
         let statusBarController = StatusBarController(
             model: appModel,
             openAdvancedSettings: { [weak settingsWindowController] in
@@ -71,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.settingsWindowController = settingsWindowController
         self.overlayWindowController = overlayWindowController
+        self.audienceDisplayWindowController = audienceDisplayWindowController
         self.statusBarController = statusBarController
         installSingleInstanceWakeObserver()
 
@@ -79,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         settingsWindowController.showSettings()
+#if DEBUG
+        if CommandLine.arguments.contains("--audience-preview") {
+            appModel.showAudienceDisplay()
+        }
+#endif
 
         appModel.$sessionState
             .removeDuplicates()

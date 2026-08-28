@@ -68,6 +68,10 @@ enum AppTextKey: String, CaseIterable {
     case sourceFont
     case overlay
     case hideOverlay
+    case audienceDisplay
+    case showAudienceDisplay
+    case hideAudienceDisplay
+    case automatic
     case showPreview
     case controlsOnly
     case opacity
@@ -188,6 +192,8 @@ enum AppTextKey: String, CaseIterable {
     case iosAccentViolet
     case iosAccentCoral
     case iosSettings
+    case iosFullscreen
+    case iosExitFullscreen
     case conversationMode
     case conversationCaptionsMode
     case switchToCaptionsMode
@@ -414,6 +420,10 @@ enum AppLocalization {
             "sourceFont": "Source Font",
             "overlay": "Overlay",
             "hideOverlay": "Hide Overlay",
+            "audienceDisplay": "Audience Display",
+            "showAudienceDisplay": "Show Audience Display",
+            "hideAudienceDisplay": "Hide Audience Display",
+            "automatic": "Automatic",
             "showPreview": "Show Preview",
             "controlsOnly": "Controls Only",
             "opacity": "Opacity",
@@ -534,6 +544,8 @@ enum AppLocalization {
             "iosAccentViolet": "Violet",
             "iosAccentCoral": "Coral",
             "iosSettings": "Settings",
+            "iosFullscreen": "Fullscreen",
+            "iosExitFullscreen": "Exit Fullscreen",
             "conversationMode": "Conversation",
             "conversationCaptionsMode": "Captions",
             "switchToCaptionsMode": "Switch to captions mode",
@@ -628,6 +640,10 @@ enum AppLocalization {
             "sourceFont": "原文字体",
             "overlay": "浮层",
             "hideOverlay": "隐藏浮层",
+            "audienceDisplay": "观众画面",
+            "showAudienceDisplay": "显示观众画面",
+            "hideAudienceDisplay": "隐藏观众画面",
+            "automatic": "自动",
             "showPreview": "显示预览",
             "controlsOnly": "仅显示控件",
             "opacity": "透明度",
@@ -748,6 +764,8 @@ enum AppLocalization {
             "iosAccentViolet": "紫罗兰",
             "iosAccentCoral": "珊瑚",
             "iosSettings": "设置",
+            "iosFullscreen": "全屏",
+            "iosExitFullscreen": "退出全屏",
             "conversationMode": "对话",
             "conversationCaptionsMode": "字幕",
             "conversationStart": "开始对话",
@@ -842,6 +860,10 @@ enum AppLocalization {
             "sourceFont": "原文字體",
             "overlay": "浮層",
             "hideOverlay": "隱藏浮層",
+            "audienceDisplay": "觀眾畫面",
+            "showAudienceDisplay": "顯示觀眾畫面",
+            "hideAudienceDisplay": "隱藏觀眾畫面",
+            "automatic": "自動",
             "showPreview": "顯示預覽",
             "controlsOnly": "僅顯示控制項目",
             "opacity": "透明度",
@@ -962,6 +984,8 @@ enum AppLocalization {
             "iosAccentViolet": "紫羅蘭",
             "iosAccentCoral": "珊瑚",
             "iosSettings": "設定",
+            "iosFullscreen": "全螢幕",
+            "iosExitFullscreen": "結束全螢幕",
             "conversationMode": "對話",
             "conversationCaptionsMode": "字幕",
             "conversationStart": "開始對話",
@@ -1056,6 +1080,10 @@ enum AppLocalization {
             "sourceFont": "Fuente original",
             "overlay": "Superposición",
             "hideOverlay": "Ocultar superposición",
+            "audienceDisplay": "Pantalla para la audiencia",
+            "showAudienceDisplay": "Mostrar pantalla para la audiencia",
+            "hideAudienceDisplay": "Ocultar pantalla para la audiencia",
+            "automatic": "Automático",
             "showPreview": "Mostrar vista previa",
             "controlsOnly": "Solo controles",
             "opacity": "Opacidad",
@@ -1160,6 +1188,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "No se pudo actualizar el ajuste de inicio de sesión: %@",
             "checkForUpdatesAutomatically": "Buscar actualizaciones automáticamente",
             "checkForUpdates": "Buscar actualizaciones",
+            "iosFullscreen": "Pantalla completa",
+            "iosExitFullscreen": "Salir de pantalla completa",
         ],
         "de": [
             "start": "Starten",
@@ -1224,6 +1254,10 @@ enum AppLocalization {
             "sourceFont": "Originalschrift",
             "overlay": "Overlay",
             "hideOverlay": "Overlay ausblenden",
+            "audienceDisplay": "Zuschaueranzeige",
+            "showAudienceDisplay": "Zuschaueranzeige anzeigen",
+            "hideAudienceDisplay": "Zuschaueranzeige ausblenden",
+            "automatic": "Automatisch",
             "showPreview": "Vorschau anzeigen",
             "controlsOnly": "Nur Steuerelemente",
             "opacity": "Deckkraft",
@@ -1328,6 +1362,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "Die Einstellung für den Start bei der Anmeldung konnte nicht aktualisiert werden: %@",
             "checkForUpdatesAutomatically": "Automatisch nach Updates suchen",
             "checkForUpdates": "Nach Updates suchen",
+            "iosFullscreen": "Vollbild",
+            "iosExitFullscreen": "Vollbild beenden",
         ],
         "ja": [
             "start": "開始",
@@ -1392,6 +1428,10 @@ enum AppLocalization {
             "sourceFont": "原文文字サイズ",
             "overlay": "オーバーレイ",
             "hideOverlay": "オーバーレイを隠す",
+            "audienceDisplay": "観客用ディスプレイ",
+            "showAudienceDisplay": "観客用ディスプレイを表示",
+            "hideAudienceDisplay": "観客用ディスプレイを隠す",
+            "automatic": "自動",
             "showPreview": "プレビューを表示",
             "controlsOnly": "コントロールのみ",
             "opacity": "不透明度",
@@ -1496,6 +1536,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "ログイン時に起動する設定を更新できませんでした: %@",
             "checkForUpdatesAutomatically": "アップデートを自動的に確認",
             "checkForUpdates": "アップデートを確認",
+            "iosFullscreen": "全画面",
+            "iosExitFullscreen": "全画面を終了",
         ],
         "fr": [
             "start": "Démarrer",
@@ -1560,6 +1602,10 @@ enum AppLocalization {
             "sourceFont": "Police source",
             "overlay": "Superposition",
             "hideOverlay": "Masquer la superposition",
+            "audienceDisplay": "Écran du public",
+            "showAudienceDisplay": "Afficher l'écran du public",
+            "hideAudienceDisplay": "Masquer l'écran du public",
+            "automatic": "Automatique",
             "showPreview": "Afficher l'aperçu",
             "controlsOnly": "Contrôles seulement",
             "opacity": "Opacité",
@@ -1664,6 +1710,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "Impossible de mettre à jour le réglage d’ouverture à la connexion : %@",
             "checkForUpdatesAutomatically": "Rechercher les mises à jour automatiquement",
             "checkForUpdates": "Rechercher les mises à jour",
+            "iosFullscreen": "Plein écran",
+            "iosExitFullscreen": "Quitter le plein écran",
         ],
         "ko": [
             "start": "시작",
@@ -1728,6 +1776,10 @@ enum AppLocalization {
             "sourceFont": "원문 글꼴",
             "overlay": "오버레이",
             "hideOverlay": "오버레이 숨기기",
+            "audienceDisplay": "청중용 디스플레이",
+            "showAudienceDisplay": "청중용 디스플레이 표시",
+            "hideAudienceDisplay": "청중용 디스플레이 숨기기",
+            "automatic": "자동",
             "showPreview": "미리보기 표시",
             "controlsOnly": "컨트롤만",
             "opacity": "불투명도",
@@ -1832,6 +1884,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "로그인 시 실행 설정을 업데이트할 수 없습니다: %@",
             "checkForUpdatesAutomatically": "자동으로 업데이트 확인",
             "checkForUpdates": "업데이트 확인",
+            "iosFullscreen": "전체 화면",
+            "iosExitFullscreen": "전체 화면 종료",
         ],
         "ar": [
             "start": "ابدأ",
@@ -1896,6 +1950,10 @@ enum AppLocalization {
             "sourceFont": "خط المصدر",
             "overlay": "الطبقة",
             "hideOverlay": "إخفاء الطبقة",
+            "audienceDisplay": "شاشة الجمهور",
+            "showAudienceDisplay": "إظهار شاشة الجمهور",
+            "hideAudienceDisplay": "إخفاء شاشة الجمهور",
+            "automatic": "تلقائي",
             "showPreview": "إظهار المعاينة",
             "controlsOnly": "عناصر التحكم فقط",
             "opacity": "الشفافية",
@@ -2000,6 +2058,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "تعذر تحديث إعداد التشغيل عند تسجيل الدخول: %@",
             "checkForUpdatesAutomatically": "التحقق من التحديثات تلقائيًا",
             "checkForUpdates": "التحقق من التحديثات",
+            "iosFullscreen": "ملء الشاشة",
+            "iosExitFullscreen": "إنهاء ملء الشاشة",
         ],
         "pt": [
             "start": "Iniciar",
@@ -2064,6 +2124,10 @@ enum AppLocalization {
             "sourceFont": "Fonte original",
             "overlay": "Sobreposição",
             "hideOverlay": "Ocultar sobreposição",
+            "audienceDisplay": "Tela do público",
+            "showAudienceDisplay": "Mostrar tela do público",
+            "hideAudienceDisplay": "Ocultar tela do público",
+            "automatic": "Automático",
             "showPreview": "Mostrar prévia",
             "controlsOnly": "Somente controles",
             "opacity": "Opacidade",
@@ -2168,6 +2232,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "Não foi possível atualizar a configuração de início de sessão: %@",
             "checkForUpdatesAutomatically": "Verificar atualizações automaticamente",
             "checkForUpdates": "Verificar atualizações",
+            "iosFullscreen": "Tela cheia",
+            "iosExitFullscreen": "Sair da tela cheia",
         ],
         "ru": [
             "start": "Запустить",
@@ -2232,6 +2298,10 @@ enum AppLocalization {
             "sourceFont": "Шрифт оригинала",
             "overlay": "Наложение",
             "hideOverlay": "Скрыть наложение",
+            "audienceDisplay": "Экран для аудитории",
+            "showAudienceDisplay": "Показать экран для аудитории",
+            "hideAudienceDisplay": "Скрыть экран для аудитории",
+            "automatic": "Автоматически",
             "showPreview": "Показать предпросмотр",
             "controlsOnly": "Только элементы управления",
             "opacity": "Прозрачность",
@@ -2336,6 +2406,8 @@ enum AppLocalization {
             "launchAtLoginUpdateFailedFormat": "Не удалось обновить параметр запуска при входе: %@",
             "checkForUpdatesAutomatically": "Автоматически проверять обновления",
             "checkForUpdates": "Проверить обновления",
+            "iosFullscreen": "Полноэкранный режим",
+            "iosExitFullscreen": "Выйти из полноэкранного режима",
         ],
     ]
     static let tables: [String: [String: String]] = {

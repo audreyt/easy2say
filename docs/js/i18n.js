@@ -56,7 +56,7 @@
           "Source and translation each receive half the screen: stacked in portrait, side by side in landscape.",
         h3Title: "A screen made to share",
         h3Body:
-          "Flip the other person’s half across a table, or let landscape mode open the conversation side by side.",
+          "Go full screen on iPhone and iPad, flip a side across a table, or present an audience view on Mac displays.",
       },
       features: {
         eyebrow: "01 · The experience",
@@ -240,7 +240,7 @@
           "原文與譯文各佔一半畫面：直向時上下排列，橫向時左右並排。",
         h3Title: "一面可以共享的畫面",
         h3Body:
-          "隔桌時可將對方那一半上下翻轉；改用橫向，對話便在左右兩側展開。",
+          "iPhone 與 iPad 可全螢幕或隔桌翻轉閱讀；Mac 亦可投放到指定螢幕，呈現觀眾畫面。",
       },
       features: {
         eyebrow: "01 · 使用體驗",

@@ -56,7 +56,7 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: Easy2say
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "51"
+        CURRENT_PROJECT_VERSION: "52"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO
@@ -82,10 +82,26 @@ targets:
         NSMicrophoneUsageDescription: "Easy2say uses the microphone to generate live subtitles entirely on device."
         NSSpeechRecognitionUsageDescription: "Easy2say uses on-device speech recognition to transcribe audio into subtitles."
         ITSAppUsesNonExemptEncryption: false
+  v2s-ios-uitests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: v2s-ios
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: org.audreyt.v2s.ios.uitests
 schemes:
   v2s-ios:
     build:
       targets:
         v2s-ios: all
+        v2s-ios-uitests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - v2s-ios-uitests

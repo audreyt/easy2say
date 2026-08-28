@@ -18,6 +18,7 @@
 - 只使用 iPhone 或 iPad 的麥克風。
 - 字幕輸出預設為繁體中文（`zh-Hant`），並可選擇繁體中文（`zh-Hant`）或簡體中文（`zh-Hans`）。
 - 字幕進行時也可回看：Mac 使用浮層捲軸，iPhone 與 iPad 使用字幕記錄表單，不必停止聽打。
+- 全螢幕與觀眾畫面。iPhone、iPad 可讓字幕填滿畫面；Mac 可在指定螢幕或投影機顯示觀眾畫面。
 - 提供雙向對話模式：兩人各說自己的語言、共用一支麥克風，每段話都會以說話者的語言轉寫，並以聽者的語言顯示譯文；對方那一半畫面可上下翻轉，方便隔桌閱讀。Apple 並未提供口語語言辨識 API，因此本模式會為兩種語言各執行一個 `SpeechTranscriber`，共用同一份錄音，再挑選轉寫信賴度較高的那一路；環境吵雜到判斷失準時，輕觸任一半畫面即可指定發言方。
 - iOS 與 macOS 版可使用內建的 4 位元 Breeze-ASR-26 模型，在裝置端產生台語字幕。語言選單明確標示為「`台語（華文轉寫）`」，因為這個模型會將台語語音對應為華文漢字，而非台語正字。模型公布的 30 段政府宣導音檔基準平均字元錯誤率為 30.13%（單段 14.49%–52.78%），應視為輔助轉寫，不宜當成權威紀錄。Core ML 首次特化約 890 MB 權重時可能需要數分鐘，之後會使用 Apple 的快取。台語目前支援字幕模式，不支援自動雙向對話模式。
 
@@ -28,6 +29,7 @@
 | 即時麥克風字幕 | 是 | 是 |
 | 裝置端語音辨識與翻譯 | 是 | 是 |
 | 字幕呈現方式 | 原文與翻譯各佔一半；直向時上下排列，橫向時左右並排 | 半透明浮動字幕面板，可上下或左右分欄，並可反轉順序 |
+| 全螢幕呈現 | 全螢幕字幕；輕觸顯示控制項 | 可在任一指定螢幕顯示觀眾畫面 |
 | 擷取其他應用程式的音訊 | 否。iOS 應用程式僅使用麥克風。 | 是 |
 | 將字幕浮動顯示於其他應用程式上方 | 否。字幕只顯示在 Easy2say 內。 | 是 |
 
@@ -118,7 +120,9 @@ xcodebuild \
 
 ## macOS 與上游
 
-此分支會發佈 Easy2say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2say-universal.pkg)下載。0.3.38 是首次改用 Easy2say 名稱與更新來源的 macOS 版本；既有 `v2s` 使用者需手動安裝一次，安裝程式會移除同一 bundle ID 的 `/Applications/v2s.app`，並保留原有設定與模型快取。原始 macOS 專案與血緣資訊仍見 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
+此分支會發佈 Easy2say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2say-universal.pkg)下載。內建 Breeze-ASR-26 與 Silero VAD，不含 TranslateGemma、私有 Monlam Whisper 或 Melong 權重。自 0.3.39 版起，應用程式與安裝套件皆以 Developer ID 簽署，並已通過 Apple 公證、附加公證票證。Gatekeeper 可直接開啟下載檔案，無需手動略過安全設定。
+
+0.3.38 是首次改用 Easy2say 名稱與更新來源的 macOS 版本；既有 `v2s` 使用者需手動安裝一次，安裝程式會移除同一 bundle ID 的 `/Applications/v2s.app`，並保留原有設定與模型快取。原始 macOS 專案與血緣資訊仍見 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
 
 ## 授權
 

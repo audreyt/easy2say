@@ -190,6 +190,19 @@ struct StatusBarPopoverView: View {
                     selection: model.overlayCaptionLayoutSelectionBinding
                 )
             }
+            SettingsControlRow(label: model.localized(.audienceDisplay)) {
+                Button {
+                    model.toggleAudienceDisplayVisibility()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: model.isAudienceDisplayVisible ? "tv.fill" : "tv")
+                        Text(model.isAudienceDisplayVisible ? model.localized(.hideAudienceDisplay) : model.localized(.showAudienceDisplay))
+                    }
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
             VStack(spacing: 6) {
                 SettingsControlRow(label: model.localized(.textOutline)) {
                     Toggle("", isOn: textOutlineEnabledBinding)

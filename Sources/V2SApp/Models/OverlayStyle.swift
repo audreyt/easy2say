@@ -128,6 +128,7 @@ enum OverlayCaptionLayout: String, Codable, CaseIterable, Sendable {
 struct OverlayStyle: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case targetDisplayID
+        case audienceTargetDisplayID
         case topInset
         case widthRatio
         case minWidth
@@ -152,6 +153,7 @@ struct OverlayStyle: Codable, Equatable {
     }
 
     var targetDisplayID: String?
+    var audienceTargetDisplayID: String?
     var topInset: Double
     var widthRatio: Double
     var minWidth: Double
@@ -179,6 +181,7 @@ struct OverlayStyle: Codable, Equatable {
 
     static let `default` = OverlayStyle(
         targetDisplayID: nil,
+        audienceTargetDisplayID: nil,
         topInset: 12,
         widthRatio: 0.82,
         minWidth: 720,
@@ -200,6 +203,7 @@ struct OverlayStyle: Codable, Equatable {
 
     init(
         targetDisplayID: String?,
+        audienceTargetDisplayID: String? = nil,
         topInset: Double,
         widthRatio: Double,
         minWidth: Double,
@@ -219,6 +223,7 @@ struct OverlayStyle: Codable, Equatable {
         captionLayout: OverlayCaptionLayout = .topDown
     ) {
         self.targetDisplayID = targetDisplayID
+        self.audienceTargetDisplayID = audienceTargetDisplayID
         self.topInset = topInset
         self.widthRatio = widthRatio
         self.minWidth = minWidth
@@ -241,8 +246,9 @@ struct OverlayStyle: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
-        targetDisplayID    = try c.decodeIfPresent(String.self, forKey: .targetDisplayID)
-        topInset           = try c.decode(Double.self, forKey: .topInset)
+        targetDisplayID         = try c.decodeIfPresent(String.self, forKey: .targetDisplayID)
+        audienceTargetDisplayID = try c.decodeIfPresent(String.self, forKey: .audienceTargetDisplayID)
+        topInset                = try c.decode(Double.self, forKey: .topInset)
         widthRatio         = try c.decode(Double.self, forKey: .widthRatio)
         minWidth           = try c.decode(Double.self, forKey: .minWidth)
         maxWidth           = try c.decode(Double.self, forKey: .maxWidth)

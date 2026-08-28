@@ -62,6 +62,9 @@
 		A000000000000000000000C8 /* ConversationLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C9 /* ConversationLane.swift */; };
 		A000000000000000000000CA /* ConversationAudioTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CB /* ConversationAudioTap.swift */; };
 		A000000000000000000000CC /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CD /* ConversationTurn.swift */; };
+		A000000000000000000000CE /* CaptionFlowContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000CF /* CaptionFlowContentView.swift */; };
+		A000000000000000000000D0 /* AudienceDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000D1 /* AudienceDisplayView.swift */; };
+		A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000D3 /* AudienceDisplayWindowController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -120,6 +123,9 @@
 		A000000000000000000000C9 /* ConversationLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationLane.swift; sourceTree = "<group>"; };
 		A000000000000000000000CB /* ConversationAudioTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAudioTap.swift; sourceTree = "<group>"; };
 		A000000000000000000000CD /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
+		A000000000000000000000CF /* CaptionFlowContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionFlowContentView.swift; sourceTree = "<group>"; };
+		A000000000000000000000D1 /* AudienceDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceDisplayView.swift; sourceTree = "<group>"; };
+		A000000000000000000000D3 /* AudienceDisplayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceDisplayWindowController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -276,6 +282,9 @@
 			children = (
 				A0000000000000000000003B /* OverlayView.swift */,
 				A0000000000000000000003C /* OverlayWindowController.swift */,
+				A000000000000000000000CF /* CaptionFlowContentView.swift */,
+				A000000000000000000000D1 /* AudienceDisplayView.swift */,
+				A000000000000000000000D3 /* AudienceDisplayWindowController.swift */,
 			);
 			path = Overlay;
 			sourceTree = "<group>";
@@ -456,6 +465,9 @@
 				A000000000000000000000CA /* ConversationAudioTap.swift in Sources */,
 				A000000000000000000000CC /* ConversationTurn.swift in Sources */,
 				A000000000000000000000B9 /* TibetanASREngine.swift in Sources */,
+				A000000000000000000000CE /* CaptionFlowContentView.swift in Sources */,
+				A000000000000000000000D0 /* AudienceDisplayView.swift in Sources */,
+				A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -499,7 +511,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 44;
 				COREML_CODEGEN_LANGUAGE = None;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -509,7 +521,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.3.39;
+				MARKETING_VERSION = 0.3.40;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_MODULE_NAME = v2s;
@@ -530,7 +542,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 43;
+				CURRENT_PROJECT_VERSION = 44;
 				COREML_CODEGEN_LANGUAGE = None;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -541,7 +553,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				ONLY_ACTIVE_ARCH = NO;
-				MARKETING_VERSION = 0.3.39;
+				MARKETING_VERSION = 0.3.40;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_MODULE_NAME = v2s;
 				PRODUCT_NAME = Easy2say;

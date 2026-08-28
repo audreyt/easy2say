@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -256,6 +257,26 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 settingsCard {
+                    sectionHeader(model.localized(.audienceDisplay), icon: "tv")
+                    settingsRow(model.localized(.status)) {
+                        Button(model.isAudienceDisplayVisible ? model.localized(.hideAudienceDisplay) : model.localized(.showAudienceDisplay)) {
+                            model.toggleAudienceDisplayVisibility()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    if NSScreen.screens.count > 1 {
+                        Divider()
+                        settingsRow(model.localized(.displayShort)) {
+                            TargetDisplayMenuPicker(
+                                selection: targetDisplayBinding,
+                                screens: NSScreen.screens,
+                                automaticLabel: model.localized(.automatic)
+                            )
+                        }
+                    }
+                }
+                settingsCard {
                     sectionHeader(model.localized(.subtitleOverlay), icon: "rectangle.on.rectangle")
                     settingsRow(model.localized(.captionLayout)) {
                         CaptionLayoutMenuPicker(
@@ -509,6 +530,10 @@ struct SettingsView: View {
         overlayBinding(\.sourceFontSize)
     }
 
+    private var targetDisplayBinding: Binding<String?> {
+        overlayBinding(\.audienceTargetDisplayID)
+    }
+
     @ViewBuilder private var selectedSourceLanguageRows: some View {
         let sources = model.selectedSources
         if sources.isEmpty == false {
@@ -644,5 +669,27 @@ private struct LabeledSlider: View {
 
     private var formattedValue: String {
         String(format: "%.\(precision)f", value.wrappedValue)
+    }
+}
+
+struct TargetDisplayMenuPicker: View {
+    @Binding var selection: String?
+    let screens: [NSScreen]
+    let automaticLabel: String
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            Text(automaticLabel)
+                .tag(nil as String?)
+            ForEach(screens.indices, id: \.self) { index in
+                let screen = screens[index]
+                if let id = screen.displayIDString {
+                    Text(screen.displayName)
+                        .tag(id as String?)
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
     }
 }
