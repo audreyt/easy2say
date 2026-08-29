@@ -290,6 +290,7 @@ final class AppModel: ObservableObject {
         installTranslationFallbacks(on: translationCoordinator)
         installTranslationFallbacks(on: reverseTranslationCoordinator)
         reloadSpeechCorrections()
+        Logger.caption.notice("caption-log-ready")
 
         isBootstrapping = false
         applyStatusMessage()
@@ -2864,7 +2865,7 @@ final class AppModel: ObservableObject {
         let promotionText = promotionID?.uuidString ?? "-"
         let replacesText = replacesID?.uuidString ?? "-"
         let revisionText = revision.map(String.init) ?? "-"
-        Logger.caption.info("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
+        Logger.caption.notice("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
     }
 
     private func refreshCaptionTranslations() {
