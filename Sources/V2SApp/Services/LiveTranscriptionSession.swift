@@ -76,17 +76,26 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let promotionSegmentID: UUID?
         let heardLanguageID: String
         let dualLaneEvidence: DualLaneEvidence?
+        let isProvisionalSilence: Bool
+        let audioRange: CMTimeRange?
+        let audioEndTime: TimeInterval?
 
         init(
             text: String,
             promotionSegmentID: UUID? = nil,
             heardLanguageID: String = "",
-            dualLaneEvidence: DualLaneEvidence? = nil
+            dualLaneEvidence: DualLaneEvidence? = nil,
+            isProvisionalSilence: Bool = false,
+            audioRange: CMTimeRange? = nil,
+            audioEndTime: TimeInterval? = nil
         ) {
             self.text = text
             self.promotionSegmentID = promotionSegmentID
             self.heardLanguageID = heardLanguageID
             self.dualLaneEvidence = dualLaneEvidence
+            self.isProvisionalSilence = isProvisionalSilence
+            self.audioRange = audioRange
+            self.audioEndTime = audioEndTime
         }
     }
 
@@ -103,23 +112,30 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let rawText: String
         let comparableText: String
         let time: Date
+        let isProvisionalSilence: Bool
         let allowsPrefixContinuation: Bool
         let promotionSegmentID: UUID?
         let rootPromotionSegmentID: UUID?
         var acceptedPromotionIDs: Set<UUID>
+        let audioRange: CMTimeRange?
+        let audioEndTime: TimeInterval?
 
         init(
             rawText: String,
             comparableText: String,
             time: Date,
+            isProvisionalSilence: Bool = false,
             allowsPrefixContinuation: Bool,
             promotionSegmentID: UUID?,
             rootPromotionSegmentID: UUID? = nil,
-            acceptedPromotionIDs: Set<UUID> = []
+            acceptedPromotionIDs: Set<UUID> = [],
+            audioRange: CMTimeRange? = nil,
+            audioEndTime: TimeInterval? = nil
         ) {
             self.rawText = rawText
             self.comparableText = comparableText
             self.time = time
+            self.isProvisionalSilence = isProvisionalSilence
             self.allowsPrefixContinuation = allowsPrefixContinuation
             self.promotionSegmentID = promotionSegmentID
             self.rootPromotionSegmentID = rootPromotionSegmentID ?? promotionSegmentID
@@ -128,6 +144,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 ids.insert(promotionSegmentID)
             }
             self.acceptedPromotionIDs = ids
+            self.audioRange = audioRange
+            self.audioEndTime = audioEndTime
         }
     }
     struct PreparedSentenceEmission: Equatable, Sendable {
@@ -250,7 +268,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var analyzerInputFormat: AVAudioFormat?
     private var latestModernText = ""
     private var modernCommittedPrefixText = ""
-
 #if canImport(WhisperKit)
     private var taigiEngine: TaigiASREngine?
 #if os(macOS)
@@ -1678,7 +1695,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
             for sentenceText in sentenceTexts {
                 let corrected = speechCorrections.apply(sentenceText, languageID: emissionLang)
-                guard let prepared = prepareCommittedSentenceForEmission(corrected, pendingPromotionID: pendingPromotionID) else {
+                guard let prepared = prepareCommittedSentenceForEmission(
+                    corrected,
+                    pendingPromotionID: pendingPromotionID,
+                    isProvisionalSilence: emission.isProvisionalSilence,
+                    audioRange: emission.audioRange,
+                    audioEndTime: emission.audioEndTime
+                ) else {
                     continue
                 }
                 emitRecognizedSentence(
@@ -1783,7 +1806,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     @MainActor
     private func prepareCommittedSentenceForEmission(
         _ text: String,
-        pendingPromotionID: UUID? = nil
+        pendingPromotionID: UUID? = nil,
+        isProvisionalSilence: Bool = false,
+        audioRange: CMTimeRange? = nil,
+        audioEndTime: TimeInterval? = nil
     ) -> PreparedSentenceEmission? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
@@ -1801,15 +1827,22 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return nil
         }
 
+        // Continuation, replay, or in-place revision check against recent history:
+        if let continuation = committedContinuationOrRevision(
+            from: trimmed,
+            comparableText: comparable,
+            pendingPromotionID: pendingPromotionID,
+            isProvisionalSilence: isProvisionalSilence,
+            audioRange: audioRange,
+            audioEndTime: audioEndTime
+        ) {
+            return continuation
+        }
+
         // Legacy nil-ID replay suppression: if no ID provided and exact text was recently committed, drop duplicate.
         if pendingPromotionID == nil,
            recentCommittedSentenceHistory.contains(where: { $0.comparableText == comparable }) {
             return nil
-        }
-
-        // Prefix continuation / in-place revision check:
-        if let continuation = committedPrefixContinuation(from: trimmed, pendingPromotionID: pendingPromotionID) {
-            return continuation
         }
 
         let bestOverlap = recentCommittedSentenceHistory
@@ -1841,7 +1874,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         let emissionPromotionID = pendingPromotionID ?? UUID()
-        rememberCommittedSentence(candidateText, promotionSegmentID: emissionPromotionID, rootPromotionSegmentID: emissionPromotionID)
+        rememberCommittedSentence(
+            candidateText,
+            isProvisionalSilence: isProvisionalSilence,
+            promotionSegmentID: emissionPromotionID,
+            rootPromotionSegmentID: emissionPromotionID,
+            audioRange: audioRange,
+            audioEndTime: audioEndTime
+        )
 
         return PreparedSentenceEmission(
             text: candidateText,
@@ -1853,40 +1893,88 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     @MainActor
     private func rememberCommittedSentence(
         _ text: String,
+        isProvisionalSilence: Bool = false,
         promotionSegmentID: UUID?,
-        rootPromotionSegmentID: UUID? = nil
+        rootPromotionSegmentID: UUID? = nil,
+        audioRange: CMTimeRange? = nil,
+        audioEndTime: TimeInterval? = nil
     ) {
         let comparable = comparableCommittedSentenceText(text)
         guard comparable.isEmpty == false else {
             return
         }
 
+        let allowsContinuation = isProvisionalSilence
+            || (SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) == false)
+
         recentCommittedSentenceHistory.append(
             RecentCommittedSentence(
                 rawText: text,
                 comparableText: comparable,
                 time: Date(),
-                allowsPrefixContinuation: SentenceBoundaryHeuristics
-                    .endsWithLikelySentenceTerminator(in: text) == false,
+                isProvisionalSilence: isProvisionalSilence,
+                allowsPrefixContinuation: allowsContinuation,
                 promotionSegmentID: promotionSegmentID,
-                rootPromotionSegmentID: rootPromotionSegmentID ?? promotionSegmentID
+                rootPromotionSegmentID: rootPromotionSegmentID ?? promotionSegmentID,
+                audioRange: audioRange,
+                audioEndTime: audioEndTime
             )
         )
         pruneRecentCommittedSentenceHistory()
     }
 
     @MainActor
-    private func committedPrefixContinuation(
+    private func committedContinuationOrRevision(
         from text: String,
-        pendingPromotionID: UUID?
+        comparableText: String,
+        pendingPromotionID: UUID?,
+        isProvisionalSilence: Bool,
+        audioRange: CMTimeRange?,
+        audioEndTime: TimeInterval?
     ) -> PreparedSentenceEmission? {
         let now = Date()
 
         for (index, previous) in recentCommittedSentenceHistory.enumerated().reversed() {
-            guard previous.allowsPrefixContinuation,
-                  now.timeIntervalSince(previous.time) <= Self.committedPrefixContinuationWindow,
-                  text.count > previous.rawText.count,
-                  text.hasPrefix(previous.rawText) else {
+            let elapsed = now.timeIntervalSince(previous.time)
+            guard elapsed <= Self.committedPrefixContinuationWindow else {
+                continue
+            }
+
+            let isAudioSpanMatch: Bool
+            if let prevRange = previous.audioRange, let currRange = audioRange {
+                let prevStart = cmTimeSeconds(prevRange.start)
+                let currStart = cmTimeSeconds(currRange.start)
+                isAudioSpanMatch = abs(prevStart - currStart) <= 0.35
+            } else if let prevEnd = previous.audioEndTime, let currEnd = audioEndTime {
+                isAudioSpanMatch = currEnd <= prevEnd + 0.15
+            } else {
+                isAudioSpanMatch = false
+            }
+
+            let prevStripped = canonicalSentencePunctuationStripped(previous.rawText)
+            let currStripped = canonicalSentencePunctuationStripped(text)
+
+            let isSameComparable = (previous.comparableText == comparableText) || (prevStripped == currStripped)
+            let isNearDup = isNearDuplicateCommittedText(prevStripped, currStripped)
+            let isPrefixExt = currStripped.hasPrefix(prevStripped)
+                && currStripped.count > prevStripped.count
+            let isFuzzyExt = isFuzzyPrefixMatch(previous: prevStripped, current: currStripped)
+            // Audio match must be gated by semantic relation, never unconditional.
+            let hasSemanticRelation = isSameComparable || isNearDup || isPrefixExt || isFuzzyExt
+            let isMatch: Bool
+            if pendingPromotionID == nil && isSameComparable {
+                return nil
+            } else if isAudioSpanMatch {
+                isMatch = hasSemanticRelation
+            } else if previous.isProvisionalSilence {
+                isMatch = hasSemanticRelation
+            } else if previous.allowsPrefixContinuation {
+                isMatch = isPrefixExt || isFuzzyExt || (isSameComparable && elapsed <= 1.5)
+            } else {
+                isMatch = false
+            }
+
+            guard isMatch else {
                 continue
             }
 
@@ -1899,13 +1987,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             recentCommittedSentenceHistory.append(
                 RecentCommittedSentence(
                     rawText: text,
-                    comparableText: comparableCommittedSentenceText(text),
+                    comparableText: comparableText,
                     time: now,
-                    allowsPrefixContinuation: SentenceBoundaryHeuristics
-                        .endsWithLikelySentenceTerminator(in: text) == false,
+                    isProvisionalSilence: isProvisionalSilence,
+                    allowsPrefixContinuation: isProvisionalSilence
+                        || (SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) == false),
                     promotionSegmentID: newPromotionID,
                     rootPromotionSegmentID: rootID,
-                    acceptedPromotionIDs: updatedIDs
+                    acceptedPromotionIDs: updatedIDs,
+                    audioRange: audioRange ?? previous.audioRange,
+                    audioEndTime: audioEndTime ?? previous.audioEndTime
                 )
             )
 
@@ -1917,6 +2008,49 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         return nil
+    }
+
+    private func canonicalSentencePunctuationStripped(_ text: String) -> String {
+        text.unicodeScalars.filter {
+            CharacterSet.punctuationCharacters.contains($0) == false
+                && CharacterSet.symbols.contains($0) == false
+        }
+        .map(String.init)
+        .joined()
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { $0.isEmpty == false }
+        .joined(separator: " ")
+        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
+    private func isNearDuplicateCommittedText(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsClean = canonicalSentencePunctuationStripped(lhs)
+        let rhsClean = canonicalSentencePunctuationStripped(rhs)
+        if lhsClean == rhsClean {
+            return true
+        }
+        let maxLen = max(lhsClean.count, rhsClean.count)
+        guard maxLen >= 3 else {
+            return false
+        }
+        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(lhsClean, rhsClean)
+        return similarity >= 0.82
+    }
+
+    private func isFuzzyPrefixMatch(previous: String, current: String) -> Bool {
+        let prevClean = canonicalSentencePunctuationStripped(previous)
+        let currClean = canonicalSentencePunctuationStripped(current)
+        guard prevClean.count >= 2, currClean.count > prevClean.count else {
+            return false
+        }
+        let prevLen = prevClean.count
+        let currentPrefix = String(currClean.prefix(prevLen))
+        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(prevClean, currentPrefix)
+        return similarity >= 0.72
+    }
+
+    private func cmTimeSeconds(_ time: CMTime) -> Double {
+        time.isNumeric ? CMTimeGetSeconds(time) : 0
     }
 
     @MainActor
@@ -2016,7 +2150,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func sentenceRanges(in text: NSString) -> [NSRange] {
         SentenceBoundaryHeuristics.sentenceRanges(in: text)
     }
-
     private func pendingModernText(from fullText: String) -> String {
         guard modernCommittedPrefixText.isEmpty == false else {
             return fullText
@@ -2212,7 +2345,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 committedEmissions.append(
                     CommittedEmission(
                         text: sentenceText,
-                        promotionSegmentID: committedDraftID
+                        promotionSegmentID: committedDraftID,
+                        isProvisionalSilence: !result.isFinal,
+                        audioEndTime: segmentEndTime(for: segments[commitEndIndex])
                     )
                 )
             }
@@ -2442,7 +2577,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                             text: text,
                             promotionSegmentID: committedDraftID,
                             heardLanguageID: resolved.languageID,
-                            dualLaneEvidence: step.evidence
+                            dualLaneEvidence: step.evidence,
+                            isProvisionalSilence: false
                         )
                     ],
                     clearDraftAfter: true
@@ -2518,33 +2654,43 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     @available(iOS 26.0, macOS 26.0, *)
     private func processModernRecognitionResult(_ result: SpeechTranscriber.Result) {
+        processModernRecognitionText(
+            normalizedTranscriberText(result.text),
+            isFinal: result.isFinal,
+            audioRange: result.range
+        )
+    }
+
+    private func processModernRecognitionText(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
         let now = Date()
         lastRecognitionResultTime = now
-        let fullText = normalizedTranscriberText(result.text)
         let pendingRawText = pendingModernText(from: fullText)
         currentHeardLanguageID = configuredSourceLanguageID
-        // Keep raw — corrections applied once at emitCommittedSequence / emitPartialDraft.
         let text = pendingRawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if result.isFinal {
-            let identity = modernResultIdentity(for: result)
+        if isFinal {
+            let identity = "\(cmTimeMilliseconds(audioRange.start)):\(cmTimeMilliseconds(audioRange.duration)):\(fullText)"
             guard identity != lastModernCommittedResultIdentity else { return }
             lastModernCommittedResultIdentity = identity
 
             cancelSilenceTimer()
             cancelVADSilenceTimer()
+            let fullUtteranceText = fullText
             resetModernTranscriptionState()
             let committedDraftID = currentDraftId
             resetDraftState()
 
-            if text.isEmpty == false {
+            let textToEmit = fullUtteranceText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if textToEmit.isEmpty == false {
                 Task {
                     await emitCommittedSequence(
                         [
                             CommittedEmission(
-                                text: text,
+                                text: textToEmit,
                                 promotionSegmentID: committedDraftID,
-                                heardLanguageID: currentHeardLanguageID
+                                heardLanguageID: currentHeardLanguageID,
+                                isProvisionalSilence: false,
+                                audioRange: audioRange
                             )
                         ],
                         clearDraftAfter: true
@@ -2576,9 +2722,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 Task { await emitPartialDraft(nil) }
                 return
             }
-
             cancelSilenceTimer()
-            cancelVADSilenceTimer()
             modernCommittedPrefixText += split.committedRawText
             latestModernText = split.remainingRawText
             let committedDraftID = currentDraftId
@@ -2588,7 +2732,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                     [
                         CommittedEmission(
                             text: committedText,
-                            promotionSegmentID: committedDraftID
+                            promotionSegmentID: committedDraftID,
+                            isProvisionalSilence: true,
+                            audioRange: audioRange
                         )
                     ],
                     clearDraftAfter: true
@@ -2597,8 +2743,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return
         }
 
-        emitDraftUpdate(from: result, text: text)
-        scheduleSilenceCommit()
+        emitCorrectedDraft(text)
     }
 
     private func observeDraftText(_ text: String, at now: Date) {
@@ -2924,7 +3069,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         CommittedEmission(
                             text: text,
                             promotionSegmentID: committedDraftID,
-                            heardLanguageID: currentHeardLanguageID
+                            heardLanguageID: currentHeardLanguageID,
+                            isProvisionalSilence: true
                         )
                     ],
                     clearDraftAfter: remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2961,7 +3107,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         CommittedEmission(
                             text: sentenceText,
                             promotionSegmentID: committedDraftID,
-                            heardLanguageID: currentHeardLanguageID
+                            heardLanguageID: currentHeardLanguageID,
+                            isProvisionalSilence: true,
+                            audioEndTime: committedAudioBoundaryTime
                         )
                     ],
                     clearDraftAfter: true
@@ -3166,14 +3314,59 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     @MainActor
     func prepareCommittedSentenceForEmissionForTesting(
         _ text: String,
-        pendingPromotionID: UUID? = nil
+        pendingPromotionID: UUID? = nil,
+        isProvisionalSilence: Bool = false,
+        audioRange: CMTimeRange? = nil,
+        audioEndTime: TimeInterval? = nil
     ) -> PreparedSentenceEmission? {
-        prepareCommittedSentenceForEmission(text, pendingPromotionID: pendingPromotionID)
+        prepareCommittedSentenceForEmission(
+            text,
+            pendingPromotionID: pendingPromotionID,
+            isProvisionalSilence: isProvisionalSilence,
+            audioRange: audioRange,
+            audioEndTime: audioEndTime
+        )
     }
 
     @MainActor
-    func rememberCommittedSentenceForTesting(_ text: String, promotionSegmentID: UUID? = nil) {
-        rememberCommittedSentence(text, promotionSegmentID: promotionSegmentID)
+    func rememberCommittedSentenceForTesting(
+        _ text: String,
+        isProvisionalSilence: Bool = false,
+        promotionSegmentID: UUID? = nil,
+        rootPromotionSegmentID: UUID? = nil,
+        audioRange: CMTimeRange? = nil,
+        audioEndTime: TimeInterval? = nil
+    ) {
+        rememberCommittedSentence(
+            text,
+            isProvisionalSilence: isProvisionalSilence,
+            promotionSegmentID: promotionSegmentID,
+            rootPromotionSegmentID: rootPromotionSegmentID,
+            audioRange: audioRange,
+            audioEndTime: audioEndTime
+        )
+    }
+
+    func installTranscriptHandlerForTesting(_ handler: ((RecognizedSentence) -> Void)?) {
+        transcriptHandler = handler
+    }
+
+    func processModernRecognitionTextForTesting(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
+        recognitionBackend = .speechAnalyzer
+        if configuredSourceLanguageID.isEmpty {
+            configuredSourceLanguageID = "en"
+            currentHeardLanguageID = "en"
+        }
+        processModernRecognitionText(fullText, isFinal: isFinal, audioRange: audioRange)
+    }
+
+    func forceCommitOnSilenceForTesting() {
+        recognitionBackend = .speechAnalyzer
+        forceCommitOnSilence(trigger: .asrInactivity)
+    }
+
+    func backdateLastDraftTextChangeForTesting(secondsAgo: TimeInterval) {
+        lastDraftTextChangeTime = Date().addingTimeInterval(-secondsAgo)
     }
 #endif
 }

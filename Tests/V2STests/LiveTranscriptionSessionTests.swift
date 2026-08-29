@@ -1,3 +1,4 @@
+import CoreMedia
 import XCTest
 @testable import v2s
 
@@ -273,6 +274,499 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             model.transcriptEntriesForTesting.last?.sourceText,
             "This is the next sentence."
         )
+    }
+
+    @MainActor
+    func testLTSProvisionalEndingWithPeriodReplacedByFullSentenceProducesOneRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Provisional silence commit ending with period
+        session.rememberCommittedSentenceForTesting("We are going to.", isProvisionalSilence: true, promotionSegmentID: id1)
+
+        // Full final sentence arrives
+        let fullSentence = "We are going to build a new system."
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        // End-to-end with AppModel
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-provisional-period-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "We are going to.", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testLTSProvisionalEndingWithFullWidthPeriodReplacedByFullChineseSentenceProducesOneRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Provisional Chinese sentence ending with full-width period
+        session.rememberCommittedSentenceForTesting("我們今天要。", isProvisionalSilence: true, promotionSegmentID: id1)
+
+        let fullSentence = "我們今天要出發前往台北發表演講。"
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-chinese-provisional-period-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "我們今天要。", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "zh-Hant")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "zh-Hant", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "zh-Hant")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "zh-Hant", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testLTSProvisionalPunctuationVariantExtensionProducesOneRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Provisional "A B"
+        session.rememberCommittedSentenceForTesting("A B", isProvisionalSilence: true, promotionSegmentID: id1)
+
+        // Punctuated and extended "A, B C"
+        let fullSentence = "A, B C"
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-punc-variant-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "A B", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testLTSProvisionalModestASRRewriteProducesOneRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Provisional "there is a problem"
+        session.rememberCommittedSentenceForTesting("there is a problem", isProvisionalSilence: true, promotionSegmentID: id1)
+
+        // Modest rewrite "There's a problem with the server."
+        let fullSentence = "There's a problem with the server."
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-modest-rewrite-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "there is a problem", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testLTSProvisionalSameTextReplayWithRotatedIDProducesOneRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Provisional commit "Thank you very much."
+        session.rememberCommittedSentenceForTesting("Thank you very much.", isProvisionalSilence: true, promotionSegmentID: id1)
+
+        // Callback arrives with same text and rotated ID
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            "Thank you very much.",
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, "Thank you very much.")
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-same-text-replay-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "Thank you very much.", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, "Thank you very much.")
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, "Thank you very much.")
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testLTSGenuineIdenticalUtteranceAcrossDistinctAcousticBoundaryAppendsSecondRowInAppModel() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Utterance 1 finalized (not provisional silence)
+        session.rememberCommittedSentenceForTesting("Thank you very much.", isProvisionalSilence: false, promotionSegmentID: id1)
+
+        // Utterance 2 arrives as a new utterance across distinct acoustic boundary
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            "Thank you very much.",
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, "Thank you very much.")
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertNil(prepared?.replacesPromotionSegmentID)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-genuine-acoustic-boundary-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "Thank you very much.", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+        model.completeHeldCaptionForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, "Thank you very much.")
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 1)
+        XCTAssertEqual(model.overlayHistoryForTesting.first?.sourceText, "Thank you very much.")
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 2)
+        XCTAssertEqual(model.transcriptEntriesForTesting[0].sourceText, "Thank you very much.")
+        XCTAssertEqual(model.transcriptEntriesForTesting[1].sourceText, "Thank you very much.")
+    }
+
+    @MainActor
+    func testModernSpeechTranscriberProvisionalSilenceFollowedByFullUtteranceProducesOneReconstructedRow() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+        let range = CMTimeRange(start: CMTime(seconds: 1.0, preferredTimescale: 1000), duration: CMTime(seconds: 4.0, preferredTimescale: 1000))
+
+        // Provisional silence commit "We are going to."
+        session.rememberCommittedSentenceForTesting("We are going to.", isProvisionalSilence: true, promotionSegmentID: id1, audioRange: range)
+
+        // Full final transcriber result arrives with complete utterance
+        let fullSentence = "We are going to build a new system."
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false,
+            audioRange: range
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-modern-reconstruct-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "We are going to.", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        // Must be ONE row containing full A+B, not severed suffix
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testModernFastAutoPunctuationProvisionalFollowedByFinalReconstructsFullUtteranceProducesOneRow() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+        let range = CMTimeRange(start: CMTime(seconds: 0.0, preferredTimescale: 1000), duration: CMTime(seconds: 5.0, preferredTimescale: 1000))
+
+        // Fast auto-punctuation provisional commit "First clause,"
+        session.rememberCommittedSentenceForTesting("First clause,", isProvisionalSilence: true, promotionSegmentID: id1, audioRange: range)
+
+        // Full final transcriber result arrives with complete sentence
+        let fullSentence = "First clause, second clause completed."
+        let prepared = session.prepareCommittedSentenceForEmissionForTesting(
+            fullSentence,
+            pendingPromotionID: id2,
+            isProvisionalSilence: false,
+            audioRange: range
+        )
+
+        XCTAssertNotNil(prepared)
+        XCTAssertEqual(prepared?.text, fullSentence)
+        XCTAssertEqual(prepared?.promotionSegmentID, id2)
+        XCTAssertEqual(prepared?.replacesPromotionSegmentID, id1)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-fast-autopunc-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "First clause,", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        let s2 = RecognizedSentence(text: prepared!.text, promotionSegmentID: prepared!.promotionSegmentID, replacesPromotionSegmentID: prepared!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+    }
+
+    @MainActor
+    func testModernSilenceCommitThenFinalFullUtteranceProducesOneRowThroughProductionSeam() async {
+        let session = LiveTranscriptionSession()
+        var collected: [RecognizedSentence] = []
+        session.installTranscriptHandlerForTesting { collected.append($0) }
+
+        let range = CMTimeRange(
+            start: CMTime(seconds: 1.0, preferredTimescale: 1000),
+            duration: CMTime(seconds: 4.0, preferredTimescale: 1000)
+        )
+        let fullSentence = "We are going to build a new system."
+
+        session.processModernRecognitionTextForTesting("We are going to.", isFinal: false, audioRange: range)
+        await flushModernEmissions()
+        session.forceCommitOnSilenceForTesting()
+        await flushModernEmissions()
+        session.processModernRecognitionTextForTesting(fullSentence, isFinal: true, audioRange: range)
+        await flushModernEmissions()
+
+        XCTAssertFalse(collected.isEmpty, "production seam must emit at least one recognized sentence")
+        let (model, settingsURL) = makeAppModel(prefix: "v2s-modern-silence-seam")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        await enqueueCollected(collected, into: model)
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+        XCTAssertNotEqual(model.displayedCaptionForTesting?.sourceText, "build a new system.")
+    }
+
+    @MainActor
+    func testModernFastAutoPunctuationThenFinalFullUtteranceProducesOneRowThroughProductionSeam() async {
+        let session = LiveTranscriptionSession()
+        var collected: [RecognizedSentence] = []
+        session.installTranscriptHandlerForTesting { collected.append($0) }
+
+        let range = CMTimeRange(
+            start: CMTime(seconds: 0.0, preferredTimescale: 1000),
+            duration: CMTime(seconds: 5.0, preferredTimescale: 1000)
+        )
+        let fullSentence = "First clause, second clause completed."
+
+        session.processModernRecognitionTextForTesting("First clause,", isFinal: false, audioRange: range)
+        await flushModernEmissions()
+        session.backdateLastDraftTextChangeForTesting(secondsAgo: 1)
+        session.processModernRecognitionTextForTesting("First clause,", isFinal: false, audioRange: range)
+        await flushModernEmissions()
+        session.processModernRecognitionTextForTesting(fullSentence, isFinal: true, audioRange: range)
+        await flushModernEmissions()
+
+        XCTAssertFalse(collected.isEmpty, "production seam must emit at least one recognized sentence")
+        let (model, settingsURL) = makeAppModel(prefix: "v2s-modern-fast-autopunc-seam")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        await enqueueCollected(collected, into: model)
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting.first?.sourceText, fullSentence)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+        XCTAssertNotEqual(model.displayedCaptionForTesting?.sourceText, "second clause completed.")
+    }
+
+
+    @MainActor
+    func testModernCallbackWithTwoIndependentSentencesProducesTwoRows() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+        let range = CMTimeRange(start: CMTime(seconds: 0.0, preferredTimescale: 1000), duration: CMTime(seconds: 6.0, preferredTimescale: 1000))
+
+        // Sentence 1 prepared from callback
+        let prep1 = session.prepareCommittedSentenceForEmissionForTesting(
+            "Hello everyone.",
+            pendingPromotionID: id1,
+            isProvisionalSilence: false,
+            audioRange: range
+        )
+        XCTAssertNotNil(prep1)
+        XCTAssertEqual(prep1?.text, "Hello everyone.")
+        XCTAssertNil(prep1?.replacesPromotionSegmentID)
+
+        // Sentence 2 prepared from same callback with same audio range
+        let prep2 = session.prepareCommittedSentenceForEmissionForTesting(
+            "Welcome to the presentation.",
+            pendingPromotionID: id2,
+            isProvisionalSilence: false,
+            audioRange: range
+        )
+        XCTAssertNotNil(prep2)
+        XCTAssertEqual(prep2?.text, "Welcome to the presentation.")
+        // Must NOT replace sentence 1 despite sharing audio range
+        XCTAssertNil(prep2?.replacesPromotionSegmentID)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-two-sentences-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: prep1!.text, promotionSegmentID: prep1!.promotionSegmentID, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+        model.completeHeldCaptionForTesting()
+
+        let s2 = RecognizedSentence(text: prep2!.text, promotionSegmentID: prep2!.promotionSegmentID, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, "Welcome to the presentation.")
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 1)
+        XCTAssertEqual(model.overlayHistoryForTesting.first?.sourceText, "Hello everyone.")
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 2)
+        XCTAssertEqual(model.transcriptEntriesForTesting[0].sourceText, "Hello everyone.")
+        XCTAssertEqual(model.transcriptEntriesForTesting[1].sourceText, "Welcome to the presentation.")
+    }
+
+    @MainActor
+    func testFinalizedPrefixFollowedByGenuineNextPrefixExtensionProducesTwoRows() async {
+        let session = LiveTranscriptionSession()
+        let id1 = UUID()
+        let id2 = UUID()
+
+        // Sentence 1 finalized: "We are going."
+        session.rememberCommittedSentenceForTesting("We are going.", isProvisionalSilence: false, promotionSegmentID: id1)
+
+        // Sentence 2 begins with same prefix but is a genuine next sentence: "We are going to Tokyo tomorrow."
+        let prep2 = session.prepareCommittedSentenceForEmissionForTesting(
+            "We are going to Tokyo tomorrow.",
+            pendingPromotionID: id2,
+            isProvisionalSilence: false
+        )
+
+        XCTAssertNotNil(prep2)
+        XCTAssertEqual(prep2?.text, "We are going to Tokyo tomorrow.")
+        // Because sentence 1 was finalized (not provisional silence), sentence 2 is a new utterance
+        XCTAssertNil(prep2?.replacesPromotionSegmentID)
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-genuine-prefix-extension-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(settingsStore: SettingsStore(fileURL: settingsURL), sourceCatalogService: SourceCatalogService())
+
+        let s1 = RecognizedSentence(text: "We are going.", promotionSegmentID: id1, replacesPromotionSegmentID: nil, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s1, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+        model.completeHeldCaptionForTesting()
+
+        let s2 = RecognizedSentence(text: prep2!.text, promotionSegmentID: prep2!.promotionSegmentID, replacesPromotionSegmentID: prep2!.replacesPromotionSegmentID, heardLanguageID: "en")
+        model.enqueueRecognizedSentenceForTesting(s2, sourceLanguageID: "en", targetLanguageID: "en")
+        await model.runCaptionQueueTurnForTesting()
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, "We are going to Tokyo tomorrow.")
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 1)
+        XCTAssertEqual(model.overlayHistoryForTesting.first?.sourceText, "We are going.")
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 2)
+        XCTAssertEqual(model.transcriptEntriesForTesting[0].sourceText, "We are going.")
+        XCTAssertEqual(model.transcriptEntriesForTesting[1].sourceText, "We are going to Tokyo tomorrow.")
     }
 
     @MainActor
@@ -1287,6 +1781,32 @@ final class LiveTranscriptionSessionTests: XCTestCase {
         XCTAssertEqual(finalStepBoth.floor, .primary)
         XCTAssertEqual(finalStepBoth.commitSide, .primary)
         XCTAssertEqual(finalStepBoth.commitText, "強勢主語言")
+    }
+
+    @MainActor
+    private func flushModernEmissions() async {
+        await Task.yield()
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    @MainActor
+    private func makeAppModel(prefix: String) -> (AppModel, URL) {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString).json")
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        return (model, settingsURL)
+    }
+
+    @MainActor
+    private func enqueueCollected(_ sentences: [RecognizedSentence], into model: AppModel) async {
+        for s in sentences {
+            model.enqueueRecognizedSentenceForTesting(s, sourceLanguageID: "en", targetLanguageID: "en")
+            await model.runCaptionQueueTurnForTesting()
+        }
     }
 
     private func disposition(

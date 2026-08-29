@@ -3145,10 +3145,8 @@ final class AppModel: ObservableObject {
                 return false
             }
             if promotionID == nil {
-                if comparableCaptionText(displayedCaption.sourceText) == comparable {
-                    return false
-                }
-                if isNearDuplicateCaptionText(displayedCaption.sourceText, text) {
+                if comparableCaptionText(displayedCaption.sourceText) == comparable
+                    && isNearDuplicateCaptionText(displayedCaption.sourceText, text) {
                     return false
                 }
             }
@@ -3159,7 +3157,8 @@ final class AppModel: ObservableObject {
                 return true
             }
             if promotionID == nil {
-                return comparableCaptionText($0.sourceText) == comparable || isNearDuplicateCaptionText($0.sourceText, text)
+                return comparableCaptionText($0.sourceText) == comparable
+                    && isNearDuplicateCaptionText($0.sourceText, text)
             }
             return false
         }) {
@@ -3174,13 +3173,7 @@ final class AppModel: ObservableObject {
             return false
         }
 
-        if let promotionID {
-            return recentRecognizedCaptionTexts.contains(where: { $0.promotionID == promotionID }) == false
-        }
-
-        return recentRecognizedCaptionTexts.contains(where: {
-            $0.comparableText == comparable || isNearDuplicateCaptionText($0.rawText, text)
-        }) == false
+        return true
     }
 
     private func rememberRecognizedSentence(_ text: String, promotionID: UUID? = nil) {
@@ -3204,6 +3197,7 @@ final class AppModel: ObservableObject {
         }
 
         recentArchivedCaption = RecentArchivedCaption(
+            rawText: sourceText,
             comparableText: comparable,
             time: Date(),
             promotionID: promotionID
@@ -4081,6 +4075,7 @@ private struct RecentRecognizedCaption {
 }
 
 private struct RecentArchivedCaption {
+    let rawText: String
     let comparableText: String
     let time: Date
     let promotionID: UUID?
