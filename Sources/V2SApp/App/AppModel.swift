@@ -2861,13 +2861,14 @@ final class AppModel: ObservableObject {
         revision: UInt64?,
         sourceID: String,
         sourceKind: String,
-        promotionOrigin: String = "inbound"
+        promotionOrigin: String? = nil
     ) {
         let captionText = captionID?.uuidString ?? "-"
         let promotionText = promotionID?.uuidString ?? "-"
         let replacesText = replacesID?.uuidString ?? "-"
         let revisionText = revision.map(String.init) ?? "-"
-        Logger.caption.notice("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) origin=\(promotionOrigin, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
+        let originText = promotionOrigin ?? "-"
+        Logger.caption.notice("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) origin=\(originText, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
     }
 
     private func refreshCaptionTranslations() {
