@@ -1903,4 +1903,50 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             message: message
         )
     }
+
+    /// The draft overlay update carries several independent assignments. A commit
+    /// that adds one and drops another compiles and leaves every caption test
+    /// green, so assert them together.
+    @MainActor
+    func testPartialDraftAssignsSourceNameAndAudioIdentity() {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-draft-identity-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(translatedText: "", sourceText: "", sourceName: "stale name")
+        )
+
+        let promotionID = UUID()
+        let draft = DraftSegment(
+            segmentId: promotionID,
+            sourceText: "大家好",
+            stablePrefixLength: 0,
+            mutableTailText: "大家好",
+            avgConfidence: 0.9,
+            startMs: 0,
+            lastUpdateMs: 0,
+            silenceMs: 0,
+            stabilityScore: 0.5,
+            boundaryScore: 0.5,
+            chunkScore: 0.5,
+            vadProbability: 0.2,
+            words: [],
+            heardLanguageID: "zh-Hant",
+            audioHypothesisStartMs: 1_234
+        )
+        model.handlePartialDraftForTesting(draft)
+
+        let state = model.overlayStateForTesting
+        XCTAssertEqual(state?.draftSourceText, "大家好")
+        XCTAssertEqual(state?.draftPromotionID, promotionID)
+        XCTAssertEqual(state?.draftAudioStartMs, 1_234)
+        XCTAssertEqual(
+            state?.sourceName, InputSource.preview.name,
+            "draft update must refresh the overlay source name"
+        )
+    }
 }

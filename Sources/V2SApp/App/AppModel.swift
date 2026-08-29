@@ -2151,7 +2151,7 @@ final class AppModel: ObservableObject {
         sourceLanguageID: String,
         targetLanguageID: String
     ) {
-        guard liveTranscriptionSession != nil else { return }
+        guard isCaptionPipelineActive else { return }
         if let draft, isFinalizedDraftPromotionID(draft.segmentId) {
             return
         }
@@ -4147,6 +4147,25 @@ final class AppModel: ObservableObject {
             targetLanguageID: targetLanguageID,
             usesInverseGlossary: usesInverseGlossary
         )
+    }
+
+    func handlePartialDraftForTesting(
+        _ draft: DraftSegment?,
+        source: InputSource = .preview,
+        sourceLanguageID: String = "zh-Hant",
+        targetLanguageID: String = "en"
+    ) {
+        isSessionActiveForTesting = true
+        handlePartialDraft(
+            draft,
+            source: source,
+            sourceLanguageID: sourceLanguageID,
+            targetLanguageID: targetLanguageID
+        )
+    }
+
+    var overlayStateForTesting: OverlayPreviewState? {
+        overlayState
     }
 
     func runCaptionQueueTurnForTesting() async {
