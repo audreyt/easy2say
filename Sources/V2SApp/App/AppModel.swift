@@ -2187,7 +2187,6 @@ final class AppModel: ObservableObject {
                 promotionID: draftPromotionID
             )
         }
-        overlayState?.draftStablePrefixLength = min(draft?.stablePrefixLength ?? 0, draftText.count)
         overlayState?.draftPromotionID = draftPromotionID
         overlayState?.sourceName = source.name
         dismissListeningPlaceholderIfNeeded()
@@ -2264,7 +2263,6 @@ final class AppModel: ObservableObject {
         draftClearTask?.cancel()
         draftClearTask = nil
         overlayState?.draftSourceText = nil
-        overlayState?.draftStablePrefixLength = 0
         overlayState?.draftPromotionID = nil
         overlayState?.clearDraftTranslation()
         activeDraftSourceLanguageID = nil
@@ -3073,11 +3071,8 @@ final class AppModel: ObservableObject {
             cancelCommittedCaptionArchive()
             displayedCaption = caption
 
-            // If a draft translation was visible, skip the fade-in so the committed
-            // text replaces the draft seamlessly instead of flashing.
-            let hadDraftTranslation = initialTranslation?.isEmpty == false
-
-            overlayState?.skipCommittedFadeIn = hadDraftTranslation
+            // The presentation keeps the draft and committed phases in one stable
+            // caption slot; promotion only changes its content and color.
             let panes = languagePanes(
                 heard: caption.sourceText,
                 translated: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
@@ -4109,6 +4104,24 @@ final class AppModel: ObservableObject {
     }
 
 #if DEBUG
+    private(set) var liveCaptionFrameForTesting: CGRect?
+    private(set) var liveCaptionFramesForTesting: [CGRect] = []
+
+    func setOverlayStateForTesting(_ state: OverlayPreviewState) {
+        overlayState = state
+        sessionState = .running
+    }
+
+    func recordLiveCaptionFrameForTesting(_ frame: CGRect) {
+        liveCaptionFrameForTesting = frame
+        guard liveCaptionFramesForTesting.last != frame else { return }
+        liveCaptionFramesForTesting.append(frame)
+    }
+
+    func resetLiveCaptionFramesForTesting() {
+        liveCaptionFramesForTesting = []
+    }
+
     func enqueueRecognizedSentenceForTesting(
         _ sentence: RecognizedSentence,
         source: InputSource = .preview,

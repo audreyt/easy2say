@@ -8,10 +8,7 @@ struct CaptionFlowContentView: View {
     var reservesColumnHeaderSpace: Bool = true
     var columnHeaderOpacity: Double = 1.0
 
-    @Namespace private var captionFlowNamespace
-    @State private var lastDraftSlotHeight: CGFloat = 0.0
     @State private var lastLiveLayersHeight: CGFloat = 0.0
-    @State private var lastCommittedSlotHeight: CGFloat = 0.0
     @State private var measuredHistoryEntryHeights: [UUID: CGFloat] = [:]
 
     var body: some View {
@@ -48,24 +45,9 @@ struct CaptionFlowContentView: View {
                     .mask(continuousFlowMask)
                     .background(alignment: .center) { captionColumnDivider }
                     .overlay(alignment: .top) { captionColumnHeader }
-                    .onPreferenceChange(DraftSlotHeightPreferenceKey.self) { height in
-                        guard height > 0 else { return }
-                        let snappedHeight = ceil(height)
-                        let downwardDelta = lastDraftSlotHeight - snappedHeight
-
-                        if lastDraftSlotHeight == 0
-                            || snappedHeight >= lastDraftSlotHeight
-                            || downwardDelta >= Self.draftHeightJitterTolerance {
-                            lastDraftSlotHeight = snappedHeight
-                        }
-                    }
                     .onPreferenceChange(LiveLayersHeightPreferenceKey.self) { height in
                         guard height > 0 else { return }
                         lastLiveLayersHeight = ceil(height)
-                    }
-                    .onPreferenceChange(CommittedSlotHeightPreferenceKey.self) { height in
-                        guard height > 0 else { return }
-                        lastCommittedSlotHeight = ceil(height)
                     }
                     .onPreferenceChange(HistoryEntryHeightsPreferenceKey.self) { heights in
                         guard heights.isEmpty == false else { return }
@@ -94,9 +76,7 @@ struct CaptionFlowContentView: View {
                     }
                     .onChange(of: model.sessionState) { _, newState in
                         if newState != .running {
-                            lastDraftSlotHeight = 0
                             lastLiveLayersHeight = 0
-                            lastCommittedSlotHeight = 0
                             measuredHistoryEntryHeights = [:]
                         }
                     }
@@ -117,32 +97,66 @@ struct CaptionFlowContentView: View {
     // MARK: - Continuous flow
 
     private func liveLayers(_ state: OverlayPreviewState) -> some View {
-        VStack(alignment: .center, spacing: Self.liveStackSpacing) {
-            if hasCommittedCaption(state) {
-                committedLayer(state)
-            } else if shouldReserveCommittedSlot(for: state) {
-                committedSlotPlaceholder
+        let presentation = state.liveCaptionPresentation
+
+        return VStack(alignment: .center, spacing: Self.liveStackSpacing) {
+            if let precedingCaption = presentation.precedingCommittedCaption {
+                precedingCommittedLayer(precedingCaption)
             }
 
-            draftLayer(state)
+            if let currentCaption = presentation.currentCaption {
+                currentCaptionLayer(currentCaption)
+            } else if shouldReserveCurrentCaptionSlot(for: state) {
+                currentCaptionSlotPlaceholder
+            }
         }
         .animation(Self.captionFlowAnimation, value: flowAnimationState(for: state))
     }
 
-    private func committedLayer(_ state: OverlayPreviewState) -> some View {
-        applyingPromotionTransition(
-            to: captionPair(
-                translated: state.translatedText,
-                translatedColor: baseSubtitleColor,
-                source: state.sourceText,
-                sourceColor: subtitleColor(opacity: 0.82)
-            )
-            .background(committedSlotHeightReader),
-            key: promotionKey(
-                promotionID: state.committedPromotionID,
-                sourceText: state.sourceText,
-                translatedText: state.translatedText
-            )
+    private func currentCaptionLayer(
+        _ caption: OverlayLiveCaptionPresentation.Caption
+    ) -> some View {
+        let isTentative = caption.phase == .tentative
+        let layer = captionPair(
+            translated: caption.translatedText,
+            translatedColor: isTentative ? tentativeSubtitleColor : baseSubtitleColor,
+            source: caption.sourceText,
+            sourceColor: isTentative ? tentativeSubtitleColor : subtitleColor(opacity: 0.82),
+            reservesEmptyLines: true
+        )
+        .padding(.bottom, Self.currentCaptionBottomInset)
+        .id(caption.id)
+
+#if DEBUG
+        return layer.background(currentCaptionFrameReader)
+#else
+        return layer
+#endif
+    }
+
+#if DEBUG
+    private var currentCaptionFrameReader: some View {
+        GeometryReader { proxy in
+            let frame = proxy.frame(in: .global)
+            Color.clear
+                .onAppear {
+                    model.recordLiveCaptionFrameForTesting(frame)
+                }
+                .onChange(of: frame) { _, newFrame in
+                    model.recordLiveCaptionFrameForTesting(newFrame)
+                }
+        }
+    }
+#endif
+
+    private func precedingCommittedLayer(
+        _ caption: OverlayLiveCaptionPresentation.Caption
+    ) -> some View {
+        captionPair(
+            translated: caption.translatedText,
+            translatedColor: subtitleColor(opacity: 0.68),
+            source: caption.sourceText,
+            sourceColor: subtitleColor(opacity: 0.46)
         )
     }
 
@@ -170,121 +184,6 @@ struct CaptionFlowContentView: View {
         )
     }
 
-    // MARK: - Draft layer (50–65% opacity, stable prefix slightly brighter)
-
-    private func draftLayer(_ state: OverlayPreviewState) -> some View {
-        ZStack(alignment: .top) {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            if state.hasActiveDraftLayer {
-                let draftSource = state.draftSourceText ?? ""
-                let visibleDraftTranslatedText = displayedDraftTranslatedText(
-                    for: state,
-                    draftText: draftSource
-                )
-                applyingPromotionTransition(
-                    to: draftBody(state: state, draftText: draftSource, translated: visibleDraftTranslatedText)
-                        .background(draftSlotHeightReader),
-                    key: promotionKey(
-                        promotionID: state.draftPromotionID,
-                        sourceText: draftSource.isEmpty ? (visibleDraftTranslatedText ?? "") : draftSource,
-                        translatedText: visibleDraftTranslatedText ?? draftSource
-                    )
-                )
-                .frame(maxWidth: .infinity, alignment: .top)
-            }
-        }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: draftSlotHeight(for: state),
-            maxHeight: draftSlotHeight(for: state),
-            alignment: .top
-        )
-    }
-
-    @ViewBuilder
-    private func draftBody(
-        state: OverlayPreviewState,
-        draftText: String,
-        translated: String?
-    ) -> some View {
-        if usesColumnCaptions {
-            HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
-                inLayoutOrder(
-                    translated: {
-                        captionColumn {
-                            draftTranslatedLine(translated)
-                        }
-                        .environment(\.layoutDirection, draftTranslatedCaptionLayoutDirection)
-                    },
-                    original: {
-                        captionColumn {
-                            draftSourceLine(state: state, draftText: draftText)
-                        }
-                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
-                    }
-                )
-            }
-            .environment(\.layoutDirection, .leftToRight)
-        } else {
-            VStack(spacing: 2) {
-                inLayoutOrder(
-                    translated: {
-                        Group {
-                            if showsTranslatedSubtitle {
-                                draftTranslatedLine(translated)
-                            }
-                        }
-                        .environment(\.layoutDirection, draftTranslatedCaptionLayoutDirection)
-                    },
-                    original: {
-                        Group {
-                            if showsOriginalSubtitle {
-                                draftSourceLine(state: state, draftText: draftText)
-                            }
-                        }
-                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
-                    }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func draftTranslatedLine(_ translated: String?) -> some View {
-        if let translated {
-            translatedText(
-                translated,
-                color: subtitleColor(opacity: 0.55)
-            )
-        } else if model.shouldReserveDraftTranslationSlot {
-            Text(" ")
-                .font(.system(size: model.overlayStyle.scaledTranslatedFontSize, weight: .semibold))
-                .multilineTextAlignment(captionTextAlignment)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .hidden()
-                .accessibilityHidden(true)
-        }
-    }
-
-    private func draftSourceLine(state: OverlayPreviewState, draftText: String) -> some View {
-        let prefixLen = min(state.draftStablePrefixLength, draftText.count)
-        let stable = String(draftText.prefix(prefixLen))
-        let mutable = String(draftText.dropFirst(prefixLen))
-
-        return captionText(
-            draftSourceAttributedText(
-                stable: stable,
-                mutable: mutable
-            ),
-            rawText: draftText,
-            fontSize: displayedSourceFontSize,
-            weight: displayedSourceFontWeight
-        )
-    }
 
     private func historyEntry(
         _ entry: OverlayHistoryEntry,
@@ -337,27 +236,17 @@ struct CaptionFlowContentView: View {
         max(lastLiveLayersHeight, estimatedLiveLayersHeight(for: state))
     }
 
-    private func hasCommittedCaption(_ state: OverlayPreviewState) -> Bool {
-        usesSourceAsTranslationFallback(
-            translated: state.translatedText,
-            source: state.sourceText
-        )
-            || (showsTranslatedSubtitle && state.translatedText.isEmpty == false)
-            || (showsOriginalSubtitle && state.sourceText.isEmpty == false)
-    }
-
-    private func shouldReserveCommittedSlot(for state: OverlayPreviewState) -> Bool {
-        hasCommittedCaption(state) || model.shouldReserveCommittedCaptionSlot
+    private func shouldReserveCurrentCaptionSlot(for state: OverlayPreviewState) -> Bool {
+        state.liveCaptionPresentation.currentCaption != nil
+            || model.shouldReserveCommittedCaptionSlot
     }
 
     private func flowAnimationState(for state: OverlayPreviewState) -> OverlayFlowAnimationState {
-        OverlayFlowAnimationState(
-            captionEpoch: state.captionEpoch,
-            translatedText: state.translatedText,
-            sourceText: state.sourceText,
-            committedPromotionID: state.committedPromotionID,
-            draftPromotionID: state.draftPromotionID,
-            reservesCommittedSlot: shouldReserveCommittedSlot(for: state)
+        let presentation = state.liveCaptionPresentation
+        return OverlayFlowAnimationState(
+            currentCaptionID: presentation.currentCaption?.id,
+            precedingCommittedCaptionID: presentation.precedingCommittedCaption?.id,
+            reservesCurrentCaptionSlot: shouldReserveCurrentCaptionSlot(for: state)
         )
     }
 
@@ -365,22 +254,13 @@ struct CaptionFlowContentView: View {
         for state: OverlayPreviewState,
         visibleHistoryEntries: [OverlayHistoryEntry]
     ) -> OverlayHistoryLayoutAnimationState {
-        OverlayHistoryLayoutAnimationState(
+        let presentation = state.liveCaptionPresentation
+        return OverlayHistoryLayoutAnimationState(
             historyIDs: visibleHistoryEntries.map(\.id),
-            reservesCommittedSlot: shouldReserveCommittedSlot(for: state),
-            draftPromotionID: state.draftPromotionID
+            currentCaptionID: presentation.currentCaption?.id,
+            precedingCommittedCaptionID: presentation.precedingCommittedCaption?.id,
+            reservesCurrentCaptionSlot: shouldReserveCurrentCaptionSlot(for: state)
         )
-    }
-
-    private var estimatedCommittedSlotHeight: CGFloat {
-        estimatedCaptionPairHeight(
-            showsTranslated: showsTranslatedSubtitle,
-            showsSource: showsOriginalSubtitle
-        )
-    }
-
-    private var committedSlotHeight: CGFloat {
-        max(lastCommittedSlotHeight, estimatedCommittedSlotHeight)
     }
 
     private func historyEntryHeight(for entry: OverlayHistoryEntry) -> CGFloat {
@@ -400,69 +280,33 @@ struct CaptionFlowContentView: View {
     }
 
     private func estimatedLiveLayersHeight(for state: OverlayPreviewState) -> CGFloat {
-        var height = draftSlotHeight(for: state)
+        let presentation = state.liveCaptionPresentation
+        let captionHeight = estimatedCaptionPairHeight(
+            showsTranslated: showsTranslatedSubtitle,
+            showsSource: showsOriginalSubtitle
+        )
+        var height: CGFloat = 0
 
-        if shouldReserveCommittedSlot(for: state) {
-            height += committedSlotHeight + Self.liveStackSpacing
+        if presentation.precedingCommittedCaption != nil {
+            height += captionHeight + Self.liveStackSpacing
+        }
+
+        if shouldReserveCurrentCaptionSlot(for: state) {
+            height += captionHeight + Self.currentCaptionBottomInset
         }
 
         return height
     }
 
-    private func draftSlotHeight(for state: OverlayPreviewState) -> CGFloat {
-        max(lastDraftSlotHeight, estimatedDraftRowHeight(for: state)) + Self.draftBottomInset
-    }
-
-    private func estimatedDraftRowHeight(for state: OverlayPreviewState) -> CGFloat {
-        let currentDraftTranslation = state.visibleDraftTranslatedText(
-            for: state.draftSourceText ?? "",
-            promotionID: state.draftPromotionID
-        )
-        let translatedHeight = showsTranslatedSubtitle && (
-            (currentDraftTranslation?.isEmpty == false) || model.shouldReserveDraftTranslationSlot
-        )
-            ? translatedLineHeight
-            : 0
-        let sourceHeight = showsOriginalSubtitle ? sourceLineHeight : 0
-        return usesColumnCaptions
-            ? max(translatedHeight, sourceHeight)
-            : translatedHeight + sourceHeight
-    }
-
-    private func displayedDraftTranslatedText(
-        for state: OverlayPreviewState,
-        draftText: String
-    ) -> String? {
-        if model.shouldReserveDraftTranslationSlot && showsOriginalSubtitle == false {
-            return draftText.isEmpty ? state.draftTranslatedText : draftText
-        }
-
-        if let explicit = state.draftTranslatedText, explicit.isEmpty == false {
-            return explicit
-        }
-
-        guard let draftTranslated = state.visibleDraftTranslatedText(
-            for: draftText,
-            promotionID: state.draftPromotionID
-        ),
-              draftTranslated.isEmpty == false else {
-            return nil
-        }
-
-        return draftTranslated
-    }
-
-    private var draftSlotHeightReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .preference(key: DraftSlotHeightPreferenceKey.self, value: proxy.size.height)
-        }
-    }
-
-    private var committedSlotPlaceholder: some View {
+    private var currentCaptionSlotPlaceholder: some View {
         Color.clear
             .frame(maxWidth: .infinity)
-            .frame(height: committedSlotHeight)
+            .frame(
+                height: estimatedCaptionPairHeight(
+                    showsTranslated: showsTranslatedSubtitle,
+                    showsSource: showsOriginalSubtitle
+                ) + Self.currentCaptionBottomInset
+            )
             .accessibilityHidden(true)
     }
 
@@ -473,13 +317,6 @@ struct CaptionFlowContentView: View {
         }
     }
 
-    private var committedSlotHeightReader: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .preference(key: CommittedSlotHeightPreferenceKey.self, value: proxy.size.height)
-        }
-    }
-
     private func historyEntryHeightReader(for id: UUID) -> some View {
         GeometryReader { proxy in
             Color.clear
@@ -487,48 +324,14 @@ struct CaptionFlowContentView: View {
         }
     }
 
-    private func promotionKey(
-        promotionID: UUID?,
-        sourceText: String,
-        translatedText: String
-    ) -> String? {
-        if let promotionID {
-            return "live-caption:\(promotionID.uuidString)"
-        }
-
-        let normalizedSource = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedSource.isEmpty == false {
-            return "live-caption:\(normalizedSource)"
-        }
-
-        let normalizedTranslation = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalizedTranslation.isEmpty == false else { return nil }
-        return "live-caption:\(normalizedTranslation)"
-    }
-
-    @ViewBuilder
-    private func applyingPromotionTransition<Content: View>(
-        to content: Content,
-        key: String?
-    ) -> some View {
-        if let key {
-            content.matchedGeometryEffect(
-                id: key,
-                in: captionFlowNamespace,
-                properties: .frame,
-                anchor: .bottom
-            )
-        } else {
-            content
-        }
-    }
 
     @ViewBuilder
     private func captionPair(
         translated: String,
         translatedColor: Color,
         source: String,
-        sourceColor: Color
+        sourceColor: Color,
+        reservesEmptyLines: Bool = false
     ) -> some View {
         if usesColumnCaptions {
             HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
@@ -537,6 +340,10 @@ struct CaptionFlowContentView: View {
                         captionColumn {
                             if translated.isEmpty == false {
                                 translatedText(translated, color: translatedColor)
+                            } else if reservesEmptyLines {
+                                translatedText(" ", color: translatedColor)
+                                    .hidden()
+                                    .accessibilityHidden(true)
                             }
                         }
                         .environment(\.layoutDirection, translatedCaptionLayoutDirection)
@@ -545,6 +352,10 @@ struct CaptionFlowContentView: View {
                         captionColumn {
                             if source.isEmpty == false {
                                 sourceText(source, color: sourceColor)
+                            } else if reservesEmptyLines {
+                                sourceText(" ", color: sourceColor)
+                                    .hidden()
+                                    .accessibilityHidden(true)
                             }
                         }
                         .environment(\.layoutDirection, originalCaptionLayoutDirection)
@@ -557,7 +368,8 @@ struct CaptionFlowContentView: View {
                 translated: translated,
                 translatedColor: translatedColor,
                 source: source,
-                sourceColor: sourceColor
+                sourceColor: sourceColor,
+                reservesEmptyLines: reservesEmptyLines
             )
         }
     }
@@ -588,25 +400,33 @@ struct CaptionFlowContentView: View {
         translated: String,
         translatedColor: Color,
         source: String,
-        sourceColor: Color
+        sourceColor: Color,
+        reservesEmptyLines: Bool
     ) -> some View {
         let usesFallback = usesSourceAsTranslationFallback(
             translated: translated,
             source: source
-        )
+        ) && (reservesEmptyLines == false || showsOriginalSubtitle == false)
         let primaryTranslatedText = usesFallback ? source : translated
-        let showsTranslatedLine = showsTranslatedSubtitle && primaryTranslatedText.isEmpty == false
-        let showsSourceLine = showsOriginalSubtitle && source.isEmpty == false && usesFallback == false
+        let showsTranslatedLine = showsTranslatedSubtitle
+            && (primaryTranslatedText.isEmpty == false || reservesEmptyLines)
+        let showsSourceLine = showsOriginalSubtitle
+            && usesFallback == false
+            && (source.isEmpty == false || reservesEmptyLines)
 
         return VStack(spacing: Self.captionPairSpacing) {
             inLayoutOrder(
                 translated: {
                     Group {
-                        if showsTranslatedLine {
+                        if primaryTranslatedText.isEmpty == false {
                             translatedText(
                                 primaryTranslatedText,
                                 color: translatedColor
                             )
+                        } else if showsTranslatedLine {
+                            translatedText(" ", color: translatedColor)
+                                .hidden()
+                                .accessibilityHidden(true)
                         }
                     }
                     .environment(
@@ -616,11 +436,15 @@ struct CaptionFlowContentView: View {
                 },
                 original: {
                     Group {
-                        if showsSourceLine {
+                        if source.isEmpty == false && usesFallback == false {
                             sourceText(
                                 source,
                                 color: sourceColor
                             )
+                        } else if showsSourceLine {
+                            sourceText(" ", color: sourceColor)
+                                .hidden()
+                                .accessibilityHidden(true)
                         }
                     }
                     .environment(\.layoutDirection, originalCaptionLayoutDirection)
@@ -889,6 +713,10 @@ struct CaptionFlowContentView: View {
         }
     }
 
+    private var tentativeSubtitleColor: Color {
+        Color(nsColor: .secondaryLabelColor)
+    }
+
     private var baseSubtitleColor: Color {
         model.overlayStyle.subtitleColor.color
     }
@@ -909,8 +737,7 @@ extension CaptionFlowContentView {
         blendDuration: 0.08
     )
     static let liveStackSpacing: CGFloat = 10.0
-    static let draftBottomInset: CGFloat = 3.0
-    static let draftHeightJitterTolerance: CGFloat = 6.0
+    static let currentCaptionBottomInset: CGFloat = 3.0
     static let captionPairSpacing: CGFloat = 4.0
     /// Gap between the two 50/50 caption columns, and the height reserved for their
     /// role labels above the flow.
@@ -929,27 +756,18 @@ extension CaptionFlowContentView {
 }
 
 struct OverlayFlowAnimationState: Equatable {
-    let captionEpoch: Int
-    let translatedText: String
-    let sourceText: String
-    let committedPromotionID: UUID?
-    let draftPromotionID: UUID?
-    let reservesCommittedSlot: Bool
+    let currentCaptionID: OverlayLiveCaptionPresentation.Identity?
+    let precedingCommittedCaptionID: OverlayLiveCaptionPresentation.Identity?
+    let reservesCurrentCaptionSlot: Bool
 }
 
 struct OverlayHistoryLayoutAnimationState: Equatable {
     let historyIDs: [UUID]
-    let reservesCommittedSlot: Bool
-    let draftPromotionID: UUID?
+    let currentCaptionID: OverlayLiveCaptionPresentation.Identity?
+    let precedingCommittedCaptionID: OverlayLiveCaptionPresentation.Identity?
+    let reservesCurrentCaptionSlot: Bool
 }
 
-struct DraftSlotHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0.0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
 
 struct LiveLayersHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0.0
@@ -959,13 +777,6 @@ struct LiveLayersHeightPreferenceKey: PreferenceKey {
     }
 }
 
-struct CommittedSlotHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0.0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
 
 struct HistoryEntryHeightsPreferenceKey: PreferenceKey {
     static var defaultValue: [UUID: CGFloat] = [:]

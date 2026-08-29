@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct CaptionHalves: View {
     @ObservedObject var model: AppModel
@@ -59,7 +60,7 @@ struct CaptionHalves: View {
     }
 }
 
-private enum CaptionRole: String {
+private enum CaptionRole {
     case source
     case translation
 }
@@ -71,63 +72,33 @@ private struct CaptionPane: View {
 
     @ScaledMetric(relativeTo: .largeTitle) private var baseCaptionSize: CGFloat = 34
 
-
-    private var committedText: String {
-        guard let state = model.overlayState else { return "" }
-        switch role {
-        case .source:
-            return state.sourceText
-        case .translation:
-            return state.translatedText
-        }
+    private var liveCaption: OverlayLiveCaptionPresentation.Caption? {
+        model.overlayState?.liveCaptionPresentation.currentCaption
     }
-
-    private var draftText: String? {
-        guard let state = model.overlayState, state.hasActiveDraftLayer else {
-            return nil
-        }
-
-        switch role {
-        case .source:
-            return state.draftSourceText
-        case .translation:
-            if let explicit = state.draftTranslatedText, explicit.isEmpty == false {
-                return explicit
-            }
-            if let sourceDraft = state.draftSourceText {
-                return state.visibleDraftTranslatedText(
-                    for: sourceDraft,
-                    promotionID: state.draftPromotionID
-                )
-            }
-            return nil
-        }
-    }
-
-    private var tentativeText: String? {
-        guard let draftText, draftText.isEmpty == false else { return nil }
-        guard committedText.isEmpty == false else { return draftText }
-        guard draftText != committedText else { return nil }
-
-        if draftText.hasPrefix(committedText) {
-            let tail = String(draftText.dropFirst(committedText.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return tail.isEmpty ? nil : tail
-        }
-        return draftText
-    }
-
 
     private var visibleText: String {
-        [committedText, tentativeText]
-            .compactMap { $0 }
-            .filter { $0.isEmpty == false }
-            .joined(separator: " ")
+        guard let liveCaption else { return "" }
+
+        switch role {
+        case .source:
+            return liveCaption.sourceText
+        case .translation:
+            return liveCaption.translatedText
+        }
     }
 
-    private var transitionIdentity: String {
-        let epoch = model.overlayState?.captionEpoch ?? 0
-        return "\(role.rawValue)-\(epoch)-\(committedText)-\(tentativeText ?? "")"
+    private var captionColor: Color {
+        liveCaption?.phase == .tentative
+            ? Color(uiColor: .secondaryLabel)
+            : accent
+    }
+
+    private var captionAccessibilityIdentifier: String {
+        role == .source ? "live-caption-source" : "live-caption-translation"
+    }
+
+    private var captionPhaseAccessibilityValue: String {
+        liveCaption?.phase == .tentative ? "tentative" : "committed"
     }
 
     private var placeholderKey: AppTextKey {
@@ -195,52 +166,26 @@ private struct CaptionPane: View {
     }
 
     private var captionText: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if committedText.isEmpty == false {
-                Text(committedText)
-                    .font(
-                        .system(
-                            size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
-                            weight: .semibold,
-                            design: .rounded
-                        )
-                    )
-                    .foregroundStyle(accent)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(nil)
-                    .minimumScaleFactor(0.5)
-                    .allowsTightening(true)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let tentativeText {
-                HStack(alignment: .lastTextBaseline, spacing: 7) {
-                    Text(tentativeText)
-                        .font(
-                            .system(
-                                size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
-                                weight: .medium,
-                                design: .rounded
-                            )
-                        )
-                        .foregroundStyle(IOSTheme.secondaryText)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(nil)
-                        .minimumScaleFactor(0.5)
-                        .allowsTightening(true)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    AnimatedEllipsis(color: accent.opacity(0.64))
-                        .padding(.bottom, 4)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .id(transitionIdentity)
-        .transition(.opacity)
-        .animation(.easeOut(duration: 0.24), value: transitionIdentity)
-        .accessibilityLabel(visibleText)
+        // Promotion updates this same text node; phase only changes its
+        // contents and neutral-gray versus committed color.
+        Text(visibleText)
+            .font(
+                .system(
+                    size: baseCaptionSize * CGFloat(model.overlayStyle.overlayScaleFactor),
+                    weight: .semibold,
+                    design: .rounded
+                )
+            )
+            .foregroundStyle(captionColor)
+            .multilineTextAlignment(.leading)
+            .lineLimit(nil)
+            .minimumScaleFactor(0.5)
+            .allowsTightening(true)
+            .fixedSize(horizontal: false, vertical: true)
+            .id(liveCaption?.id)
+            .accessibilityLabel(visibleText)
+            .accessibilityIdentifier(captionAccessibilityIdentifier)
+            .accessibilityValue(captionPhaseAccessibilityValue)
     }
 }
 

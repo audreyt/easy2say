@@ -18,10 +18,9 @@ struct OverlayPreviewState: Equatable {
     var sourceText: String
     var sourceName: String
 
-    // MARK: Draft layer — partial ASR, shown below committed
+    // MARK: Draft layer — partial ASR for the current caption slot
     var draftSourceText: String? = nil
-    var draftStablePrefixLength: Int = 0
-    /// Incremental translation of the current draft text (updates as stable prefix grows).
+    /// Incremental translation of the current draft text.
     var draftTranslatedText: String? = nil
     var draftTranslationSourceText: String? = nil
     var draftTranslationPromotionID: UUID? = nil
@@ -30,13 +29,9 @@ struct OverlayPreviewState: Equatable {
     // MARK: History layer — committed captions the user can scroll back through
     var history: [OverlayHistoryEntry] = []
 
-    // MARK: Caption epoch — increments on each new committed sentence (drives slide-in transition)
+    // MARK: Caption identity
     var captionEpoch: Int = 0
     var committedPromotionID: UUID? = nil
-
-    /// When true, the committed layer should appear instantly (no fade-in) because
-    /// a draft translation was already visible and is being directly replaced.
-    var skipCommittedFadeIn: Bool = false
 
     // MARK: Derived helpers
 
@@ -98,5 +93,82 @@ struct OverlayPreviewState: Equatable {
         }
 
         return draftTranslationSourceText == sourceText ? draftTranslatedText : nil
+    }
+}
+
+struct OverlayLiveCaptionPresentation: Equatable {
+    enum Phase: Equatable {
+        case tentative
+        case committed
+    }
+
+    enum Identity: Hashable {
+        case promotion(UUID)
+        case captionEpoch(Int)
+    }
+
+    struct Caption: Identifiable, Equatable {
+        let id: Identity
+        let phase: Phase
+        let translatedText: String
+        let sourceText: String
+    }
+
+    let precedingCommittedCaption: Caption?
+    let currentCaption: Caption?
+}
+
+extension OverlayPreviewState {
+    var liveCaptionPresentation: OverlayLiveCaptionPresentation {
+        let committedCaption = committedLiveCaption
+
+        guard hasActiveDraftLayer else {
+            return OverlayLiveCaptionPresentation(
+                precedingCommittedCaption: nil,
+                currentCaption: committedCaption
+            )
+        }
+
+        let sourceText = draftSourceText ?? ""
+        let translatedText: String
+        if sourceText.isEmpty {
+            translatedText = draftTranslatedText ?? ""
+        } else {
+            translatedText = visibleDraftTranslatedText(
+                for: sourceText,
+                promotionID: draftPromotionID
+            ) ?? ""
+        }
+
+        let identity = draftPromotionID
+            .map(OverlayLiveCaptionPresentation.Identity.promotion)
+            ?? .captionEpoch(captionEpoch &+ 1)
+
+        return OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: committedCaption,
+            currentCaption: OverlayLiveCaptionPresentation.Caption(
+                id: identity,
+                phase: .tentative,
+                translatedText: translatedText,
+                sourceText: sourceText
+            )
+        )
+    }
+
+    private var committedLiveCaption: OverlayLiveCaptionPresentation.Caption? {
+        guard translatedText.isEmpty == false || sourceText.isEmpty == false else {
+            return nil
+        }
+
+        let identity = committedPromotionID
+            .map(OverlayLiveCaptionPresentation.Identity.promotion)
+            ?? .captionEpoch(captionEpoch)
+
+        return OverlayLiveCaptionPresentation.Caption(
+            id: identity,
+            phase: .committed,
+            translatedText: translatedText,
+            sourceText: sourceText
+        )
     }
 }
