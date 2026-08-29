@@ -15,17 +15,20 @@ import WhisperKit
 struct RecognizedSentence: Equatable, Sendable {
     let text: String
     let promotionSegmentID: UUID?
+    let replacesPromotionSegmentID: UUID?
     let heardLanguageID: String
     let dualLaneEvidence: DualLaneEvidence?
 
     init(
         text: String,
         promotionSegmentID: UUID? = nil,
+        replacesPromotionSegmentID: UUID? = nil,
         heardLanguageID: String = "",
         dualLaneEvidence: DualLaneEvidence? = nil
     ) {
         self.text = text
         self.promotionSegmentID = promotionSegmentID
+        self.replacesPromotionSegmentID = replacesPromotionSegmentID
         self.heardLanguageID = heardLanguageID
         self.dualLaneEvidence = dualLaneEvidence
     }
@@ -101,6 +104,36 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let comparableText: String
         let time: Date
         let allowsPrefixContinuation: Bool
+        let promotionSegmentID: UUID?
+        let rootPromotionSegmentID: UUID?
+        var acceptedPromotionIDs: Set<UUID>
+
+        init(
+            rawText: String,
+            comparableText: String,
+            time: Date,
+            allowsPrefixContinuation: Bool,
+            promotionSegmentID: UUID?,
+            rootPromotionSegmentID: UUID? = nil,
+            acceptedPromotionIDs: Set<UUID> = []
+        ) {
+            self.rawText = rawText
+            self.comparableText = comparableText
+            self.time = time
+            self.allowsPrefixContinuation = allowsPrefixContinuation
+            self.promotionSegmentID = promotionSegmentID
+            self.rootPromotionSegmentID = rootPromotionSegmentID ?? promotionSegmentID
+            var ids = acceptedPromotionIDs
+            if let promotionSegmentID {
+                ids.insert(promotionSegmentID)
+            }
+            self.acceptedPromotionIDs = ids
+        }
+    }
+    struct PreparedSentenceEmission: Equatable, Sendable {
+        let text: String
+        let promotionSegmentID: UUID?
+        let replacesPromotionSegmentID: UUID?
     }
 
     private struct AudioLevelStats {
@@ -1325,8 +1358,15 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             do {
                 let text = try await transcribe(audio)
                 guard Task.isCancelled == false else { return }
-                if let prepared = await self.prepareCommittedSentenceForEmission(text) {
-                    await self.emitRecognizedText(prepared)
+                if let prepared = await self.prepareCommittedSentenceForEmission(text, pendingPromotionID: nil) {
+                    await self.emitRecognizedSentence(
+                        RecognizedSentence(
+                            text: prepared.text,
+                            promotionSegmentID: prepared.promotionSegmentID,
+                            replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
+                            heardLanguageID: currentHeardLanguageID
+                        )
+                    )
                 }
             } catch is CancellationError {
                 return
@@ -1604,15 +1644,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     @MainActor
     private func emitRecognizedText(_ text: String, promotionSegmentID: UUID? = nil) {
         let sentenceTexts = splitCommittedEmissionUnits(in: text)
+        var pendingPromotionID = promotionSegmentID
 
-        for (index, sentenceText) in sentenceTexts.enumerated() {
+        for sentenceText in sentenceTexts {
+            guard let prepared = prepareCommittedSentenceForEmission(sentenceText, pendingPromotionID: pendingPromotionID) else {
+                continue
+            }
             emitRecognizedSentence(
                 RecognizedSentence(
-                    text: sentenceText,
-                    promotionSegmentID: index == 0 ? promotionSegmentID : nil,
+                    text: prepared.text,
+                    promotionSegmentID: prepared.promotionSegmentID,
+                    replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
                     heardLanguageID: currentHeardLanguageID
                 )
             )
+            pendingPromotionID = nil
         }
     }
 
@@ -1632,22 +1678,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
             for sentenceText in sentenceTexts {
                 let corrected = speechCorrections.apply(sentenceText, languageID: emissionLang)
-                guard let preparedSentence = prepareCommittedSentenceForEmission(corrected) else {
+                guard let prepared = prepareCommittedSentenceForEmission(corrected, pendingPromotionID: pendingPromotionID) else {
                     continue
                 }
                 emitRecognizedSentence(
                     RecognizedSentence(
-                        text: preparedSentence,
-                        promotionSegmentID: pendingPromotionID,
+                        text: prepared.text,
+                        promotionSegmentID: prepared.promotionSegmentID,
+                        replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
                         heardLanguageID: emissionLang,
                         dualLaneEvidence: emission.dualLaneEvidence
                     )
                 )
-                rememberCommittedSentence(preparedSentence)
                 pendingPromotionID = nil
             }
         }
-
         if clearDraftAfter {
             emitPartialDraft(nil)
         }
@@ -1736,7 +1781,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     @MainActor
-    private func prepareCommittedSentenceForEmission(_ text: String) -> String? {
+    private func prepareCommittedSentenceForEmission(
+        _ text: String,
+        pendingPromotionID: UUID? = nil
+    ) -> PreparedSentenceEmission? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
             return nil
@@ -1747,18 +1795,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return nil
         }
 
-        if recentCommittedSentenceHistory.contains(where: { $0.comparableText == comparable }) {
+        // Replay suppression: if this exact promotion ID was already accepted in recent history, drop duplicate callback.
+        if let pendingPromotionID,
+           recentCommittedSentenceHistory.contains(where: { $0.acceptedPromotionIDs.contains(pendingPromotionID) }) {
             return nil
         }
 
-        if let extendedSentence = trimmedCommittedPrefixContinuation(from: trimmed) {
-            let extendedComparable = comparableCommittedSentenceText(extendedSentence)
-            guard extendedComparable.isEmpty == false,
-                  recentCommittedSentenceHistory.contains(where: { $0.comparableText == extendedComparable }) == false else {
-                return nil
-            }
+        // Legacy nil-ID replay suppression: if no ID provided and exact text was recently committed, drop duplicate.
+        if pendingPromotionID == nil,
+           recentCommittedSentenceHistory.contains(where: { $0.comparableText == comparable }) {
+            return nil
+        }
 
-            return extendedSentence
+        // Prefix continuation / in-place revision check:
+        if let continuation = committedPrefixContinuation(from: trimmed, pendingPromotionID: pendingPromotionID) {
+            return continuation
         }
 
         let bestOverlap = recentCommittedSentenceHistory
@@ -1767,7 +1818,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             .max() ?? 0
 
         let candidateText: String
-        if shouldTrimLeadingOverlap(length: bestOverlap, in: trimmed) {
+        // Only trim partial leading overlap if it does NOT drop the entire text when a distinct promotion ID is provided.
+        if shouldTrimLeadingOverlap(length: bestOverlap, in: trimmed) && (bestOverlap < trimmed.count || pendingPromotionID == nil) {
             candidateText = dropLeadingCharacters(bestOverlap, from: trimmed)
                 .trimmingCharacters(in: Self.leadingOverlapTrimCharacterSet)
         } else {
@@ -1779,16 +1831,31 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         let candidateComparable = comparableCommittedSentenceText(candidateText)
-        guard candidateComparable.isEmpty == false,
-              recentCommittedSentenceHistory.contains(where: { $0.comparableText == candidateComparable }) == false else {
+        guard candidateComparable.isEmpty == false else {
             return nil
         }
 
-        return candidateText
+        if pendingPromotionID == nil,
+           recentCommittedSentenceHistory.contains(where: { $0.comparableText == candidateComparable }) {
+            return nil
+        }
+
+        let emissionPromotionID = pendingPromotionID ?? UUID()
+        rememberCommittedSentence(candidateText, promotionSegmentID: emissionPromotionID, rootPromotionSegmentID: emissionPromotionID)
+
+        return PreparedSentenceEmission(
+            text: candidateText,
+            promotionSegmentID: emissionPromotionID,
+            replacesPromotionSegmentID: nil
+        )
     }
 
     @MainActor
-    private func rememberCommittedSentence(_ text: String) {
+    private func rememberCommittedSentence(
+        _ text: String,
+        promotionSegmentID: UUID?,
+        rootPromotionSegmentID: UUID? = nil
+    ) {
         let comparable = comparableCommittedSentenceText(text)
         guard comparable.isEmpty == false else {
             return
@@ -1800,17 +1867,22 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 comparableText: comparable,
                 time: Date(),
                 allowsPrefixContinuation: SentenceBoundaryHeuristics
-                    .endsWithLikelySentenceTerminator(in: text) == false
+                    .endsWithLikelySentenceTerminator(in: text) == false,
+                promotionSegmentID: promotionSegmentID,
+                rootPromotionSegmentID: rootPromotionSegmentID ?? promotionSegmentID
             )
         )
         pruneRecentCommittedSentenceHistory()
     }
 
     @MainActor
-    private func trimmedCommittedPrefixContinuation(from text: String) -> String? {
+    private func committedPrefixContinuation(
+        from text: String,
+        pendingPromotionID: UUID?
+    ) -> PreparedSentenceEmission? {
         let now = Date()
 
-        for previous in recentCommittedSentenceHistory.suffix(3).reversed() {
+        for (index, previous) in recentCommittedSentenceHistory.enumerated().reversed() {
             guard previous.allowsPrefixContinuation,
                   now.timeIntervalSince(previous.time) <= Self.committedPrefixContinuationWindow,
                   text.count > previous.rawText.count,
@@ -1818,13 +1890,30 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 continue
             }
 
-            let remainder = dropLeadingCharacters(previous.rawText.count, from: text)
-                .trimmingCharacters(in: Self.leadingOverlapTrimCharacterSet)
-            guard remainder.isEmpty == false else {
-                continue
-            }
+            let newPromotionID = pendingPromotionID ?? UUID()
+            let rootID = previous.rootPromotionSegmentID ?? previous.promotionSegmentID ?? newPromotionID
+            var updatedIDs = previous.acceptedPromotionIDs
+            updatedIDs.insert(newPromotionID)
 
-            return remainder
+            recentCommittedSentenceHistory.remove(at: index)
+            recentCommittedSentenceHistory.append(
+                RecentCommittedSentence(
+                    rawText: text,
+                    comparableText: comparableCommittedSentenceText(text),
+                    time: now,
+                    allowsPrefixContinuation: SentenceBoundaryHeuristics
+                        .endsWithLikelySentenceTerminator(in: text) == false,
+                    promotionSegmentID: newPromotionID,
+                    rootPromotionSegmentID: rootID,
+                    acceptedPromotionIDs: updatedIDs
+                )
+            )
+
+            return PreparedSentenceEmission(
+                text: text,
+                promotionSegmentID: newPromotionID,
+                replacesPromotionSegmentID: rootID
+            )
         }
 
         return nil
@@ -3071,6 +3160,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 localized(.failedToStageWithReasonFormat, stage, status.readableDescription)
             )
         }
+    }
+#endif
+#if DEBUG
+    @MainActor
+    func prepareCommittedSentenceForEmissionForTesting(
+        _ text: String,
+        pendingPromotionID: UUID? = nil
+    ) -> PreparedSentenceEmission? {
+        prepareCommittedSentenceForEmission(text, pendingPromotionID: pendingPromotionID)
+    }
+
+    @MainActor
+    func rememberCommittedSentenceForTesting(_ text: String, promotionSegmentID: UUID? = nil) {
+        rememberCommittedSentence(text, promotionSegmentID: promotionSegmentID)
     }
 #endif
 }
