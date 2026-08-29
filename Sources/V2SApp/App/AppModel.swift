@@ -12,6 +12,7 @@ import Translation
 
 private extension Logger {
     static let session = Logger(subsystem: "com.franklioxygen.v2s", category: "session")
+    static let caption = Logger(subsystem: "com.franklioxygen.v2s", category: "caption")
 }
 
 /// A recognition failure that arrived while its own source was still starting, folded
@@ -2516,6 +2517,15 @@ final class AppModel: ObservableObject {
     ) {
         let sourceText = sanitizedDisplayText(sentence.text)
         guard sourceText.isEmpty == false else {
+            logCaptionEnqueue(
+                kind: "drop-empty",
+                captionID: nil,
+                promotionID: sentence.promotionSegmentID,
+                replacesID: sentence.replacesPromotionSegmentID,
+                revision: nil,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
             return
         }
 
@@ -2531,10 +2541,28 @@ final class AppModel: ObservableObject {
             ) {
                 return
             }
+            logCaptionEnqueue(
+                kind: "replace-miss",
+                captionID: captionIDByPromotionID[replacesID],
+                promotionID: sentence.promotionSegmentID,
+                replacesID: replacesID,
+                revision: nil,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
         }
 
         if let promotionID = sentence.promotionSegmentID {
             guard isFinalizedDraftPromotionID(promotionID) == false else {
+                logCaptionEnqueue(
+                    kind: "drop-finalized-draft",
+                    captionID: captionIDByPromotionID[promotionID],
+                    promotionID: promotionID,
+                    replacesID: sentence.replacesPromotionSegmentID,
+                    revision: nil,
+                    sourceID: source.id,
+                    sourceKind: source.category.rawValue
+                )
                 return
             }
 
@@ -2543,6 +2571,15 @@ final class AppModel: ObservableObject {
             cancelCommittedCaptionArchive()
 
             guard shouldEnqueueRecognizedSentence(sourceText, promotionID: promotionID) else {
+                logCaptionEnqueue(
+                    kind: "drop-enqueue-guard",
+                    captionID: captionIDByPromotionID[promotionID],
+                    promotionID: promotionID,
+                    replacesID: sentence.replacesPromotionSegmentID,
+                    revision: nil,
+                    sourceID: source.id,
+                    sourceKind: source.category.rawValue
+                )
                 return
             }
 
@@ -2563,10 +2600,28 @@ final class AppModel: ObservableObject {
             rememberRecognizedSentence(sourceText, promotionID: promotionID)
             pendingCaptions.append(caption)
             translateCaption(caption)
+            logCaptionEnqueue(
+                kind: "append",
+                captionID: caption.id,
+                promotionID: promotionID,
+                replacesID: sentence.replacesPromotionSegmentID,
+                revision: caption.revision,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
         } else {
             cancelCommittedCaptionArchive()
 
             guard shouldEnqueueRecognizedSentence(sourceText, promotionID: nil) else {
+                logCaptionEnqueue(
+                    kind: "drop-enqueue-guard",
+                    captionID: nil,
+                    promotionID: nil,
+                    replacesID: sentence.replacesPromotionSegmentID,
+                    revision: nil,
+                    sourceID: source.id,
+                    sourceKind: source.category.rawValue
+                )
                 return
             }
 
@@ -2590,6 +2645,15 @@ final class AppModel: ObservableObject {
             rememberRecognizedSentence(sourceText, promotionID: promotionID)
             pendingCaptions.append(caption)
             translateCaption(caption)
+            logCaptionEnqueue(
+                kind: "append",
+                captionID: caption.id,
+                promotionID: promotionID,
+                replacesID: sentence.replacesPromotionSegmentID,
+                revision: caption.revision,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
         }
 
         // Keep the currently displayed caption plus up to two fresh arrivals.
@@ -2600,6 +2664,15 @@ final class AppModel: ObservableObject {
             captionTranslationTasks[dropped.id]?.cancel()
             captionTranslationTasks.removeValue(forKey: dropped.id)
             updateReadyCaptionTranslation(nil, for: dropped.id)
+            logCaptionEnqueue(
+                kind: "drop-pending-overflow",
+                captionID: dropped.id,
+                promotionID: dropped.promotionID,
+                replacesID: nil,
+                revision: dropped.revision,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
         }
 
         processCaptionQueueIfNeeded()
@@ -2682,6 +2755,15 @@ final class AppModel: ObservableObject {
             cancelCommittedCaptionArchive()
             translateCaption(updatedCaption)
             rememberRecognizedSentence(sourceText)
+            logCaptionEnqueue(
+                kind: "replace-displayed",
+                captionID: captionID,
+                promotionID: newPromotionID,
+                replacesID: replacesID,
+                revision: newRevision,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
             return true
         }
 
@@ -2714,6 +2796,15 @@ final class AppModel: ObservableObject {
 
             translateCaption(updated)
             rememberRecognizedSentence(sourceText)
+            logCaptionEnqueue(
+                kind: "replace-pending",
+                captionID: old.id,
+                promotionID: newPromotionID,
+                replacesID: replacesID,
+                revision: newRevision,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
             return true
         }
 
@@ -2744,10 +2835,36 @@ final class AppModel: ObservableObject {
                 )
             }
             rememberRecognizedSentence(sourceText)
+            logCaptionEnqueue(
+                kind: "replace-history",
+                captionID: captionID,
+                promotionID: newPromotionID,
+                replacesID: replacesID,
+                revision: nil,
+                sourceID: source.id,
+                sourceKind: source.category.rawValue
+            )
             return true
         }
 
         return false
+    }
+
+    /// Privacy-safe caption identity log. Never interpolates transcript text.
+    private func logCaptionEnqueue(
+        kind: String,
+        captionID: UUID?,
+        promotionID: UUID?,
+        replacesID: UUID?,
+        revision: UInt64?,
+        sourceID: String,
+        sourceKind: String
+    ) {
+        let captionText = captionID?.uuidString ?? "-"
+        let promotionText = promotionID?.uuidString ?? "-"
+        let replacesText = replacesID?.uuidString ?? "-"
+        let revisionText = revision.map(String.init) ?? "-"
+        Logger.caption.info("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
     }
 
     private func refreshCaptionTranslations() {
