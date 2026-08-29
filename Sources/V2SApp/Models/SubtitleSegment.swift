@@ -23,6 +23,8 @@ struct DraftSegment: Equatable, Sendable {
     var vadProbability: Float
     var words: [WordToken]
     var heardLanguageID: String = ""
+    /// Analyzer-range start in ms. Nil when the draft has no validated audio identity.
+    var audioHypothesisStartMs: Int? = nil
 
     var stablePrefixText: String {
         String(sourceText.prefix(stablePrefixLength))

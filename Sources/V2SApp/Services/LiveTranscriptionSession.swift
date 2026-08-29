@@ -18,19 +18,22 @@ struct RecognizedSentence: Equatable, Sendable {
     let replacesPromotionSegmentID: UUID?
     let heardLanguageID: String
     let dualLaneEvidence: DualLaneEvidence?
+    let audioStartMs: Int?
 
     init(
         text: String,
         promotionSegmentID: UUID? = nil,
         replacesPromotionSegmentID: UUID? = nil,
         heardLanguageID: String = "",
-        dualLaneEvidence: DualLaneEvidence? = nil
+        dualLaneEvidence: DualLaneEvidence? = nil,
+        audioStartMs: Int? = nil
     ) {
         self.text = text
         self.promotionSegmentID = promotionSegmentID
         self.replacesPromotionSegmentID = replacesPromotionSegmentID
         self.heardLanguageID = heardLanguageID
         self.dualLaneEvidence = dualLaneEvidence
+        self.audioStartMs = audioStartMs
     }
 }
 
@@ -79,6 +82,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let isProvisionalSilence: Bool
         let audioRange: CMTimeRange?
         let audioEndTime: TimeInterval?
+        let audioStartMs: Int?
 
         init(
             text: String,
@@ -87,7 +91,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             dualLaneEvidence: DualLaneEvidence? = nil,
             isProvisionalSilence: Bool = false,
             audioRange: CMTimeRange? = nil,
-            audioEndTime: TimeInterval? = nil
+            audioEndTime: TimeInterval? = nil,
+            audioStartMs: Int? = nil
         ) {
             self.text = text
             self.promotionSegmentID = promotionSegmentID
@@ -96,6 +101,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             self.isProvisionalSilence = isProvisionalSilence
             self.audioRange = audioRange
             self.audioEndTime = audioEndTime
+            self.audioStartMs = audioStartMs
         }
     }
 
@@ -267,6 +273,45 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var analyzerInputContinuationState: Any?
     private var analyzerInputFormat: AVAudioFormat?
     private var latestModernText = ""
+    private var lastModernAudioStartMs: Int?
+    private let presentationWorkLock = NSLock()
+    private var presentationWorkTail: Task<Void, Never>?
+
+    @discardableResult
+    private func appendPresentationWork(_ work: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+        presentationWorkLock.lock()
+        let predecessor = presentationWorkTail
+        let task = Task { @MainActor in
+            await predecessor?.value
+            work()
+        }
+        presentationWorkTail = task
+        presentationWorkLock.unlock()
+        return task
+    }
+
+    private func enqueuePresentationWork(_ work: @escaping @MainActor () -> Void) {
+        _ = appendPresentationWork(work)
+    }
+
+    private func enqueueCommittedSequence(
+        _ emissions: [CommittedEmission],
+        clearDraftAfter: Bool
+    ) {
+        enqueuePresentationWork {
+            self.emitCommittedSequence(emissions, clearDraftAfter: clearDraftAfter)
+        }
+    }
+
+    private func enqueuePartialDraft(_ draft: DraftSegment?) {
+        enqueuePresentationWork {
+            self.emitPartialDraft(draft)
+        }
+    }
+
+    func awaitPendingEmissionsForTesting() async {
+        await appendPresentationWork({}).value
+    }
     private var modernCommittedPrefixText = ""
 #if canImport(WhisperKit)
     private var taigiEngine: TaigiASREngine?
@@ -1008,6 +1053,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func resetModernTranscriptionState() {
         latestModernText = ""
         modernCommittedPrefixText = ""
+        lastModernAudioStartMs = nil
     }
 
     private func resetLegacyTranscriptionState() {
@@ -1692,8 +1738,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let emissionLang = emission.heardLanguageID.isEmpty
                 ? currentHeardLanguageID
                 : emission.heardLanguageID
+            let parentStartMs = emission.audioStartMs
 
-            for sentenceText in sentenceTexts {
+            for (unitIndex, sentenceText) in sentenceTexts.enumerated() {
                 let corrected = speechCorrections.apply(sentenceText, languageID: emissionLang)
                 guard let prepared = prepareCommittedSentenceForEmission(
                     corrected,
@@ -1704,13 +1751,15 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 ) else {
                     continue
                 }
+                let isTrailingUnit = unitIndex == sentenceTexts.count - 1
                 emitRecognizedSentence(
                     RecognizedSentence(
                         text: prepared.text,
                         promotionSegmentID: prepared.promotionSegmentID,
                         replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
                         heardLanguageID: emissionLang,
-                        dualLaneEvidence: emission.dualLaneEvidence
+                        dualLaneEvidence: emission.dualLaneEvidence,
+                        audioStartMs: isTrailingUnit ? parentStartMs : nil
                     )
                 )
                 pendingPromotionID = nil
@@ -2379,14 +2428,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
 
         if committedEmissions.isEmpty == false {
-            Task { [committedEmissions, shouldClearDraftAfterCommit] in
-                await emitCommittedSequence(
-                    committedEmissions,
-                    clearDraftAfter: shouldClearDraftAfterCommit
-                )
-            }
+            enqueueCommittedSequence(
+                committedEmissions,
+                clearDraftAfter: shouldClearDraftAfterCommit
+            )
         } else if shouldClearDraftAfterCommit {
-            Task { await emitPartialDraft(nil) }
+            enqueuePartialDraft(nil)
         }
 
         // SFSpeechRecognizer marks isFinal = true when its internal session ends
@@ -2431,7 +2478,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         resetLegacyTranscriptionState()
         resetModernTranscriptionState()
         resetDraftState()
-        Task { await emitPartialDraft(nil) }
+        enqueuePartialDraft(nil)
     }
 
     private func resetRecognitionFailureState() {
@@ -2567,23 +2614,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let committedDraftID = currentDraftId
             resetDraftState()
             guard text.isEmpty == false else {
-                Task { await emitPartialDraft(nil) }
+                enqueuePartialDraft(nil)
                 return
             }
-            Task {
-                await emitCommittedSequence(
-                    [
-                        CommittedEmission(
-                            text: text,
-                            promotionSegmentID: committedDraftID,
-                            heardLanguageID: resolved.languageID,
-                            dualLaneEvidence: step.evidence,
-                            isProvisionalSilence: false
-                        )
-                    ],
-                    clearDraftAfter: true
-                )
-            }
+            enqueueCommittedSequence(
+                [
+                    CommittedEmission(
+                        text: text,
+                        promotionSegmentID: committedDraftID,
+                        heardLanguageID: resolved.languageID,
+                        dualLaneEvidence: step.evidence,
+                        isProvisionalSilence: false
+                    )
+                ],
+                clearDraftAfter: true
+            )
             return
         }
 
@@ -2632,7 +2677,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             stablePrefixLength: computeStablePrefixLength(text: text, now: now),
             mutableTailText: String(text.dropFirst(min(computeStablePrefixLength(text: text, now: now), text.count))),
             avgConfidence: 0.82,
-            startMs: 0,
+            startMs: lastModernAudioStartMs ?? 0,
             lastUpdateMs: Int(now.timeIntervalSinceReferenceDate * 1000),
             silenceMs: draftStability.silenceMs,
             stabilityScore: draftStability.stabilityScore,
@@ -2646,9 +2691,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             ),
             vadProbability: lastVADProbability,
             words: [],
-            heardLanguageID: currentHeardLanguageID
+            heardLanguageID: currentHeardLanguageID,
+            audioHypothesisStartMs: lastModernAudioStartMs
         )
-        Task { await emitPartialDraft(draft) }
+        enqueuePartialDraft(draft)
         scheduleSilenceCommit()
     }
 
@@ -2664,9 +2710,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func processModernRecognitionText(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
         let now = Date()
         lastRecognitionResultTime = now
+        lastModernAudioStartMs = cmTimeMilliseconds(audioRange.start)
         let pendingRawText = pendingModernText(from: fullText)
         currentHeardLanguageID = configuredSourceLanguageID
         let text = pendingRawText.trimmingCharacters(in: .whitespacesAndNewlines)
+
 
         if isFinal {
             let identity = "\(cmTimeMilliseconds(audioRange.start)):\(cmTimeMilliseconds(audioRange.duration)):\(fullText)"
@@ -2676,28 +2724,28 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             cancelSilenceTimer()
             cancelVADSilenceTimer()
             let fullUtteranceText = fullText
+            let hypothesisStartMs = lastModernAudioStartMs
             resetModernTranscriptionState()
             let committedDraftID = currentDraftId
             resetDraftState()
 
             let textToEmit = fullUtteranceText.trimmingCharacters(in: .whitespacesAndNewlines)
             if textToEmit.isEmpty == false {
-                Task {
-                    await emitCommittedSequence(
-                        [
-                            CommittedEmission(
-                                text: textToEmit,
-                                promotionSegmentID: committedDraftID,
-                                heardLanguageID: currentHeardLanguageID,
-                                isProvisionalSilence: false,
-                                audioRange: audioRange
-                            )
-                        ],
-                        clearDraftAfter: true
-                    )
-                }
+                enqueueCommittedSequence(
+                    [
+                        CommittedEmission(
+                            text: textToEmit,
+                            promotionSegmentID: committedDraftID,
+                            heardLanguageID: currentHeardLanguageID,
+                            isProvisionalSilence: false,
+                            audioRange: audioRange,
+                            audioStartMs: hypothesisStartMs
+                        )
+                    ],
+                    clearDraftAfter: true
+                )
             } else {
-                Task { await emitPartialDraft(nil) }
+                enqueuePartialDraft(nil)
             }
             return
         }
@@ -2706,7 +2754,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             latestModernText = ""
             cancelSilenceTimer()
             cancelVADSilenceTimer()
-            Task { await emitPartialDraft(nil) }
+            enqueuePartialDraft(nil)
             return
         }
 
@@ -2719,7 +2767,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let committedText = split.committedRawText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard committedText.isEmpty == false else {
                 latestModernText = ""
-                Task { await emitPartialDraft(nil) }
+                enqueuePartialDraft(nil)
                 return
             }
             cancelSilenceTimer()
@@ -2727,19 +2775,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             latestModernText = split.remainingRawText
             let committedDraftID = currentDraftId
             resetDraftState()
-            Task {
-                await emitCommittedSequence(
-                    [
-                        CommittedEmission(
-                            text: committedText,
-                            promotionSegmentID: committedDraftID,
-                            isProvisionalSilence: true,
-                            audioRange: audioRange
-                        )
-                    ],
-                    clearDraftAfter: true
-                )
-            }
+            enqueueCommittedSequence(
+                [
+                    CommittedEmission(
+                        text: committedText,
+                        promotionSegmentID: committedDraftID,
+                        isProvisionalSilence: true,
+                        audioRange: audioRange,
+                        audioStartMs: lastModernAudioStartMs
+                    )
+                ],
+                clearDraftAfter: true
+            )
             return
         }
 
@@ -2782,14 +2829,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return false
         }
 
-        let stableForMs = Int(now.timeIntervalSince(lastDraftTextChangeTime) * 1000)
-        let minimumStableMs = max(vadSilenceCommitDeadlineMs, 260)
-        guard stableForMs >= minimumStableMs else {
+        guard SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) else {
             return false
         }
 
-        let maxDraftLength = text.containsCJKCharacters ? 14 : 28
-        return text.count <= maxDraftLength
+        let stableForMs = Int(now.timeIntervalSince(lastDraftTextChangeTime) * 1000)
+        let minimumStableMs = max(vadSilenceCommitDeadlineMs, 260)
+        return stableForMs >= minimumStableMs
     }
 
     private func shouldHoldModernVADCommit(for text: String) -> Bool {
@@ -2808,7 +2854,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let normalized = text.lowercased()
             return Self.modernVADDeferredEnglishCommitSuffixes.contains(where: { normalized.hasSuffix($0) })
         case .other:
-            return false
+            // Mandarin and mixed speech often omit punctuation until isFinal.
+            // Hold the draft rather than freezing a short clause as its own turn.
+            return true
         }
     }
 
@@ -2873,10 +2921,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             boundaryScore: boundaryScore,
             chunkScore: chunkScore,
             vadProbability: lastVADProbability,
-            words: []
+            words: [],
+            audioHypothesisStartMs: timeRange.map { cmTimeMilliseconds($0.start) }
         )
 
-        Task { await emitPartialDraft(draft) }
+        enqueuePartialDraft(draft)
     }
 
     @available(iOS 26.0, macOS 26.0, *)
@@ -3062,20 +3111,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             modernCommittedPrefixText += committedRawText
             latestModernText = remainingRawText
             let committedDraftID = currentDraftId
+            let hypothesisStartMs = lastModernAudioStartMs
             resetDraftState()
-            Task {
-                await emitCommittedSequence(
-                    [
-                        CommittedEmission(
-                            text: text,
-                            promotionSegmentID: committedDraftID,
-                            heardLanguageID: currentHeardLanguageID,
-                            isProvisionalSilence: true
-                        )
-                    ],
-                    clearDraftAfter: remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
-            }
+            enqueueCommittedSequence(
+                [
+                    CommittedEmission(
+                        text: text,
+                        promotionSegmentID: committedDraftID,
+                        heardLanguageID: currentHeardLanguageID,
+                        isProvisionalSilence: true,
+                        audioStartMs: hypothesisStartMs
+                    )
+                ],
+                clearDraftAfter: remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
             return
         }
 
@@ -3101,22 +3150,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         committedSegmentCount = segments.count
         resetDraftState()
         if sentenceText.isEmpty == false {
-            Task {
-                await emitCommittedSequence(
-                    [
-                        CommittedEmission(
-                            text: sentenceText,
-                            promotionSegmentID: committedDraftID,
-                            heardLanguageID: currentHeardLanguageID,
-                            isProvisionalSilence: true,
-                            audioEndTime: committedAudioBoundaryTime
-                        )
-                    ],
-                    clearDraftAfter: true
-                )
-            }
+            enqueueCommittedSequence(
+                [
+                    CommittedEmission(
+                        text: sentenceText,
+                        promotionSegmentID: committedDraftID,
+                        heardLanguageID: currentHeardLanguageID,
+                        isProvisionalSilence: true,
+                        audioEndTime: committedAudioBoundaryTime
+                    )
+                ],
+                clearDraftAfter: true
+            )
         } else {
-            Task { await emitPartialDraft(nil) }
+            enqueuePartialDraft(nil)
         }
     }
     private func requiredCommitDelayMs(
@@ -3200,7 +3247,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !text.isEmpty else {
-            Task { await emitPartialDraft(nil) }
+            enqueuePartialDraft(nil)
             return
         }
 
@@ -3255,7 +3302,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             words: words
         )
 
-        Task { await emitPartialDraft(draft) }
+        enqueuePartialDraft(draft)
     }
 
     /// Returns the character count of the stable (frozen) prefix.
@@ -3351,11 +3398,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         transcriptHandler = handler
     }
 
-    func processModernRecognitionTextForTesting(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
+    func installPartialHandlerForTesting(_ handler: ((DraftSegment?) -> Void)?) {
+        partialHandler = handler
+    }
+
+
+    func processModernRecognitionTextForTesting(
+        _ fullText: String,
+        isFinal: Bool,
+        audioRange: CMTimeRange,
+        sourceLanguageID: String = "en"
+    ) {
         recognitionBackend = .speechAnalyzer
         if configuredSourceLanguageID.isEmpty {
-            configuredSourceLanguageID = "en"
-            currentHeardLanguageID = "en"
+            configuredSourceLanguageID = sourceLanguageID
+            currentHeardLanguageID = sourceLanguageID
         }
         processModernRecognitionText(fullText, isFinal: isFinal, audioRange: audioRange)
     }
@@ -3363,6 +3420,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     func forceCommitOnSilenceForTesting() {
         recognitionBackend = .speechAnalyzer
         forceCommitOnSilence(trigger: .asrInactivity)
+    }
+
+    func forceVADCommitOnSilenceForTesting() {
+        recognitionBackend = .speechAnalyzer
+        forceCommitOnSilence(trigger: .vadOffset)
     }
 
     func backdateLastDraftTextChangeForTesting(secondsAgo: TimeInterval) {

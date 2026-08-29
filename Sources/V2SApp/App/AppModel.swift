@@ -2188,6 +2188,7 @@ final class AppModel: ObservableObject {
             )
         }
         overlayState?.draftPromotionID = draftPromotionID
+        overlayState?.draftAudioStartMs = draft?.audioHypothesisStartMs
         overlayState?.sourceName = source.name
         dismissListeningPlaceholderIfNeeded()
 
@@ -2264,6 +2265,7 @@ final class AppModel: ObservableObject {
         draftClearTask = nil
         overlayState?.draftSourceText = nil
         overlayState?.draftPromotionID = nil
+        overlayState?.draftAudioStartMs = nil
         overlayState?.clearDraftTranslation()
         activeDraftSourceLanguageID = nil
         activeDraftTargetLanguageID = nil
@@ -2402,7 +2404,9 @@ final class AppModel: ObservableObject {
         sourceText: String,
         promotionID: UUID? = nil,
         bumpEpoch: Bool = false,
-        lateTranslation: Bool = false
+        lateTranslation: Bool = false,
+        audioStartMs: Int? = nil,
+        assignCommittedAudioStart: Bool = false
     ) {
         if overlayState == nil {
             overlayState = OverlayPreviewState(
@@ -2420,6 +2424,9 @@ final class AppModel: ObservableObject {
         }
         if let promotionID {
             overlayState?.committedPromotionID = promotionID
+        }
+        if assignCommittedAudioStart {
+            overlayState?.committedAudioStartMs = audioStartMs
         }
         displayedCaptionLastVisualUpdateAt = Date()
         displayedCaptionLastVisualUpdateWasLateTranslation = lateTranslation
@@ -2590,7 +2597,8 @@ final class AppModel: ObservableObject {
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
                 usesInverseGlossary: usesInverseGlossary,
-                promotedDraftTranslation: promotedDraftTranslation
+                promotedDraftTranslation: promotedDraftTranslation,
+                audioStartMs: sentence.audioStartMs
             )
             captionIDByPromotionID[promotionID] = caption.id
             if usesInverseGlossary {
@@ -3082,7 +3090,9 @@ final class AppModel: ObservableObject {
                 translatedText: panes.translatedText,
                 sourceText: panes.sourceText,
                 promotionID: caption.promotionID,
-                bumpEpoch: true
+                bumpEpoch: true,
+                audioStartMs: caption.audioStartMs,
+                assignCommittedAudioStart: true
             )
             upsertTranscriptEntry(
                 id: caption.id,
@@ -4230,6 +4240,7 @@ private struct QueuedCaption: Identifiable, Equatable {
     let usesInverseGlossary: Bool
     let promotedDraftTranslation: String?
     let revision: UInt64
+    let audioStartMs: Int?
 
     init(
         id: UUID,
@@ -4240,7 +4251,8 @@ private struct QueuedCaption: Identifiable, Equatable {
         targetLanguageID: String,
         usesInverseGlossary: Bool,
         promotedDraftTranslation: String?,
-        revision: UInt64 = 0
+        revision: UInt64 = 0,
+        audioStartMs: Int? = nil
     ) {
         self.id = id
         self.promotionID = promotionID
@@ -4251,6 +4263,7 @@ private struct QueuedCaption: Identifiable, Equatable {
         self.usesInverseGlossary = usesInverseGlossary
         self.promotedDraftTranslation = promotedDraftTranslation
         self.revision = revision
+        self.audioStartMs = audioStartMs
     }
 }
 

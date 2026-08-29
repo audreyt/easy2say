@@ -1784,6 +1784,90 @@ final class LiveTranscriptionSessionTests: XCTestCase {
     }
 
     @MainActor
+    func testVADSilenceDoesNotCommitIncompleteClause() async {
+        let session = LiveTranscriptionSession()
+        var collected: [RecognizedSentence] = []
+        session.installTranscriptHandlerForTesting { collected.append($0) }
+
+        let range = CMTimeRange(
+            start: CMTime(seconds: 0.0, preferredTimescale: 1000),
+            duration: CMTime(seconds: 3.0, preferredTimescale: 1000)
+        )
+
+        session.processModernRecognitionTextForTesting(
+            "Welcome to our first",
+            isFinal: false,
+            audioRange: range
+        )
+        await flushModernEmissions()
+        session.backdateLastDraftTextChangeForTesting(secondsAgo: 1)
+        session.forceVADCommitOnSilenceForTesting()
+        await flushModernEmissions()
+
+        XCTAssertTrue(collected.isEmpty)
+    }
+
+    @MainActor
+    func testIncompleteDraftThenFinalEmitsEachTokenOnce() async {
+        let session = LiveTranscriptionSession()
+        var collected: [RecognizedSentence] = []
+        session.installTranscriptHandlerForTesting { collected.append($0) }
+
+        let range = CMTimeRange(
+            start: CMTime(seconds: 1.0, preferredTimescale: 1000),
+            duration: CMTime(seconds: 4.0, preferredTimescale: 1000)
+        )
+        let fullSentence = "Welcome to our first session."
+
+        session.processModernRecognitionTextForTesting(
+            "Welcome to our first",
+            isFinal: false,
+            audioRange: range
+        )
+        await flushModernEmissions()
+        session.backdateLastDraftTextChangeForTesting(secondsAgo: 1)
+        session.forceVADCommitOnSilenceForTesting()
+        await flushModernEmissions()
+        session.processModernRecognitionTextForTesting(fullSentence, isFinal: true, audioRange: range)
+        await flushModernEmissions()
+
+        XCTAssertEqual(collected.map(\.text), [fullSentence])
+
+        let (model, settingsURL) = makeAppModel(prefix: "v2s-incomplete-then-final-once")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        await enqueueCollected(collected, into: model)
+
+        XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, fullSentence)
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+        XCTAssertNotEqual(model.displayedCaptionForTesting?.sourceText, "session.")
+    }
+
+    @MainActor
+    func testVADSilenceCommitsTerminatedSentence() async {
+        let session = LiveTranscriptionSession()
+        var collected: [RecognizedSentence] = []
+        session.installTranscriptHandlerForTesting { collected.append($0) }
+
+        let range = CMTimeRange(
+            start: CMTime(seconds: 0.0, preferredTimescale: 1000),
+            duration: CMTime(seconds: 2.0, preferredTimescale: 1000)
+        )
+
+        session.processModernRecognitionTextForTesting(
+            "Hello everyone.",
+            isFinal: false,
+            audioRange: range
+        )
+        await flushModernEmissions()
+        session.backdateLastDraftTextChangeForTesting(secondsAgo: 1)
+        session.forceVADCommitOnSilenceForTesting()
+        await flushModernEmissions()
+
+        XCTAssertEqual(collected.map(\.text), ["Hello everyone."])
+    }
+
+    @MainActor
     private func flushModernEmissions() async {
         await Task.yield()
         await Task.yield()

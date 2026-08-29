@@ -205,6 +205,107 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(current.sourceText, "Current tentative caption")
     }
 
+    func testSameAudioStartKeepsIndependentCommittedVisible() throws {
+        let committedPromotionID = UUID()
+        let draftPromotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "Committed fragment",
+            sourceText: "Committed fragment",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = committedPromotionID
+        state.committedAudioStartMs = 1_000
+        state.draftSourceText = "Unrelated later hypothesis text"
+        state.draftPromotionID = draftPromotionID
+        state.draftAudioStartMs = 1_020
+
+        let presentation = state.liveCaptionPresentation
+        let preceding = try XCTUnwrap(presentation.precedingCommittedCaption)
+        let current = try XCTUnwrap(presentation.currentCaption)
+
+        XCTAssertEqual(preceding.sourceText, "Committed fragment")
+        XCTAssertEqual(current.phase, .tentative)
+        XCTAssertEqual(current.sourceText, "Unrelated later hypothesis text")
+    }
+
+
+    func testPartialContinuationCollapsesToExclusiveCurrentCaption() throws {
+        let committedPromotionID = UUID()
+        let draftPromotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "Hello everyone",
+            sourceText: "Hello everyone",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = committedPromotionID
+        state.draftSourceText = "Hello everyone, hello."
+        state.draftPromotionID = draftPromotionID
+
+        let presentation = state.liveCaptionPresentation
+        let current = try XCTUnwrap(presentation.currentCaption)
+
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        XCTAssertEqual(current.id, .promotion(draftPromotionID))
+        XCTAssertEqual(current.phase, .tentative)
+        XCTAssertEqual(current.sourceText, "Hello everyone, hello.")
+    }
+
+    func testSuffixFragmentJoinsIntoExclusiveCurrentCaption() throws {
+        let committedPromotionID = UUID()
+        let draftPromotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "Welcome to our first",
+            sourceText: "Welcome to our first",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = committedPromotionID
+        state.draftSourceText = "session."
+        state.draftPromotionID = draftPromotionID
+
+        let presentation = state.liveCaptionPresentation
+        let current = try XCTUnwrap(presentation.currentCaption)
+
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        XCTAssertEqual(current.sourceText, "Welcome to our first session.")
+        XCTAssertEqual(current.phase, .tentative)
+    }
+
+    func testReplaySequenceNeverLayersOverlappingPartials() throws {
+        var state = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        let steps: [(committed: String, draft: String)] = [
+            ("", "Hello"),
+            ("", "Hello everyone"),
+            ("Hello everyone", "Hello everyone, hello."),
+            ("Hello everyone, hello.", "Welcome to our first session."),
+            ("Welcome to our first", "session."),
+        ]
+
+        for (committed, draft) in steps {
+            state.sourceText = committed
+            state.translatedText = committed
+            state.committedPromotionID = committed.isEmpty ? nil : UUID()
+            state.draftSourceText = draft.isEmpty ? nil : draft
+            state.draftPromotionID = draft.isEmpty ? nil : UUID()
+
+            let presentation = state.liveCaptionPresentation
+            if let preceding = presentation.precedingCommittedCaption,
+               let current = presentation.currentCaption {
+                let relation = LiveCaptionReplay.relation(
+                    committedSourceText: preceding.sourceText,
+                    draftSourceText: current.sourceText
+                )
+                if case .sameUtterance = relation {
+                    XCTFail("layered same utterance '\(preceding.sourceText)' + '\(current.sourceText)'")
+                }
+            }
+        }
+    }
+
+
     func testDraftTextRevisionKeepsPromotionIdentity() throws {
         let promotionID = UUID()
         var state = OverlayPreviewState(
