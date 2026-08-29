@@ -2653,7 +2653,8 @@ final class AppModel: ObservableObject {
                 replacesID: sentence.replacesPromotionSegmentID,
                 revision: caption.revision,
                 sourceID: source.id,
-                sourceKind: source.category.rawValue
+                sourceKind: source.category.rawValue,
+                promotionOrigin: "generated"
             )
         }
 
@@ -2859,13 +2860,14 @@ final class AppModel: ObservableObject {
         replacesID: UUID?,
         revision: UInt64?,
         sourceID: String,
-        sourceKind: String
+        sourceKind: String,
+        promotionOrigin: String = "inbound"
     ) {
         let captionText = captionID?.uuidString ?? "-"
         let promotionText = promotionID?.uuidString ?? "-"
         let replacesText = replacesID?.uuidString ?? "-"
         let revisionText = revision.map(String.init) ?? "-"
-        Logger.caption.notice("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
+        Logger.caption.notice("enqueue kind=\(kind, privacy: .public) caption=\(captionText, privacy: .public) promotion=\(promotionText, privacy: .public) origin=\(promotionOrigin, privacy: .public) replaces=\(replacesText, privacy: .public) revision=\(revisionText, privacy: .public) sourceKind=\(sourceKind, privacy: .public) source=\(sourceID, privacy: .public)")
     }
 
     private func refreshCaptionTranslations() {
