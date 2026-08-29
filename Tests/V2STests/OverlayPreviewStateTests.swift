@@ -154,6 +154,33 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(committed.phase, .committed)
     }
 
+    func testPromotionOverlapCollapsesToCommittedCaption() throws {
+        let promotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "已修正字幕。",
+            sourceText: "Corrected caption.",
+            sourceName: "Test"
+        )
+        state.captionEpoch = 1
+        state.committedPromotionID = promotionID
+        state.draftSourceText = "Tentative caption"
+        state.draftPromotionID = promotionID
+        state.setDraftTranslation(
+            "暫定字幕",
+            sourceText: "Tentative caption",
+            promotionID: promotionID
+        )
+
+        let presentation = state.liveCaptionPresentation
+        let current = try XCTUnwrap(presentation.currentCaption)
+
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        XCTAssertEqual(current.id, .promotion(promotionID))
+        XCTAssertEqual(current.phase, .committed)
+        XCTAssertEqual(current.sourceText, "Corrected caption.")
+        XCTAssertEqual(current.translatedText, "已修正字幕。")
+    }
+
     func testDraftKeepsPreviousCommitOutsideCurrentCaptionSlot() throws {
         let committedPromotionID = UUID()
         let draftPromotionID = UUID()

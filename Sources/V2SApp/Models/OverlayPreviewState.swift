@@ -144,6 +144,15 @@ extension OverlayPreviewState {
             .map(OverlayLiveCaptionPresentation.Identity.promotion)
             ?? .captionEpoch(captionEpoch &+ 1)
 
+        // Promotion publishes the committed caption before the draft is cleared.
+        // Collapse that overlap so SwiftUI sees one stable slot and committed text wins.
+        if committedCaption?.id == identity {
+            return OverlayLiveCaptionPresentation(
+                precedingCommittedCaption: nil,
+                currentCaption: committedCaption
+            )
+        }
+
         return OverlayLiveCaptionPresentation(
             precedingCommittedCaption: committedCaption,
             currentCaption: OverlayLiveCaptionPresentation.Caption(
