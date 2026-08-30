@@ -45,7 +45,7 @@ private enum AppBuildInfo {
 @MainActor
 final class AppModel: ObservableObject {
     private let settingsStore: SettingsStore
-    private let sourceCatalogService: SourceCatalogService
+    private let sourceCatalogService: any SourceCatalogProviding
     private let translationCoordinator = TranslationCoordinator()
     private let reverseTranslationCoordinator = TranslationCoordinator()
 #if os(macOS)
@@ -245,7 +245,7 @@ final class AppModel: ObservableObject {
 
     init(
         settingsStore: SettingsStore,
-        sourceCatalogService: SourceCatalogService
+        sourceCatalogService: any SourceCatalogProviding
     ) {
         self.settingsStore = settingsStore
         self.sourceCatalogService = sourceCatalogService

@@ -335,7 +335,7 @@ final class OverlayPreviewStateTests: XCTestCase {
 
         let model = AppModel(
             settingsStore: SettingsStore(fileURL: settingsURL),
-            sourceCatalogService: SourceCatalogService()
+            sourceCatalogService: NullSourceCatalog()
         )
         model.subtitleDisplayMode = .both
 
@@ -398,6 +398,127 @@ final class OverlayPreviewStateTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testMacRendererPaintsCaptionRolloverAtomically() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-caption-rollover-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+
+        let previousPromotionID = UUID()
+        var previousState = OverlayPreviewState(
+            translatedText: "PREVIOUS TRANSLATION",
+            sourceText: "PREVIOUS SOURCE",
+            sourceName: "Test"
+        )
+        previousState.captionEpoch = 1
+        previousState.committedPromotionID = previousPromotionID
+        model.setOverlayStateForTesting(previousState)
+
+        let hostingView = NSHostingView(
+            rootView: CaptionFlowContentView(
+                model: model,
+                reservesColumnHeaderSpace: false
+            )
+            .background(Color.black)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 420)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+        let previousBitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-native-rollover-previous.png"
+        )
+        let previousPixels = try XCTUnwrap(
+            previousBitmap.representation(using: .png, properties: [:])
+        )
+
+        let currentPromotionID = UUID()
+        var currentState = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        currentState.captionEpoch = 2
+        currentState.history = [
+            OverlayHistoryEntry(
+                translatedText: "PREVIOUS TRANSLATION",
+                sourceText: "PREVIOUS SOURCE"
+            )
+        ]
+        currentState.draftPromotionID = currentPromotionID
+        currentState.draftSourceText = "CURRENT SOURCE"
+        currentState.setDraftTranslation(
+            "CURRENT TRANSLATION",
+            sourceText: "CURRENT SOURCE",
+            promotionID: currentPromotionID
+        )
+
+        model.setOverlayStateForTesting(currentState)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.12))
+        let earlyBitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-native-rollover-early.png"
+        )
+        let earlyPixels = try XCTUnwrap(
+            earlyBitmap.representation(using: .png, properties: [:])
+        )
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+        let settledBitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-native-rollover-settled.png"
+        )
+        let settledPixels = try XCTUnwrap(
+            settledBitmap.representation(using: .png, properties: [:])
+        )
+
+        XCTAssertNotEqual(earlyPixels, previousPixels, "rollover update was not painted")
+        XCTAssertEqual(
+            earlyPixels,
+            settledPixels,
+            "caption rollover painted an intermediate crossfade frame"
+        )
+    }
+
+    @MainActor
+    private func renderBitmap(
+        _ view: NSView,
+        snapshotName: String
+    ) throws -> NSBitmapImageRep {
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+
+        if let directory = ProcessInfo.processInfo.environment["EASY2SAY_NATIVE_SNAPSHOT_DIR"],
+           directory.isEmpty == false {
+            let url = URL(fileURLWithPath: directory, isDirectory: true)
+                .appendingPathComponent(snapshotName)
+            let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try data.write(to: url)
+        }
+        return bitmap
+    }
+
     private func assertFrame(
         _ actual: CGRect,
         equals expected: CGRect,
@@ -408,5 +529,11 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(actual.minY, expected.minY, accuracy: 0.5, file: file, line: line)
         XCTAssertEqual(actual.width, expected.width, accuracy: 0.5, file: file, line: line)
         XCTAssertEqual(actual.height, expected.height, accuracy: 0.5, file: file, line: line)
+    }
+}
+
+private struct NullSourceCatalog: SourceCatalogProviding {
+    func loadSnapshot() -> SourceCatalogSnapshot {
+        SourceCatalogSnapshot(applications: [], microphones: [])
     }
 }

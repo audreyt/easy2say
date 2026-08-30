@@ -33,10 +33,10 @@ struct CaptionFlowContentView: View {
                             liveLayers(state)
                                 .background(liveLayersHeightReader)
                         }
-                        .animation(
-                            Self.captionFlowAnimation,
-                            value: historyLayoutAnimationState(for: state, visibleHistoryEntries: visibleHistoryEntries)
-                        )
+                        .transaction { transaction in
+                            transaction.animation = nil
+                            transaction.disablesAnimations = true
+                        }
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .bottom)
                     }
@@ -110,7 +110,6 @@ struct CaptionFlowContentView: View {
                 currentCaptionSlotPlaceholder
             }
         }
-        .animation(Self.captionFlowAnimation, value: flowAnimationState(for: state))
     }
 
     private func currentCaptionLayer(
@@ -125,7 +124,6 @@ struct CaptionFlowContentView: View {
             reservesEmptyLines: true
         )
         .padding(.bottom, Self.currentCaptionBottomInset)
-        .id(caption.id)
 
 #if DEBUG
         return layer.background(currentCaptionFrameReader)
@@ -241,27 +239,6 @@ struct CaptionFlowContentView: View {
             || model.shouldReserveCommittedCaptionSlot
     }
 
-    private func flowAnimationState(for state: OverlayPreviewState) -> OverlayFlowAnimationState {
-        let presentation = state.liveCaptionPresentation
-        return OverlayFlowAnimationState(
-            currentCaptionID: presentation.currentCaption?.id,
-            precedingCommittedCaptionID: presentation.precedingCommittedCaption?.id,
-            reservesCurrentCaptionSlot: shouldReserveCurrentCaptionSlot(for: state)
-        )
-    }
-
-    private func historyLayoutAnimationState(
-        for state: OverlayPreviewState,
-        visibleHistoryEntries: [OverlayHistoryEntry]
-    ) -> OverlayHistoryLayoutAnimationState {
-        let presentation = state.liveCaptionPresentation
-        return OverlayHistoryLayoutAnimationState(
-            historyIDs: visibleHistoryEntries.map(\.id),
-            currentCaptionID: presentation.currentCaption?.id,
-            precedingCommittedCaptionID: presentation.precedingCommittedCaption?.id,
-            reservesCurrentCaptionSlot: shouldReserveCurrentCaptionSlot(for: state)
-        )
-    }
 
     private func historyEntryHeight(for entry: OverlayHistoryEntry) -> CGFloat {
         max(measuredHistoryEntryHeights[entry.id] ?? 0, estimatedHistoryEntryHeight(for: entry))
@@ -731,11 +708,6 @@ struct CaptionFlowContentView: View {
 }
 
 extension CaptionFlowContentView {
-    static let captionFlowAnimation = Animation.interactiveSpring(
-        response: 0.32,
-        dampingFraction: 0.88,
-        blendDuration: 0.08
-    )
     static let liveStackSpacing: CGFloat = 10.0
     static let currentCaptionBottomInset: CGFloat = 3.0
     static let captionPairSpacing: CGFloat = 4.0
@@ -755,18 +727,6 @@ extension CaptionFlowContentView {
     ]
 }
 
-struct OverlayFlowAnimationState: Equatable {
-    let currentCaptionID: OverlayLiveCaptionPresentation.Identity?
-    let precedingCommittedCaptionID: OverlayLiveCaptionPresentation.Identity?
-    let reservesCurrentCaptionSlot: Bool
-}
-
-struct OverlayHistoryLayoutAnimationState: Equatable {
-    let historyIDs: [UUID]
-    let currentCaptionID: OverlayLiveCaptionPresentation.Identity?
-    let precedingCommittedCaptionID: OverlayLiveCaptionPresentation.Identity?
-    let reservesCurrentCaptionSlot: Bool
-}
 
 
 struct LiveLayersHeightPreferenceKey: PreferenceKey {

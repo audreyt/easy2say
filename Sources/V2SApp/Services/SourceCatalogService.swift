@@ -10,7 +10,12 @@ struct SourceCatalogSnapshot: Equatable {
 }
 
 @MainActor
-final class SourceCatalogService {
+protocol SourceCatalogProviding {
+    func loadSnapshot() -> SourceCatalogSnapshot
+}
+
+@MainActor
+final class SourceCatalogService: SourceCatalogProviding {
 #if os(macOS)
     private let microphoneDiscoverySession = AVCaptureDevice.DiscoverySession(
         deviceTypes: [.microphone, .external],
