@@ -95,7 +95,7 @@ fi
 
 mkdir -p "$BUILD_ROOT"
 if [[ "$REUSE_SIGNED_APP" == "0" ]]; then
-  rm -rf "$DERIVED_DATA/Build"
+  rm -rf "$DERIVED_DATA"
 
   xcodebuild \
     -project "$PROJECT_PATH" \
