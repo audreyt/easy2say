@@ -21,12 +21,11 @@ enum FoundationModelsTranslationRefusal {
 }
 
 #if canImport(FoundationModels)
-/// On-device AFM fallback for pairs Apple Translation reports unsupported.
+/// On-device fallback after the preferred `/v1` backend and Apple Translation.
 ///
-/// Uses `permissiveContentTransformations` so caption speech (including
-/// profanity) is treated as a transform, not a chat request. The model can
-/// still refuse in the string; callers should fall through to TranslateGemma
-/// or show source.
+/// `SystemLanguageModel` selects Core Advanced when its assets are available and
+/// otherwise Core; the SDK exposes that selected variant read-only. Permissive
+/// content transformations keep caption speech from being treated as a chat request.
 @available(iOS 26.0, macOS 26.0, *)
 actor FoundationModelsTranslationService {
     enum ServiceError: LocalizedError, AppLocalizableError {

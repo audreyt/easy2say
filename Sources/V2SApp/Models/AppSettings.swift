@@ -16,6 +16,8 @@ struct AppSettings: Codable {
     var subtitleMode: SubtitleMode
     var subtitleDisplayMode: SubtitleDisplayMode
     var glossary: [String: String]
+    var customTranslationBaseURL: String
+    var customTranslationModelID: String
 
     static let `default` = AppSettings(
         selectedSourceID: nil,
@@ -32,7 +34,9 @@ struct AppSettings: Codable {
         overlayStyle: .default,
         subtitleMode: .balanced,
         subtitleDisplayMode: .both,
-        glossary: [:]
+        glossary: [:],
+        customTranslationBaseURL: "",
+        customTranslationModelID: ""
     )
 
     // Custom decoder so existing settings files load cleanly as new fields are added.
@@ -67,6 +71,14 @@ struct AppSettings: Codable {
             ?? AppSettings.default.subtitleDisplayMode
         glossary = (try? c.decodeIfPresent([String: String].self, forKey: .glossary))
             ?? AppSettings.default.glossary
+        customTranslationBaseURL = (try? c.decodeIfPresent(
+            String.self,
+            forKey: .customTranslationBaseURL
+        )) ?? AppSettings.default.customTranslationBaseURL
+        customTranslationModelID = (try? c.decodeIfPresent(
+            String.self,
+            forKey: .customTranslationModelID
+        )) ?? AppSettings.default.customTranslationModelID
     }
 
     init(
@@ -84,7 +96,9 @@ struct AppSettings: Codable {
         overlayStyle: OverlayStyle,
         subtitleMode: SubtitleMode,
         subtitleDisplayMode: SubtitleDisplayMode,
-        glossary: [String: String]
+        glossary: [String: String],
+        customTranslationBaseURL: String = "",
+        customTranslationModelID: String = ""
     ) {
         self.selectedSourceID = selectedSourceID
         self.selectedSourceIDs = selectedSourceIDs
@@ -101,6 +115,8 @@ struct AppSettings: Codable {
         self.subtitleMode     = subtitleMode
         self.subtitleDisplayMode = subtitleDisplayMode
         self.glossary         = glossary
+        self.customTranslationBaseURL = customTranslationBaseURL
+        self.customTranslationModelID = customTranslationModelID
     }
 }
 

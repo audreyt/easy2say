@@ -48,11 +48,8 @@ final class AppModel: ObservableObject {
     private let sourceCatalogService: SourceCatalogService
     private let translationCoordinator = TranslationCoordinator()
     private let reverseTranslationCoordinator = TranslationCoordinator()
-#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-    private let translateGemmaService = TranslateGemmaTranslationService()
-#endif
 #if os(macOS)
-    private let melongOmlxService = MelongOmlxTranslationService()
+    private let openAICompatibleTranslationService = OpenAICompatibleTranslationService()
 #endif
     private let glossaryService = GlossaryService()
     private var speechCorrections = SpeechCorrectionTable.empty
@@ -236,6 +233,15 @@ final class AppModel: ObservableObject {
             persistSettings()
         }
     }
+    @Published var customTranslationBaseURL: String {
+        didSet { translationBackendConfigurationDidChange() }
+    }
+    @Published var customTranslationAPIKey: String {
+        didSet { customTranslationAPIKeyDidChange() }
+    }
+    @Published var customTranslationModelID: String {
+        didSet { translationBackendConfigurationDidChange() }
+    }
 
     init(
         settingsStore: SettingsStore,
@@ -268,6 +274,13 @@ final class AppModel: ObservableObject {
         self.subtitleMode = settings.subtitleMode
         self.subtitleDisplayMode = settings.subtitleDisplayMode
         self.glossary = settings.glossary
+        self.customTranslationBaseURL = settings.customTranslationBaseURL
+#if os(macOS)
+        self.customTranslationAPIKey = CustomTranslationAPIKeyStore.load()
+#else
+        self.customTranslationAPIKey = ""
+#endif
+        self.customTranslationModelID = settings.customTranslationModelID
         self.cachedInverseGlossary = GlossaryService.buildInverseGlossary(settings.glossary)
         self.translationHostConfiguration = nil
         self.reverseTranslationHostConfiguration = nil
@@ -287,8 +300,8 @@ final class AppModel: ObservableObject {
             self?.translationLocaleIdentifier(for: languageID)
                 ?? LanguageCatalog.translationLocaleIdentifier(for: languageID)
         }
-        installTranslationFallbacks(on: translationCoordinator)
-        installTranslationFallbacks(on: reverseTranslationCoordinator)
+        installTranslationBackends(on: translationCoordinator)
+        installTranslationBackends(on: reverseTranslationCoordinator)
         reloadSpeechCorrections()
         Logger.caption.notice("caption-log-ready")
 
@@ -301,7 +314,22 @@ final class AppModel: ObservableObject {
         refreshSupportedLanguageOptions()
     }
 
-    func installTranslationFallbacks(on coordinator: TranslationCoordinator) {
+    func installTranslationBackends(on coordinator: TranslationCoordinator) {
+        coordinator.preferredPrepare = { [weak self] source, target in
+            guard let self else { return false }
+            return try await self.preparePreferredTranslationBackend(
+                from: source,
+                to: target
+            )
+        }
+        coordinator.preferredTranslate = { [weak self] text, source, target in
+            guard let self else { return nil }
+            return try await self.translateWithPreferredBackend(
+                text,
+                from: source,
+                to: target
+            )
+        }
         coordinator.fallbackPrepare = { [weak self] source, target in
             guard let self else {
                 throw TranslationCoordinator.ServiceError.unavailableOnSystem
@@ -327,15 +355,30 @@ final class AppModel: ObservableObject {
     }
 
     @available(iOS 26.0, macOS 26.0, *)
-    func installTranslationFallbacks(on engine: ConversationEngine) {
-        engine.installTranslationFallbacks(
-            prepare: { [weak self] source, target in
+    func installTranslationBackends(on engine: ConversationEngine) {
+        engine.installTranslationBackends(
+            preferredPrepare: { [weak self] source, target in
+                guard let self else { return false }
+                return try await self.preparePreferredTranslationBackend(
+                    from: source,
+                    to: target
+                )
+            },
+            preferredTranslate: { [weak self] text, source, target in
+                guard let self else { return nil }
+                return try await self.translateWithPreferredBackend(
+                    text,
+                    from: source,
+                    to: target
+                )
+            },
+            fallbackPrepare: { [weak self] source, target in
                 guard let self else {
                     throw TranslationCoordinator.ServiceError.unavailableOnSystem
                 }
                 try await self.prepareTranslationFallback(from: source, to: target)
             },
-            translate: { [weak self] text, source, target in
+            fallbackTranslate: { [weak self] text, source, target in
                 guard let self else {
                     throw TranslationCoordinator.ServiceError.unavailableOnSystem
                 }
@@ -344,39 +387,50 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func prepareTranslationFallback(from source: String, to target: String) async throws {
+    private func preparePreferredTranslationBackend(
+        from source: String,
+        to target: String
+    ) async throws -> Bool {
 #if os(macOS)
-        if MelongCaption.isTibetanLanguageID(source)
-            || MelongCaption.isTibetanLanguageID(target)
-        {
-            do {
-                try await melongOmlxService.prepare(from: source, to: target)
-                return
-            } catch {
-                // Sidecar down. Skip AFM: it hallucinates Tibetan.
-            }
-#if canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-            if #available(macOS 27.0, *) {
-                try await translateGemmaService.prepare(from: source, to: target)
-                return
-            }
+        guard let config = customTranslationConfig else { return false }
+        try await openAICompatibleTranslationService.prepare(
+            from: source,
+            to: target,
+            config: config
+        )
+        return true
+#else
+        _ = source
+        _ = target
+        return false
 #endif
-            throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
-        }
+    }
+
+    private func translateWithPreferredBackend(
+        _ text: String,
+        from source: String,
+        to target: String
+    ) async throws -> String? {
+#if os(macOS)
+        guard let config = customTranslationConfig else { return nil }
+        return try await openAICompatibleTranslationService.translate(
+            text,
+            from: source,
+            to: target,
+            config: config
+        )
+#else
+        _ = text
+        _ = source
+        _ = target
+        return nil
 #endif
+    }
+
+    private func prepareTranslationFallback(from source: String, to target: String) async throws {
 #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
-            do {
-                try await FoundationModelsTranslationService().prepare(from: source, to: target)
-                return
-            } catch {
-                // Fall through to TranslateGemma when AFM is off or not ready.
-            }
-        }
-#endif
-#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-        if #available(macOS 27.0, *) {
-            try await translateGemmaService.prepare(from: source, to: target)
+            try await FoundationModelsTranslationService().prepare(from: source, to: target)
             return
         }
 #endif
@@ -388,47 +442,27 @@ final class AppModel: ObservableObject {
         from source: String,
         to target: String
     ) async throws -> String {
-#if os(macOS)
-        if MelongCaption.isTibetanLanguageID(source)
-            || MelongCaption.isTibetanLanguageID(target)
-        {
-            do {
-                return try await melongOmlxService.translate(text, from: source, to: target)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                // Sidecar miss. Skip AFM: it hallucinates Tibetan.
-            }
-#if canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-            if #available(macOS 27.0, *) {
-                return try await translateGemmaService.translate(text, from: source, to: target)
-            }
-#endif
-            throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
-        }
-#endif
 #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
-            do {
-                return try await FoundationModelsTranslationService().translate(
-                    text,
-                    from: source,
-                    to: target
-                )
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                // Refusal / empty / unavailable → Gemma when present.
-            }
-        }
-#endif
-#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-        if #available(macOS 27.0, *) {
-            return try await translateGemmaService.translate(text, from: source, to: target)
+            return try await FoundationModelsTranslationService().translate(
+                text,
+                from: source,
+                to: target
+            )
         }
 #endif
         throw TranslationCoordinator.ServiceError.unsupportedPair(source, target)
     }
+
+#if os(macOS)
+    private var customTranslationConfig: OpenAICompatibleTranslation.Config? {
+        OpenAICompatibleTranslation.Config.resolve(
+            settingsBaseURL: customTranslationBaseURL,
+            settingsAPIKey: customTranslationAPIKey,
+            settingsModelID: customTranslationModelID
+        )
+    }
+#endif
 
     convenience init() {
         self.init(
@@ -1224,10 +1258,30 @@ final class AppModel: ObservableObject {
             overlayStyle: overlayStyle,
             subtitleMode: subtitleMode,
             subtitleDisplayMode: subtitleDisplayMode,
-            glossary: glossary
+            glossary: glossary,
+            customTranslationBaseURL: customTranslationBaseURL,
+            customTranslationModelID: customTranslationModelID
         )
 
         settingsStore.save(settings)
+    }
+
+    private func customTranslationAPIKeyDidChange() {
+        guard isBootstrapping == false else { return }
+#if os(macOS)
+        if CustomTranslationAPIKeyStore.save(customTranslationAPIKey) == false {
+            fputs("Failed to save custom translation API key to Keychain.\n", stderr)
+        }
+#endif
+        translationBackendConfigurationDidChange()
+    }
+
+    private func translationBackendConfigurationDidChange() {
+        guard isBootstrapping == false else { return }
+        translationCoordinator.reset()
+        reverseTranslationCoordinator.reset()
+        persistSettings()
+        refreshSupportedLanguageOptions()
     }
 
     private static func normalizedOverlayStyle(_ style: OverlayStyle) -> OverlayStyle {
@@ -1425,19 +1479,29 @@ final class AppModel: ObservableObject {
         var options = LanguageCatalog.options(
             for: await LanguageAvailability().supportedLanguages
         )
-#if os(macOS) && canImport(CoreAILanguageModels) && canImport(SentencepieceTokenizer)
-        // Apple Translation reports bo as .unsupported. AFM (SystemLanguageModel)
-        // hallucinates on Tibetan script, so do not advertise bo from AFM availability.
-        // TranslateGemma is the only working local bo translator on this desk.
-        if Bundle.main.url(forResource: "TranslateGemma", withExtension: nil) != nil,
-           options.contains(where: { $0.id == "bo" }) == false {
-            options.append(
-                LanguageOption(
-                    id: "bo",
-                    displayName: "Tibetan",
-                    localeIdentifier: "bo"
+#if os(macOS)
+        if let config = customTranslationConfig {
+            do {
+                try await openAICompatibleTranslationService.prepare(
+                    from: "bo",
+                    to: "en",
+                    config: config
                 )
-            )
+                if options.contains(where: { $0.id == "bo" }) == false {
+                    options.append(
+                        LanguageOption(
+                            id: "bo",
+                            displayName: "Tibetan",
+                            localeIdentifier: "bo"
+                        )
+                    )
+                }
+            } catch is CancellationError {
+                return options
+            } catch {
+                // A configured but unavailable endpoint does not advertise
+                // language pairs Apple Translation does not support.
+            }
         }
 #endif
         return options

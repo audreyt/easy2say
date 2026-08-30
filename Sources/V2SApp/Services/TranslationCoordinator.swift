@@ -42,26 +42,27 @@ final class TranslationCoordinator: ObservableObject {
             generation: Int,
             pair: LanguagePair,
             text: String,
+            prepareIfNeeded: Bool,
             continuation: CheckedContinuation<String, Error>
         )
 
         var id: UUID {
             switch self {
-            case .prepare(let id, _, _, _), .translate(let id, _, _, _, _):
+            case .prepare(let id, _, _, _), .translate(let id, _, _, _, _, _):
                 return id
             }
         }
 
         var generation: Int {
             switch self {
-            case .prepare(_, let generation, _, _), .translate(_, let generation, _, _, _):
+            case .prepare(_, let generation, _, _), .translate(_, let generation, _, _, _, _):
                 return generation
             }
         }
 
         var pair: LanguagePair {
             switch self {
-            case .prepare(_, _, let pair, _), .translate(_, _, let pair, _, _):
+            case .prepare(_, _, let pair, _), .translate(_, _, let pair, _, _, _):
                 return pair
             }
         }
@@ -97,9 +98,17 @@ final class TranslationCoordinator: ObservableObject {
 
     var onConfigurationChange: ((TranslationSession.Configuration?) -> Void)?
     var localeIdentifierForLanguageID: ((String) -> String)?
+    /// Optional backend attempted before Apple Translation. Returning `false`
+    /// or `nil` continues through Apple Translation and the fallback backend.
+    var preferredPrepare: ((String, String) async throws -> Bool)?
+    var preferredTranslate: ((String, String, String) async throws -> String?)?
     /// Optional local backend used only when Apple reports a pair unsupported.
     var fallbackPrepare: ((String, String) async throws -> Void)?
     var fallbackTranslate: ((String, String, String) async throws -> String)?
+    /// Optional deterministic Apple-tier adapters. Production leaves these
+    /// unset and uses LanguageAvailability plus the view-anchored session.
+    var appleAvailability: ((String, String) async throws -> LanguageAvailability.Status)?
+    var appleTranslate: ((String, String, String, Bool) async throws -> String)?
 
     private(set) var configuration: TranslationSession.Configuration? {
         didSet {
@@ -118,6 +127,9 @@ final class TranslationCoordinator: ObservableObject {
     /// Language pairs confirmed `.installed` this session, so the hot path can
     /// skip the framework availability round-trip on every request.
     private var installedPairs: Set<LanguagePair> = []
+    /// Pairs whose configured preferred backend passed its model-preparation
+    /// check. Translation never calls the preferred backend without this gate.
+    private var preparedPreferredPairs: Set<LanguagePair> = []
     /// Bounded memo of completed translations. Collapses the duplicate work of
     /// re-translating a promoted draft as its committed caption and of repeated
     /// short utterances, and keeps repeated sentences translated consistently.
@@ -135,6 +147,27 @@ final class TranslationCoordinator: ObservableObject {
 
         let pair = LanguagePair(source: sourceIdentifier, target: targetIdentifier)
         let requestGeneration = generation
+        if preparedPreferredPairs.contains(pair) {
+            return
+        }
+        if let preferredPrepare {
+            do {
+                if try await preferredPrepare(sourceIdentifier, targetIdentifier) {
+                    guard requestGeneration == generation else {
+                        throw CancellationError()
+                    }
+                    preparedPreferredPairs.insert(pair)
+                    return
+                }
+                preparedPreferredPairs.remove(pair)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                preparedPreferredPairs.remove(pair)
+                // A configured but unavailable preferred backend must not block
+                // Apple Translation or the on-device language model fallback.
+            }
+        }
         let status: LanguageAvailability.Status
         do {
             status = try await availabilityStatus(for: pair)
@@ -191,8 +224,30 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         let requestGeneration = generation
+        if preparedPreferredPairs.contains(pair), let preferredTranslate {
+            do {
+                if let result = try await preferredTranslate(
+                    trimmedText,
+                    sourceIdentifier,
+                    targetIdentifier
+                ) {
+                    guard requestGeneration == generation else {
+                        throw CancellationError()
+                    }
+                    memoizeTranslation(result, pair: pair, sourceText: trimmedText)
+                    return result
+                }
+                preparedPreferredPairs.remove(pair)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                preparedPreferredPairs.remove(pair)
+                // Continue through Apple Translation, then the on-device model.
+            }
+        }
+        let appleStatus: LanguageAvailability.Status
         do {
-            _ = try await availabilityStatus(for: pair)
+            appleStatus = try await availabilityStatus(for: pair)
         } catch let error as ServiceError {
             guard shouldUseFallback(for: error), let fallbackTranslate else {
                 throw error
@@ -212,6 +267,50 @@ final class TranslationCoordinator: ObservableObject {
             throw CancellationError()
         }
 
+        let prepareApple = Self.requiresApplePreparation(for: appleStatus)
+        do {
+            return try await performAppleTranslation(
+                trimmedText,
+                from: sourceIdentifier,
+                to: targetIdentifier,
+                pair: pair,
+                generation: requestGeneration,
+                prepareIfNeeded: prepareApple
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            guard Task.isCancelled == false, requestGeneration == generation else {
+                throw CancellationError()
+            }
+            guard let fallbackTranslate else {
+                throw error
+            }
+            let result = try await fallbackTranslate(
+                trimmedText,
+                sourceIdentifier,
+                targetIdentifier
+            )
+            guard requestGeneration == generation else {
+                throw CancellationError()
+            }
+            memoizeTranslation(result, pair: pair, sourceText: trimmedText)
+            return result
+        }
+    }
+
+    private func performAppleTranslation(
+        _ text: String,
+        from source: String,
+        to target: String,
+        pair: LanguagePair,
+        generation requestGeneration: Int,
+        prepareIfNeeded: Bool
+    ) async throws -> String {
+        if let appleTranslate {
+            return try await appleTranslate(text, source, target, prepareIfNeeded)
+        }
+
         let operationID = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -220,7 +319,8 @@ final class TranslationCoordinator: ObservableObject {
                         id: operationID,
                         generation: requestGeneration,
                         pair: pair,
-                        text: trimmedText,
+                        text: text,
+                        prepareIfNeeded: prepareIfNeeded,
                         continuation: continuation
                     )
                 )
@@ -292,16 +392,28 @@ final class TranslationCoordinator: ObservableObject {
             activeOperationID = operation.id
 
             switch operation {
-            case .prepare(let id, _, _, let continuation):
+            case .prepare(let id, _, let pair, let continuation):
                 do {
                     try await session.prepareTranslation()
+                    installedPairs.insert(pair)
                     finishOperation(id: id, continuation: continuation)
                 } catch {
                     finishOperation(id: id, continuation: continuation, error: error)
                 }
 
-            case .translate(let id, _, let pair, let text, let continuation):
+            case .translate(
+                let id,
+                _,
+                let pair,
+                let text,
+                let prepareIfNeeded,
+                let continuation
+            ):
                 do {
+                    if prepareIfNeeded {
+                        try await session.prepareTranslation()
+                        installedPairs.insert(pair)
+                    }
                     let response = try await session.translate(text)
                     let translatedText = response.targetText.trimmingCharacters(in: .whitespacesAndNewlines)
                     let resolvedText = translatedText.isEmpty ? text : translatedText
@@ -330,6 +442,7 @@ final class TranslationCoordinator: ObservableObject {
         currentPair = nil
         configuration = nil
         installedPairs.removeAll()
+        preparedPreferredPairs.removeAll()
         translationMemo.removeAll()
         translationMemoOrder.removeAll()
     }
@@ -438,7 +551,7 @@ final class TranslationCoordinator: ObservableObject {
         switch operation {
         case .prepare(_, _, _, let continuation):
             continuation.resume(throwing: CancellationError())
-        case .translate(_, _, _, _, let continuation):
+        case .translate(_, _, _, _, _, let continuation):
             continuation.resume(throwing: CancellationError())
         }
     }
@@ -620,6 +733,12 @@ final class TranslationCoordinator: ObservableObject {
         }
     }
 
+    static func requiresApplePreparation(
+        for status: LanguageAvailability.Status
+    ) -> Bool {
+        status == .supported
+    }
+
     private func shouldUseFallback(for error: ServiceError) -> Bool {
         switch error {
         case .unsupportedPair, .unavailableOnSystem:
@@ -636,10 +755,18 @@ final class TranslationCoordinator: ObservableObject {
             return .installed
         }
 
-        let sourceLanguage = Locale.Language(identifier: localeIdentifier(for: pair.source))
-        let targetLanguage = Locale.Language(identifier: localeIdentifier(for: pair.target))
-        let availability = LanguageAvailability()
-        let availabilityStatus = await availability.status(from: sourceLanguage, to: targetLanguage)
+        let availabilityStatus: LanguageAvailability.Status
+        if let appleAvailability {
+            availabilityStatus = try await appleAvailability(pair.source, pair.target)
+        } else {
+            let sourceLanguage = Locale.Language(identifier: localeIdentifier(for: pair.source))
+            let targetLanguage = Locale.Language(identifier: localeIdentifier(for: pair.target))
+            let availability = LanguageAvailability()
+            availabilityStatus = await availability.status(
+                from: sourceLanguage,
+                to: targetLanguage
+            )
+        }
 
         guard availabilityStatus != .unsupported else {
             throw ServiceError.unsupportedPair(pair.source, pair.target)

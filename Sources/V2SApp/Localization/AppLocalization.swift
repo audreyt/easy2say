@@ -218,8 +218,13 @@ enum AppTextKey: String, CaseIterable {
     case taigiLanguageName
     case taigiPreparingModel
 #if os(macOS)
-    case translateGemmaModelMissing
-    case translateGemmaEmptyTranslation
+    case customTranslation
+    case customTranslationEndpoint
+    case customTranslationModel
+    case customTranslationAPIKey
+    case customTranslationHint
+    case customTranslationUnavailable
+    case customTranslationEmptyTranslation
 #endif
     case foundationModelsTranslationUnavailable
     case foundationModelsTranslationEmpty
@@ -2431,22 +2436,37 @@ enum AppLocalization {
 #if os(macOS)
     private static let macOnlyTables: [String: [String: String]] = [
         "en": [
-            "translateGemmaModelMissing": "The local TranslateGemma fallback model is unavailable.",
-            "translateGemmaEmptyTranslation": "TranslateGemma returned an empty translation.",
+            "customTranslation": "Custom /v1 Translation",
+            "customTranslationEndpoint": "Endpoint",
+            "customTranslationModel": "Model",
+            "customTranslationAPIKey": "API Key",
+            "customTranslationHint": "When the endpoint and model are available, Easy2Say uses /v1/chat/completions before Apple Translation. Otherwise it uses Apple Translation for supported pairs, then Apple Foundation Models (Advanced when available, otherwise Core).",
+            "customTranslationUnavailable": "The configured /v1 translation endpoint or model is unavailable.",
+            "customTranslationEmptyTranslation": "The /v1 translation endpoint returned an empty translation.",
             "tibetanModelMissing": "The private local Monlam Tibetan model is unavailable.",
             "tibetanEmptyTranscript": "The Tibetan model could not recognize this utterance.",
             "tibetanPreparingModel": "Preparing the private local Tibetan model. First load may take several minutes.",
         ],
         "zh-Hans": [
-            "translateGemmaModelMissing": "本机 TranslateGemma 备用模型无法使用。",
-            "translateGemmaEmptyTranslation": "TranslateGemma 未生成翻译内容。",
+            "customTranslation": "自定义 /v1 翻译",
+            "customTranslationEndpoint": "端点",
+            "customTranslationModel": "模型",
+            "customTranslationAPIKey": "API 密钥",
+            "customTranslationHint": "端点与模型可用时，好说会先使用 /v1/chat/completions；否则，对支持的语言对使用 Apple 翻译，再使用 Apple 基础模型（可用时优先 Advanced，否则使用 Core）。",
+            "customTranslationUnavailable": "配置的 /v1 翻译端点或模型不可用。",
+            "customTranslationEmptyTranslation": "/v1 翻译端点未生成译文。",
             "tibetanModelMissing": "私有的本机 Monlam 藏语模型无法使用。",
             "tibetanEmptyTranscript": "藏语模型无法识别这段语音。",
             "tibetanPreparingModel": "正在准备私有的本机藏语模型。首次加载可能需要数分钟。",
         ],
         "zh-Hant": [
-            "translateGemmaModelMissing": "本機 TranslateGemma 備援模型無法使用。",
-            "translateGemmaEmptyTranslation": "TranslateGemma 未產生翻譯內容。",
+            "customTranslation": "自訂 /v1 翻譯",
+            "customTranslationEndpoint": "端點",
+            "customTranslationModel": "模型",
+            "customTranslationAPIKey": "API 金鑰",
+            "customTranslationHint": "端點與模型可用時，好說會先使用 /v1/chat/completions；否則，支援的語言對使用 Apple 翻譯，再使用 Apple 基礎模型（可用時優先 Advanced，否則使用 Core）。",
+            "customTranslationUnavailable": "設定的 /v1 翻譯端點或模型無法使用。",
+            "customTranslationEmptyTranslation": "/v1 翻譯端點未產生譯文。",
             "tibetanModelMissing": "私有的本機 Monlam 藏語模型無法使用。",
             "tibetanEmptyTranscript": "藏語模型無法辨識這段語音。",
             "tibetanPreparingModel": "正在準備私有的本機藏語模型。首次載入可能需要數分鐘。",

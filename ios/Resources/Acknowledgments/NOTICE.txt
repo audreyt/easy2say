@@ -16,16 +16,6 @@ https://huggingface.co/weiren119/Breeze-ASR-26-coreml-4bit-palette
 The model card declares the Apache License 2.0. Downloaded weights are excluded
 from this repository.
 
-The optional macOS TranslateGemma fallback is converted locally from:
-https://huggingface.co/google/translategemma-4b-it
-The model remains subject to Google's Gemma Terms of Use. Source and converted
-weights are excluded from this repository. The local runtime uses Apple's
-coreai-models (BSD 3-Clause) and swift-sentencepiece (MIT), which wraps Google's
-SentencePiece (Apache License 2.0):
-https://github.com/apple/coreai-models
-https://github.com/jkrukowski/swift-sentencepiece
-https://github.com/google/sentencepiece
-
 The optional Tibetan ASR backend uses a private Monlam checkpoint solely for
 Monlam-authorized internal evaluation. Neither the private source checkpoint nor
 its converted Core ML weights are distributed by this repository or its public

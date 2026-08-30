@@ -285,13 +285,17 @@ final class ConversationEngine: ObservableObject {
 
     // MARK: - Translation hosts
 
-    func installTranslationFallbacks(
-        prepare: @escaping (String, String) async throws -> Void,
-        translate: @escaping (String, String, String) async throws -> String
+    func installTranslationBackends(
+        preferredPrepare: @escaping (String, String) async throws -> Bool,
+        preferredTranslate: @escaping (String, String, String) async throws -> String?,
+        fallbackPrepare: @escaping (String, String) async throws -> Void,
+        fallbackTranslate: @escaping (String, String, String) async throws -> String
     ) {
         for coordinator in translators.values {
-            coordinator.fallbackPrepare = prepare
-            coordinator.fallbackTranslate = translate
+            coordinator.preferredPrepare = preferredPrepare
+            coordinator.preferredTranslate = preferredTranslate
+            coordinator.fallbackPrepare = fallbackPrepare
+            coordinator.fallbackTranslate = fallbackTranslate
         }
     }
 

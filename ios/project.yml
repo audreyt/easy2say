@@ -28,9 +28,8 @@ targets:
           - "App/DockVisibilityController.swift"
           - "App/V2SApp.swift"
           - "Services/UpdaterService.swift"
-          - "Services/MelongOmlxTranslationService.swift"
-          - "Services/TranslateGemmaTranslationService.swift"
           - "Services/TibetanASREngine.swift"
+          - "Services/OpenAICompatibleTranslationService.swift"
           - "UI/StatusBar/**"
           - "UI/Overlay/**"
           - "UI/Settings/**"
@@ -56,7 +55,7 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: Easy2Say
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "53"
+        CURRENT_PROJECT_VERSION: "54"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO

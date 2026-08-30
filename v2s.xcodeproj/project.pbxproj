@@ -53,10 +53,9 @@
 		A000000000000000000000A0 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A0000000000000000000009F /* WhisperKit */; };
 		A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A1 /* BreezeASR26Tokenizer.json */; };
 		A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */; };
-		A000000000000000000000B0 /* TranslateGemmaTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000AF /* TranslateGemmaTranslationService.swift */; };
 		A000000000000000000000B9 /* TibetanASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BA /* TibetanASREngine.swift */; };
 		A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C1 /* FoundationModelsTranslationService.swift */; };
-		A000000000000000000000C2 /* MelongOmlxTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C3 /* MelongOmlxTranslationService.swift */; };
+		A000000000000000000000F0 /* OpenAICompatibleTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000F1 /* OpenAICompatibleTranslationService.swift */; };
 		A000000000000000000000C4 /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C5 /* ConversationEngine.swift */; };
 		A000000000000000000000C6 /* ConversationFloorArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C7 /* ConversationFloorArbiter.swift */; };
 		A000000000000000000000C8 /* ConversationLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C9 /* ConversationLane.swift */; };
@@ -118,10 +117,9 @@
 		A0000000000000000000009C /* BreezeASR26 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BreezeASR26; path = ../../../ios/Resources/BreezeASR26; sourceTree = "<group>"; };
 		A000000000000000000000A1 /* BreezeASR26Tokenizer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26Tokenizer.json; sourceTree = "<group>"; };
 		A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = BreezeASR26TokenizerConfig.json; sourceTree = "<group>"; };
-		A000000000000000000000AF /* TranslateGemmaTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateGemmaTranslationService.swift; sourceTree = "<group>"; };
 		A000000000000000000000BA /* TibetanASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TibetanASREngine.swift; sourceTree = "<group>"; };
 		A000000000000000000000C1 /* FoundationModelsTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsTranslationService.swift; sourceTree = "<group>"; };
-		A000000000000000000000C3 /* MelongOmlxTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MelongOmlxTranslationService.swift; sourceTree = "<group>"; };
+		A000000000000000000000F1 /* OpenAICompatibleTranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleTranslationService.swift; sourceTree = "<group>"; };
 		A000000000000000000000C5 /* ConversationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationEngine.swift; sourceTree = "<group>"; };
 		A000000000000000000000C7 /* ConversationFloorArbiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationFloorArbiter.swift; sourceTree = "<group>"; };
 		A000000000000000000000C9 /* ConversationLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationLane.swift; sourceTree = "<group>"; };
@@ -257,9 +255,8 @@
 				A00000000000000000000085 /* UpdaterService.swift */,
 				A00000000000000000000096 /* TaigiASREngine.swift */,
 				A00000000000000000000098 /* TaiwanChineseNormalizer.swift */,
-				A000000000000000000000AF /* TranslateGemmaTranslationService.swift */,
 				A000000000000000000000C1 /* FoundationModelsTranslationService.swift */,
-				A000000000000000000000C3 /* MelongOmlxTranslationService.swift */,
+				A000000000000000000000F1 /* OpenAICompatibleTranslationService.swift */,
 				A000000000000000000000C5 /* ConversationEngine.swift */,
 				A000000000000000000000C7 /* ConversationFloorArbiter.swift */,
 				A000000000000000000000C9 /* ConversationLane.swift */,
@@ -468,9 +465,8 @@
 				A00000000000000000000086 /* UpdaterService.swift in Sources */,
 				A00000000000000000000097 /* TaigiASREngine.swift in Sources */,
 				A00000000000000000000099 /* TaiwanChineseNormalizer.swift in Sources */,
-				A000000000000000000000B0 /* TranslateGemmaTranslationService.swift in Sources */,
 				A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */,
-				A000000000000000000000C2 /* MelongOmlxTranslationService.swift in Sources */,
+				A000000000000000000000F0 /* OpenAICompatibleTranslationService.swift in Sources */,
 				A000000000000000000000C4 /* ConversationEngine.swift in Sources */,
 				A000000000000000000000C6 /* ConversationFloorArbiter.swift in Sources */,
 				A000000000000000000000C8 /* ConversationLane.swift in Sources */,
@@ -527,7 +523,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 46;
 				COREML_CODEGEN_LANGUAGE = None;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -537,7 +533,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.3.41;
+				MARKETING_VERSION = 0.3.42;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_MODULE_NAME = v2s;
@@ -558,7 +554,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 45;
+				CURRENT_PROJECT_VERSION = 46;
 				COREML_CODEGEN_LANGUAGE = None;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -569,7 +565,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				ONLY_ACTIVE_ARCH = NO;
-				MARKETING_VERSION = 0.3.41;
+				MARKETING_VERSION = 0.3.42;
 				PRODUCT_BUNDLE_IDENTIFIER = com.franklioxygen.v2s;
 				PRODUCT_MODULE_NAME = v2s;
 				PRODUCT_NAME = Easy2Say;

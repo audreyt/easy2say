@@ -213,6 +213,37 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(AppSettings.prefersSimplifiedChinese("zh-CN"))
     }
 
+    func testCustomTranslationSettingsDefaultForLegacyFiles() throws {
+        let data = try JSONEncoder().encode(AppSettings.default)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object.removeValue(forKey: "customTranslationBaseURL")
+        object.removeValue(forKey: "customTranslationModelID")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: legacyData)
+
+        XCTAssertEqual(decoded.customTranslationBaseURL, "")
+        XCTAssertEqual(decoded.customTranslationModelID, "")
+    }
+
+    func testCustomTranslationSettingsSurviveRoundTrip() throws {
+        var settings = AppSettings.default
+        settings.customTranslationBaseURL = "http://127.0.0.1:8001/v1"
+        settings.customTranslationModelID = "Thomson-1.0-Small"
+
+        let data = try JSONEncoder().encode(settings)
+        let encodedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertNil(encodedObject["customTranslationAPIKey"])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.customTranslationBaseURL, "http://127.0.0.1:8001/v1")
+        XCTAssertEqual(decoded.customTranslationModelID, "Thomson-1.0-Small")
+    }
+
     @MainActor
     func testMissingSettingsFileKeepsMacDefaults() {
         let missing = FileManager.default.temporaryDirectory

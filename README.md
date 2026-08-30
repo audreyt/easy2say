@@ -93,7 +93,7 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 
 ### Universal macOS package
 
-The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not TranslateGemma, private Monlam Whisper, or Melong model weights. Starting with 0.3.39, the app and installer are signed with Developer ID, notarized by Apple, and stapled. Gatekeeper accepts the download without a manual override.
+The downloadable `.pkg` contains native `arm64` and `x86_64` app slices. It bundles Breeze-ASR-26 and Silero VAD, but not private Monlam Whisper or external translation-model weights. Starting with 0.3.39, the app and installer are signed with Developer ID, notarized by Apple, and stapled. Gatekeeper accepts the download without a manual override.
 
 Version 0.3.38 is the first macOS build under the Easy2Say name and update feed. Existing `v2s` users must install this package once manually because older builds still follow the upstream feed and signing key. The installer removes `/Applications/v2s.app` only when its bundle identifier matches this app, installs `/Applications/Easy2Say.app`, and preserves the existing settings and model cache paths.
 

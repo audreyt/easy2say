@@ -130,7 +130,7 @@ struct HomeView: View {
         .onAppear {
             refreshMicrophoneAuthorization()
             model.refreshSources()
-            model.installTranslationFallbacks(on: conversation)
+            model.installTranslationBackends(on: conversation)
             updateIdleTimer()
         }
         .onDisappear {

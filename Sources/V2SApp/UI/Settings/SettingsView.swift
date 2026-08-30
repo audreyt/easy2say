@@ -193,6 +193,41 @@ struct SettingsView: View {
                     LanguageResourcesFooter(model: model)
                 }
                 settingsCard {
+                    sectionHeader(
+                        model.localized(.customTranslation),
+                        icon: "network"
+                    )
+                    Text(model.localized(.customTranslationHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Divider()
+                    SettingsControlRow(label: model.localized(.customTranslationEndpoint)) {
+                        TextField(
+                            "http://127.0.0.1:8001",
+                            text: $model.customTranslationBaseURL
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 280)
+                    }
+                    Divider()
+                    SettingsControlRow(label: model.localized(.customTranslationModel)) {
+                        TextField(
+                            "Thomson-1.0-Small",
+                            text: $model.customTranslationModelID
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 280)
+                    }
+                    Divider()
+                    SettingsControlRow(label: model.localized(.customTranslationAPIKey)) {
+                        SecureField("", text: $model.customTranslationAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 280)
+                            .privacySensitive()
+                    }
+                }
+                settingsCard {
                     sectionHeader(model.localized(.updates), icon: "arrow.triangle.2.circlepath")
                     settingsRow(model.localized(.openAtLogin)) {
                         Toggle("", isOn: launchAtLoginBinding)

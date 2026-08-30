@@ -120,7 +120,7 @@ xcodebuild \
 
 ## macOS 與上游
 
-此分支會發佈 Easy2Say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2Say-universal.pkg)下載。內建 Breeze-ASR-26 與 Silero VAD，不含 TranslateGemma、私有 Monlam Whisper 或 Melong 權重。自 0.3.39 版起，應用程式與安裝套件皆以 Developer ID 簽署，並已通過 Apple 公證、附加公證票證。Gatekeeper 可直接開啟下載檔案，無需手動略過安全設定。
+此分支會發佈 Easy2Say 的 Universal 2 macOS 安裝套件；請從[本分支最新版本](https://github.com/audreyt/easy2say/releases/latest/download/Easy2Say-universal.pkg)下載。內建 Breeze-ASR-26 與 Silero VAD，不含私有 Monlam Whisper 或外部翻譯模型權重。自 0.3.39 版起，應用程式與安裝套件皆以 Developer ID 簽署，並已通過 Apple 公證、附加公證票證。Gatekeeper 可直接開啟下載檔案，無需手動略過系統安全檢查。
 
 0.3.38 是首次改用 Easy2Say 名稱與更新來源的 macOS 版本；既有 `v2s` 使用者需手動安裝一次，安裝程式會移除同一 bundle ID 的 `/Applications/v2s.app`，並保留原有設定與模型快取。原始 macOS 專案與血緣資訊仍見 [franklioxygen/v2s](https://github.com/franklioxygen/v2s)。
 
