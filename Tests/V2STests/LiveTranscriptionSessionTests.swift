@@ -1058,6 +1058,9 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             settingsStore: SettingsStore(fileURL: settingsURL),
             sourceCatalogService: SourceCatalogService()
         )
+        // These lanes assert generation-race semantics, not idle timing: keep the
+        // committed-caption idle archiver from deciding the outcome on a slow host.
+        model.committedCaptionIdleArchiveDelayForTesting = .infinity
 
         let id1 = UUID()
         let sentence1 = RecognizedSentence(
@@ -1216,6 +1219,8 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             settingsStore: SettingsStore(fileURL: settingsURL),
             sourceCatalogService: SourceCatalogService()
         )
+        // Generation-race semantics only; see the normal lane.
+        model.committedCaptionIdleArchiveDelayForTesting = .infinity
 
         let evidence = DualLaneEvidence(
             arbiterFloor: .secondary,
@@ -1396,6 +1401,101 @@ final class LiveTranscriptionSessionTests: XCTestCase {
         XCTAssertEqual(model.transcriptEntriesForTesting[0].translatedText, "各位現場與線上觀眾大家好。")
         XCTAssertEqual(model.overlayState?.sourceText, "歡迎參加演講")
         XCTAssertEqual(model.overlayState?.translatedText, "Welcome to the talk")
+    }
+
+    @MainActor
+    func testAppModelIdleCommittedCaptionArchivesIntoHistoryAndClearsOverlay() async {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-idle-archive-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.committedCaptionIdleArchiveDelayForTesting = 0.05
+
+        let id1 = UUID()
+        let sentence = RecognizedSentence(
+            text: "Only sentence.",
+            promotionSegmentID: id1,
+            replacesPromotionSegmentID: nil,
+            heardLanguageID: "en"
+        )
+        model.enqueueRecognizedSentenceForTesting(sentence, sourceLanguageID: "en", targetLanguageID: "zh-Hant")
+        let generation = model.currentTranslationGenerationForTesting(captionID: id1)
+        XCTAssertNotNil(generation)
+        XCTAssertTrue(
+            model.completeCaptionTranslationForTesting(
+                captionID: id1,
+                generation: generation!,
+                translatedText: "唯一的句子。"
+            )
+        )
+        await model.runCaptionQueueTurnForTesting()
+
+        let captionID = model.transcriptEntriesForTesting.first?.id
+        XCTAssertNotNil(captionID)
+        XCTAssertEqual(model.overlayState?.sourceText, "Only sentence.")
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+
+        // No further speech: end the display hold and let the idle archiver run.
+        model.completeHeldCaptionForTesting()
+        for _ in 0..<80 where model.overlayHistoryForTesting.isEmpty {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 1)
+        XCTAssertEqual(model.overlayHistoryForTesting[0].id, captionID)
+        XCTAssertEqual(model.overlayHistoryForTesting[0].sourceText, "Only sentence.")
+        XCTAssertEqual(model.overlayHistoryForTesting[0].translatedText, "唯一的句子。")
+        XCTAssertEqual(model.overlayState?.sourceText, "")
+        XCTAssertEqual(model.overlayState?.translatedText, "")
+        // Scrollback clears; the transcript keeps the sentence.
+        XCTAssertEqual(model.transcriptEntriesForTesting.count, 1)
+        XCTAssertEqual(model.transcriptEntriesForTesting[0].sourceText, "Only sentence.")
+        XCTAssertEqual(model.transcriptEntriesForTesting[0].translatedText, "唯一的句子。")
+    }
+
+    @MainActor
+    func testAppModelSuspendedIdleArchiveKeepsCommittedCaptionDisplayed() async {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-appmodel-idle-archive-suspended-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.committedCaptionIdleArchiveDelayForTesting = .infinity
+
+        let id1 = UUID()
+        let sentence = RecognizedSentence(
+            text: "Only sentence.",
+            promotionSegmentID: id1,
+            replacesPromotionSegmentID: nil,
+            heardLanguageID: "en"
+        )
+        model.enqueueRecognizedSentenceForTesting(sentence, sourceLanguageID: "en", targetLanguageID: "zh-Hant")
+        let generation = model.currentTranslationGenerationForTesting(captionID: id1)
+        XCTAssertNotNil(generation)
+        XCTAssertTrue(
+            model.completeCaptionTranslationForTesting(
+                captionID: id1,
+                generation: generation!,
+                translatedText: "唯一的句子。"
+            )
+        )
+        await model.runCaptionQueueTurnForTesting()
+        XCTAssertEqual(model.overlayState?.sourceText, "Only sentence.")
+
+        // Idle well past the production archive delay; suspension must hold.
+        model.completeHeldCaptionForTesting()
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        XCTAssertEqual(model.overlayHistoryForTesting.count, 0)
+        XCTAssertEqual(model.overlayState?.sourceText, "Only sentence.")
+        XCTAssertEqual(model.overlayState?.translatedText, "唯一的句子。")
     }
 
     @MainActor

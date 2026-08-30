@@ -3897,10 +3897,23 @@ final class AppModel: ObservableObject {
         committedCaptionArchiveTask = nil
     }
 
+    /// Idle-archive delay actually in effect. Tests may override it; a non-finite
+    /// value suspends idle archiving so wall-clock speed cannot decide assertions
+    /// about the committed caption.
+    private var effectiveCommittedCaptionIdleArchiveDelay: TimeInterval {
+#if DEBUG
+        committedCaptionIdleArchiveDelayForTesting ?? Self.committedCaptionIdleArchiveDelay
+#else
+        Self.committedCaptionIdleArchiveDelay
+#endif
+    }
+
     private func scheduleCommittedCaptionArchiveIfNeeded() {
         cancelCommittedCaptionArchive()
 
-        guard isCaptionPipelineActive,
+        let delay = effectiveCommittedCaptionIdleArchiveDelay
+        guard delay.isFinite,
+              isCaptionPipelineActive,
               pendingCaptions.isEmpty,
               hasActiveDraftOverlay == false,
               currentCommittedCaptionHistoryPayload() != nil else {
@@ -3908,7 +3921,7 @@ final class AppModel: ObservableObject {
         }
 
         let elapsed = max(0, Date().timeIntervalSince(displayedCaptionLastVisualUpdateAt))
-        let remainingDelay = max(0, Self.committedCaptionIdleArchiveDelay - elapsed)
+        let remainingDelay = max(0, delay - elapsed)
 
         committedCaptionArchiveTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -4116,6 +4129,12 @@ final class AppModel: ObservableObject {
 #if DEBUG
     private(set) var liveCaptionFrameForTesting: CGRect?
     private(set) var liveCaptionFramesForTesting: [CGRect] = []
+
+    /// Overrides the committed-caption idle-archive delay. `nil` keeps the
+    /// production delay; `.infinity` suspends idle archiving entirely, which
+    /// tests need whenever they assert the committed caption across turns that
+    /// take longer than the production delay on a slow machine.
+    var committedCaptionIdleArchiveDelayForTesting: TimeInterval?
 
     func setOverlayStateForTesting(_ state: OverlayPreviewState) {
         overlayState = state
