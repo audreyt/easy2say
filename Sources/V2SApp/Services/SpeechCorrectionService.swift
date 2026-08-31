@@ -188,6 +188,7 @@ struct SpeechCorrectionTable: Equatable, Sendable {
         let foldedAlias: String
         let canonical: String
         let aliasCharacterCount: Int
+        let canonicalCharacterCount: Int
         let isCaseInsensitive: Bool
         let isASCII: Bool
         let asciiLowercasedBytes: [UInt8]
@@ -208,16 +209,23 @@ struct SpeechCorrectionTable: Equatable, Sendable {
         table(for: languageID)?.canonicalTerms ?? []
     }
 
-    func apply(_ text: String, languageID: String) -> String {
+    func apply(
+        _ text: String,
+        stablePrefixLength: Int,
+        languageID: String
+    ) -> (text: String, stablePrefixLength: Int) {
+        let clampedBoundary = max(0, min(stablePrefixLength, text.count))
         guard text.isEmpty == false,
               let table = table(for: languageID),
               table.patternsByFirstCharacter.isEmpty == false else {
-            return text
+            return (text, clampedBoundary)
         }
 
         var output = ""
         output.reserveCapacity(text.utf8.count)
         var index = text.startIndex
+        var rawOffset = 0
+        var correctedBoundary = 0
 
         while index < text.endIndex {
             let first = text[index]
@@ -267,20 +275,33 @@ struct SpeechCorrectionTable: Equatable, Sendable {
                        hasNonCJKWordCharacter(at: aliasEnd, in: text) {
                         continue
                     }
+                    let aliasEndOffset = rawOffset + pattern.aliasCharacterCount
+                    if aliasEndOffset <= clampedBoundary {
+                        correctedBoundary += pattern.canonicalCharacterCount
+                    }
                     output.append(pattern.canonical)
                     index = aliasEnd
+                    rawOffset = aliasEndOffset
                     matched = true
                     break
                 }
             }
 
             if matched == false {
+                if rawOffset < clampedBoundary {
+                    correctedBoundary += 1
+                }
                 output.append(first)
                 index = text.index(after: index)
+                rawOffset += 1
             }
         }
 
-        return output
+        return (output, correctedBoundary)
+    }
+
+    func apply(_ text: String, languageID: String) -> String {
+        apply(text, stablePrefixLength: text.count, languageID: languageID).text
     }
 
     private func table(for languageID: String) -> LanguageTable? {
@@ -499,6 +520,7 @@ enum SpeechCorrectionService {
                         foldedAlias: aliasKey,
                         canonical: canonical,
                         aliasCharacterCount: alias.count,
+                        canonicalCharacterCount: canonical.count,
                         isCaseInsensitive: isCaseInsensitive,
                         isASCII: isASCII,
                         asciiLowercasedBytes: asciiLowercasedBytes,

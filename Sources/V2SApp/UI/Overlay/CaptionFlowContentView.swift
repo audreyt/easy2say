@@ -7,6 +7,10 @@ struct CaptionFlowContentView: View {
     var updatesModelHistoryVisibleCount: Bool = false
     var reservesColumnHeaderSpace: Bool = true
     var columnHeaderOpacity: Double = 1.0
+    var showsHistory: Bool = true
+    var alignsTopDownCaptionsLeading: Bool = false
+    var animatesLiveCaptionLineEntrance: Bool = true
+    var stabilizesLiveCaptionLinePositions: Bool = false
 
     @State private var lastLiveLayersHeight: CGFloat = 0.0
     @State private var measuredHistoryEntryHeights: [UUID: CGFloat] = [:]
@@ -17,11 +21,13 @@ struct CaptionFlowContentView: View {
                 GeometryReader { proxy in
                     let captionAreaHeight = proxy.size.height - captionColumnHeaderHeight
                     let availableHistoryHeight = availableHistoryHeight(for: captionAreaHeight, state: state)
-                    let visibleHistoryEntries = historyVisibleEntries(from: state.history, availableHeight: availableHistoryHeight)
+                    let visibleHistoryEntries = showsHistory
+                        ? historyVisibleEntries(from: state.history, availableHeight: availableHistoryHeight)
+                        : []
                     let visibleHistoryCount = visibleHistoryEntries.count
 
                     ZStack(alignment: .bottom) {
-                        VStack(alignment: .center, spacing: Self.liveStackSpacing) {
+                        VStack(alignment: liveStackHorizontalAlignment, spacing: Self.liveStackSpacing) {
                             ForEach(Array(visibleHistoryEntries.enumerated()), id: \.element.id) { index, entry in
                                 historyEntry(
                                     entry,
@@ -99,13 +105,9 @@ struct CaptionFlowContentView: View {
     private func liveLayers(_ state: OverlayPreviewState) -> some View {
         let presentation = state.liveCaptionPresentation
 
-        return VStack(alignment: .center, spacing: Self.liveStackSpacing) {
-            if let precedingCaption = presentation.precedingCommittedCaption {
-                precedingCommittedLayer(precedingCaption)
-            }
-
-            if let currentCaption = presentation.currentCaption {
-                currentCaptionLayer(currentCaption)
+        return Group {
+            if let displayCaption = presentation.displayCaption {
+                currentCaptionLayer(displayCaption)
             } else if shouldReserveCurrentCaptionSlot(for: state) {
                 currentCaptionSlotPlaceholder
             }
@@ -115,13 +117,22 @@ struct CaptionFlowContentView: View {
     private func currentCaptionLayer(
         _ caption: OverlayLiveCaptionPresentation.Caption
     ) -> some View {
-        let isTentative = caption.phase == .tentative
         let layer = captionPair(
-            translated: caption.translatedText,
-            translatedColor: isTentative ? tentativeSubtitleColor : baseSubtitleColor,
-            source: caption.sourceText,
-            sourceColor: isTentative ? tentativeSubtitleColor : subtitleColor(opacity: 0.82),
-            reservesEmptyLines: true
+            translated: CaptionLaneContent(
+                text: caption.translatedText,
+                color: baseSubtitleColor,
+                agedPrefixLength: caption.translatedAgedPrefixLength,
+                stablePrefixLength: caption.translatedStablePrefixLength
+            ),
+            source: CaptionLaneContent(
+                text: caption.sourceText,
+                color: baseSubtitleColor,
+                agedPrefixLength: caption.sourceAgedPrefixLength,
+                stablePrefixLength: caption.sourceStablePrefixLength
+            ),
+            reservesEmptyLines: true,
+            maximumVisibleLines: Self.liveCaptionLineLimit,
+            risesNewLines: animatesLiveCaptionLineEntrance
         )
         .padding(.bottom, Self.currentCaptionBottomInset)
 
@@ -147,41 +158,35 @@ struct CaptionFlowContentView: View {
     }
 #endif
 
-    private func precedingCommittedLayer(
-        _ caption: OverlayLiveCaptionPresentation.Caption
-    ) -> some View {
-        captionPair(
-            translated: caption.translatedText,
-            translatedColor: subtitleColor(opacity: 0.68),
-            source: caption.sourceText,
-            sourceColor: subtitleColor(opacity: 0.46)
-        )
-    }
-
-    private func translatedText(_ text: String, color: Color) -> some View {
-        captionText(
-            attributedCaptionText(
-                text: text,
-                fillColor: color
-            ),
-            rawText: text,
+    private func translatedText(
+        _ lane: CaptionLaneContent,
+        maximumVisibleLines: Int? = nil,
+        risesNewLines: Bool = false
+    ) -> CaptionLaneText {
+        captionLaneText(
+            lane,
             fontSize: model.overlayStyle.scaledTranslatedFontSize,
-            weight: .semibold
+            weight: .semibold,
+            lineHeight: translatedLineHeight,
+            maximumVisibleLines: maximumVisibleLines,
+            risesNewLines: risesNewLines
         )
     }
 
-    private func sourceText(_ text: String, color: Color) -> some View {
-        captionText(
-            attributedCaptionText(
-                text: text,
-                fillColor: color
-            ),
-            rawText: text,
+    private func sourceText(
+        _ lane: CaptionLaneContent,
+        maximumVisibleLines: Int? = nil,
+        risesNewLines: Bool = false
+    ) -> CaptionLaneText {
+        captionLaneText(
+            lane,
             fontSize: displayedSourceFontSize,
-            weight: displayedSourceFontWeight
+            weight: displayedSourceFontWeight,
+            lineHeight: sourceLineHeight,
+            maximumVisibleLines: maximumVisibleLines,
+            risesNewLines: risesNewLines
         )
     }
-
 
     private func historyEntry(
         _ entry: OverlayHistoryEntry,
@@ -195,10 +200,14 @@ struct CaptionFlowContentView: View {
         let sourceOpacity = 0.22 + (0.24 * ageProgress)
 
         return captionPair(
-            translated: entry.translatedText,
-            translatedColor: subtitleColor(opacity: translatedOpacity),
-            source: entry.sourceText,
-            sourceColor: subtitleColor(opacity: sourceOpacity)
+            translated: CaptionLaneContent(
+                text: entry.translatedText,
+                color: subtitleColor(opacity: translatedOpacity)
+            ),
+            source: CaptionLaneContent(
+                text: entry.sourceText,
+                color: subtitleColor(opacity: sourceOpacity)
+            )
         )
         .background(historyEntryHeightReader(for: entry.id))
     }
@@ -235,10 +244,9 @@ struct CaptionFlowContentView: View {
     }
 
     private func shouldReserveCurrentCaptionSlot(for state: OverlayPreviewState) -> Bool {
-        state.liveCaptionPresentation.currentCaption != nil
+        state.liveCaptionPresentation.displayCaption != nil
             || model.shouldReserveCommittedCaptionSlot
     }
-
 
     private func historyEntryHeight(for entry: OverlayHistoryEntry) -> CGFloat {
         max(measuredHistoryEntryHeights[entry.id] ?? 0, estimatedHistoryEntryHeight(for: entry))
@@ -257,22 +265,12 @@ struct CaptionFlowContentView: View {
     }
 
     private func estimatedLiveLayersHeight(for state: OverlayPreviewState) -> CGFloat {
-        let presentation = state.liveCaptionPresentation
-        let captionHeight = estimatedCaptionPairHeight(
+        guard shouldReserveCurrentCaptionSlot(for: state) else { return 0 }
+        return estimatedCaptionPairHeight(
             showsTranslated: showsTranslatedSubtitle,
-            showsSource: showsOriginalSubtitle
-        )
-        var height: CGFloat = 0
-
-        if presentation.precedingCommittedCaption != nil {
-            height += captionHeight + Self.liveStackSpacing
-        }
-
-        if shouldReserveCurrentCaptionSlot(for: state) {
-            height += captionHeight + Self.currentCaptionBottomInset
-        }
-
-        return height
+            showsSource: showsOriginalSubtitle,
+            linesPerLane: Self.liveCaptionLineLimit
+        ) + Self.currentCaptionBottomInset
     }
 
     private var currentCaptionSlotPlaceholder: some View {
@@ -281,7 +279,8 @@ struct CaptionFlowContentView: View {
             .frame(
                 height: estimatedCaptionPairHeight(
                     showsTranslated: showsTranslatedSubtitle,
-                    showsSource: showsOriginalSubtitle
+                    showsSource: showsOriginalSubtitle,
+                    linesPerLane: Self.liveCaptionLineLimit
                 ) + Self.currentCaptionBottomInset
             )
             .accessibilityHidden(true)
@@ -301,38 +300,37 @@ struct CaptionFlowContentView: View {
         }
     }
 
-
     @ViewBuilder
     private func captionPair(
-        translated: String,
-        translatedColor: Color,
-        source: String,
-        sourceColor: Color,
-        reservesEmptyLines: Bool = false
+        translated: CaptionLaneContent,
+        source: CaptionLaneContent,
+        reservesEmptyLines: Bool = false,
+        maximumVisibleLines: Int? = nil,
+        risesNewLines: Bool = false
     ) -> some View {
         if usesColumnCaptions {
             HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
                 inLayoutOrder(
                     translated: {
                         captionColumn {
-                            if translated.isEmpty == false {
-                                translatedText(translated, color: translatedColor)
-                            } else if reservesEmptyLines {
-                                translatedText(" ", color: translatedColor)
-                                    .hidden()
-                                    .accessibilityHidden(true)
+                            if translated.text.isEmpty == false || reservesEmptyLines {
+                                translatedText(
+                                    translated,
+                                    maximumVisibleLines: maximumVisibleLines,
+                                    risesNewLines: risesNewLines
+                                )
                             }
                         }
                         .environment(\.layoutDirection, translatedCaptionLayoutDirection)
                     },
                     original: {
                         captionColumn {
-                            if source.isEmpty == false {
-                                sourceText(source, color: sourceColor)
-                            } else if reservesEmptyLines {
-                                sourceText(" ", color: sourceColor)
-                                    .hidden()
-                                    .accessibilityHidden(true)
+                            if source.text.isEmpty == false || reservesEmptyLines {
+                                sourceText(
+                                    source,
+                                    maximumVisibleLines: maximumVisibleLines,
+                                    risesNewLines: risesNewLines
+                                )
                             }
                         }
                         .environment(\.layoutDirection, originalCaptionLayoutDirection)
@@ -343,10 +341,10 @@ struct CaptionFlowContentView: View {
         } else {
             stackedCaptionPair(
                 translated: translated,
-                translatedColor: translatedColor,
                 source: source,
-                sourceColor: sourceColor,
-                reservesEmptyLines: reservesEmptyLines
+                reservesEmptyLines: reservesEmptyLines,
+                maximumVisibleLines: maximumVisibleLines,
+                risesNewLines: risesNewLines
             )
         }
     }
@@ -374,36 +372,35 @@ struct CaptionFlowContentView: View {
     }
 
     private func stackedCaptionPair(
-        translated: String,
-        translatedColor: Color,
-        source: String,
-        sourceColor: Color,
-        reservesEmptyLines: Bool
+        translated: CaptionLaneContent,
+        source: CaptionLaneContent,
+        reservesEmptyLines: Bool,
+        maximumVisibleLines: Int?,
+        risesNewLines: Bool
     ) -> some View {
         let usesFallback = usesSourceAsTranslationFallback(
-            translated: translated,
-            source: source
+            translated: translated.text,
+            source: source.text
         ) && (reservesEmptyLines == false || showsOriginalSubtitle == false)
-        let primaryTranslatedText = usesFallback ? source : translated
+        // The fallback lane borrows the original's text and run boundaries but
+        // keeps the translation lane's colour, so history ageing still applies.
+        let primaryTranslated = usesFallback ? source.recolored(translated.color) : translated
         let showsTranslatedLine = showsTranslatedSubtitle
-            && (primaryTranslatedText.isEmpty == false || reservesEmptyLines)
+            && (primaryTranslated.text.isEmpty == false || reservesEmptyLines)
         let showsSourceLine = showsOriginalSubtitle
             && usesFallback == false
-            && (source.isEmpty == false || reservesEmptyLines)
+            && (source.text.isEmpty == false || reservesEmptyLines)
 
-        return VStack(spacing: Self.captionPairSpacing) {
+        return VStack(alignment: liveStackHorizontalAlignment, spacing: Self.captionPairSpacing) {
             inLayoutOrder(
                 translated: {
                     Group {
-                        if primaryTranslatedText.isEmpty == false {
+                        if primaryTranslated.text.isEmpty == false || showsTranslatedLine {
                             translatedText(
-                                primaryTranslatedText,
-                                color: translatedColor
+                                primaryTranslated,
+                                maximumVisibleLines: maximumVisibleLines,
+                                risesNewLines: risesNewLines
                             )
-                        } else if showsTranslatedLine {
-                            translatedText(" ", color: translatedColor)
-                                .hidden()
-                                .accessibilityHidden(true)
                         }
                     }
                     .environment(
@@ -413,15 +410,12 @@ struct CaptionFlowContentView: View {
                 },
                 original: {
                     Group {
-                        if source.isEmpty == false && usesFallback == false {
+                        if (source.text.isEmpty == false && usesFallback == false) || showsSourceLine {
                             sourceText(
                                 source,
-                                color: sourceColor
+                                maximumVisibleLines: maximumVisibleLines,
+                                risesNewLines: risesNewLines
                             )
-                        } else if showsSourceLine {
-                            sourceText(" ", color: sourceColor)
-                                .hidden()
-                                .accessibilityHidden(true)
                         }
                     }
                     .environment(\.layoutDirection, originalCaptionLayoutDirection)
@@ -449,15 +443,22 @@ struct CaptionFlowContentView: View {
     }
 
     private var translatedLineHeight: CGFloat {
-        CGFloat(model.overlayStyle.scaledTranslatedFontSize + 10.0)
+        captionLineHeight(
+            fontSize: model.overlayStyle.scaledTranslatedFontSize,
+            weight: .semibold
+        )
     }
 
     private var sourceLineHeight: CGFloat {
-        if usesTranslatedTypographyForSourceText {
-            return translatedLineHeight
-        }
+        captionLineHeight(
+            fontSize: displayedSourceFontSize,
+            weight: usesTranslatedTypographyForSourceText ? .semibold : .regular
+        )
+    }
 
-        return CGFloat(model.overlayStyle.scaledSourceFontSize + 14.0)
+    private func captionLineHeight(fontSize: Double, weight: NSFont.Weight) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: CGFloat(fontSize), weight: weight)
+        return ceil(font.ascender - font.descender + font.leading)
     }
 
     private var usesTranslatedTypographyForSourceText: Bool {
@@ -476,10 +477,12 @@ struct CaptionFlowContentView: View {
 
     private func estimatedCaptionPairHeight(
         showsTranslated: Bool,
-        showsSource: Bool
+        showsSource: Bool,
+        linesPerLane: Int = 1
     ) -> CGFloat {
-        let translatedHeight = showsTranslated ? translatedLineHeight : 0
-        let sourceHeight = showsSource ? sourceLineHeight : 0
+        let lineCount = CGFloat(max(1, linesPerLane))
+        let translatedHeight = showsTranslated ? translatedLineHeight * lineCount : 0
+        let sourceHeight = showsSource ? sourceLineHeight * lineCount : 0
 
         if usesColumnCaptions {
             return max(translatedHeight, sourceHeight)
@@ -495,12 +498,6 @@ struct CaptionFlowContentView: View {
 
     private var translatedCaptionLayoutDirection: LayoutDirection {
         captionLayoutDirection(for: model.outputLanguageID)
-    }
-
-    private var draftTranslatedCaptionLayoutDirection: LayoutDirection {
-        model.shouldReserveDraftTranslationSlot && showsOriginalSubtitle == false
-            ? originalCaptionLayoutDirection
-            : translatedCaptionLayoutDirection
     }
 
     private var originalCaptionLayoutDirection: LayoutDirection {
@@ -523,12 +520,21 @@ struct CaptionFlowContentView: View {
             && showsOriginalSubtitle
     }
 
+    private var usesLeadingCaptionAlignment: Bool {
+        usesColumnCaptions
+            || (alignsTopDownCaptionsLeading && captionLayout == .topDown)
+    }
+
     private var captionTextAlignment: TextAlignment {
-        usesColumnCaptions ? .leading : .center
+        usesLeadingCaptionAlignment ? .leading : .center
     }
 
     private var captionFrameAlignment: Alignment {
-        usesColumnCaptions ? .leading : .center
+        usesLeadingCaptionAlignment ? .leading : .center
+    }
+
+    private var liveStackHorizontalAlignment: HorizontalAlignment {
+        usesLeadingCaptionAlignment ? .leading : .center
     }
 
     private var captionColumnHeaderHeight: CGFloat {
@@ -616,82 +622,27 @@ struct CaptionFlowContentView: View {
         )
     }
 
-    private func captionText(
-        _ attributedText: AttributedString,
-        rawText: String,
+    private func captionLaneText(
+        _ lane: CaptionLaneContent,
         fontSize: Double,
-        weight: Font.Weight
-    ) -> some View {
-        ZStack {
-            if model.overlayStyle.showsTextOutline, rawText.isEmpty == false {
-                outlineText(
-                    rawText,
-                    fontSize: fontSize,
-                    weight: weight
-                )
-            }
-
-            Text(attributedText)
-                .font(.system(size: fontSize, weight: weight))
-                .multilineTextAlignment(captionTextAlignment)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: captionFrameAlignment)
-        }
-    }
-
-    private func attributedCaptionText(
-        text: String,
-        fillColor: Color
-    ) -> AttributedString {
-        var attributed = AttributedString(text)
-        attributed.foregroundColor = fillColor
-        return attributed
-    }
-
-    private func draftSourceAttributedText(
-        stable: String,
-        mutable: String
-    ) -> AttributedString {
-        var attributed = AttributedString()
-
-        if stable.isEmpty == false {
-            var stablePart = AttributedString(stable)
-            stablePart.foregroundColor = subtitleColor(opacity: 0.62)
-            attributed += stablePart
-        }
-
-        if mutable.isEmpty == false {
-            var mutablePart = AttributedString(mutable)
-            mutablePart.foregroundColor = subtitleColor(opacity: 0.48)
-            attributed += mutablePart
-        }
-
-        return attributed
-    }
-
-    private func outlineText(
-        _ text: String,
-        fontSize: Double,
-        weight: Font.Weight
-    ) -> some View {
-        ZStack {
-            ForEach(Self.textOutlineOffsets.indices, id: \.self) { index in
-                let offset = Self.textOutlineOffsets[index]
-                Text(text)
-                    .font(.system(size: fontSize, weight: weight))
-                    .foregroundStyle(baseTextOutlineColor)
-                    .multilineTextAlignment(captionTextAlignment)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: captionFrameAlignment)
-                    .offset(x: offset.width, y: offset.height)
-            }
-        }
-    }
-
-    private var tentativeSubtitleColor: Color {
-        Color(nsColor: .secondaryLabelColor)
+        weight: Font.Weight,
+        lineHeight: CGFloat,
+        maximumVisibleLines: Int?,
+        risesNewLines: Bool
+    ) -> CaptionLaneText {
+        CaptionLaneText(
+            text: lane.text,
+            attributedText: lane.runs.attributedString(baseColor: lane.color),
+            fontSize: fontSize,
+            weight: weight,
+            lineHeight: lineHeight,
+            maximumVisibleLines: maximumVisibleLines,
+            textAlignment: captionTextAlignment,
+            frameAlignment: captionFrameAlignment,
+            outlineColor: model.overlayStyle.showsTextOutline ? baseTextOutlineColor : nil,
+            risesNewLines: risesNewLines,
+            stabilizesLinePositions: stabilizesLiveCaptionLinePositions
+        )
     }
 
     private var baseSubtitleColor: Color {
@@ -708,6 +659,7 @@ struct CaptionFlowContentView: View {
 }
 
 extension CaptionFlowContentView {
+    static let liveCaptionLineLimit = 2
     static let liveStackSpacing: CGFloat = 10.0
     static let currentCaptionBottomInset: CGFloat = 3.0
     static let captionPairSpacing: CGFloat = 4.0
@@ -727,7 +679,378 @@ extension CaptionFlowContentView {
     ]
 }
 
+/// One caption lane as the flow renders it: the text, the base colour it draws
+/// in, and the boundaries that split it into aged, stable, and mutable runs.
+struct CaptionLaneContent: Equatable {
+    let text: String
+    let color: Color
+    let agedPrefixLength: Int
+    /// `nil` means the lane is settled text with no revisable tail — history.
+    let stablePrefixLength: Int?
 
+    init(
+        text: String,
+        color: Color,
+        agedPrefixLength: Int = 0,
+        stablePrefixLength: Int? = nil
+    ) {
+        self.text = text
+        self.color = color
+        self.agedPrefixLength = agedPrefixLength
+        self.stablePrefixLength = stablePrefixLength
+    }
+
+    var runs: OverlayCaptionRuns {
+        OverlayCaptionRuns(
+            text: text,
+            agedPrefixLength: agedPrefixLength,
+            stablePrefixLength: stablePrefixLength ?? text.count
+        )
+    }
+
+    func recolored(_ color: Color) -> CaptionLaneContent {
+        CaptionLaneContent(
+            text: text,
+            color: color,
+            agedPrefixLength: agedPrefixLength,
+            stablePrefixLength: stablePrefixLength
+        )
+    }
+}
+
+/// A settled native text layout: the exact string that produced it, the number
+/// of visual lines SwiftUI wrapped it into, and the width it was measured at.
+struct CaptionLineRiseLayoutSnapshot: Equatable {
+    let text: String
+    let lineCount: Int
+    let width: CGFloat
+
+    init(text: String, lineCount: Int, width: CGFloat) {
+        self.text = text
+        self.lineCount = lineCount
+        self.width = width
+    }
+
+    /// The settled layout of a lane that has no caption text yet.
+    static func empty(width: CGFloat) -> CaptionLineRiseLayoutSnapshot {
+        CaptionLineRiseLayoutSnapshot(text: "", lineCount: 0, width: width)
+    }
+}
+
+/// Which visual lines of the current layout are newly added and should rise.
+struct CaptionLineRisePlan: Equatable {
+    let enteringLineIndices: Set<Int>
+
+    /// Nothing rises: every visual line draws fully settled.
+    static let settled = CaptionLineRisePlan(enteringLineIndices: [])
+
+    var isEmpty: Bool {
+        enteringLineIndices.isEmpty
+    }
+}
+
+/// The live-caption line rise: only text the analyzer *added* moves, and only
+/// the visual lines that addition created.
+enum CaptionLineRise {
+    static let duration: Double = 0.24
+    /// Rise distance as a fraction of the lane width, so the motion keeps its
+    /// proportion when the overlay is resized or the display changes.
+    static let translationRatio: CGFloat = 0.007
+    static let curve = UnitCurve.bezier(
+        startControlPoint: UnitPoint(x: 0.16, y: 1.0),
+        endControlPoint: UnitPoint(x: 0.3, y: 1.0)
+    )
+
+    static func translation(forWidth width: CGFloat) -> CGFloat {
+        width * translationRatio
+    }
+
+    /// Pure: decides which visual lines are entering by comparing two settled
+    /// layouts. Deliberately conservative — anything that is not a strict text
+    /// prefix addition producing extra visual lines draws fully settled, so
+    /// mutable-tail rewrites, stable-boundary moves, final promotion, removal,
+    /// and width reflow never animate.
+    static func plan(
+        previous: CaptionLineRiseLayoutSnapshot?,
+        candidate: CaptionLineRiseLayoutSnapshot
+    ) -> CaptionLineRisePlan {
+        guard let previous else { return .settled }
+        guard previous.width == candidate.width else { return .settled }
+        guard previous.text != candidate.text else { return .settled }
+        guard candidate.text.hasPrefix(previous.text) else { return .settled }
+        guard candidate.lineCount > previous.lineCount else { return .settled }
+
+        return CaptionLineRisePlan(
+            enteringLineIndices: Set(previous.lineCount..<candidate.lineCount)
+        )
+    }
+}
+
+/// Lifts the entering visual lines into place. Every other line draws exactly
+/// as SwiftUI laid it out, so a revision inside an existing line — or the whole
+/// lane reflowing — never re-animates settled text.
+struct CaptionLineRiseRenderer: TextRenderer {
+    var progress: Double
+    var enteringLineIndices: Set<Int>
+    var translation: CGFloat
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func draw(layout: Text.Layout, in ctx: inout GraphicsContext) {
+        let settledProgress = min(max(progress, 0.0), 1.0)
+
+        for (index, line) in layout.enumerated() {
+            guard enteringLineIndices.contains(index) else {
+                ctx.draw(line)
+                continue
+            }
+
+            var lineContext = ctx
+            lineContext.opacity = settledProgress
+            lineContext.translateBy(x: 0, y: translation * (1.0 - settledProgress))
+            lineContext.draw(line)
+        }
+    }
+}
+
+/// One rendered caption lane, outline and foreground drawn by a single text
+/// renderer so they stay pixel-synchronised. A hidden probe lays incoming text
+/// out at the visible lane's own width and publishes it through `Text.LayoutKey`
+/// outside the draw phase. The lane then swaps the measured caption into its one
+/// visible slot together with its presentation decision. Animated lanes can rise
+/// from their first painted frame; stabilized lanes keep the first visible
+/// baseline fixed while a second line fills, then clip from the top only when
+/// the oldest line rolls out.
+struct CaptionLaneText: View {
+    let text: String
+    let attributedText: AttributedString
+    let fontSize: Double
+    let weight: Font.Weight
+    let lineHeight: CGFloat
+    let maximumVisibleLines: Int?
+    let textAlignment: TextAlignment
+    let frameAlignment: Alignment
+    let outlineColor: Color?
+    let risesNewLines: Bool
+    let stabilizesLinePositions: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var visible: VisibleCaption?
+    @State private var measured: MeasuredCandidate?
+    @State private var enteringLineIndices: Set<Int> = []
+    @State private var riseGeneration: Int = 0
+
+    /// What the lane is drawing right now, paired with the settled layout it was
+    /// measured at. One value, so caption text and its rise decision can only
+    /// ever commit together.
+    private struct VisibleCaption: Equatable {
+        let attributedText: AttributedString
+        let layout: CaptionLineRiseLayoutSnapshot
+    }
+
+    /// One hidden measurement: which string was laid out, into how many visual
+    /// lines, and at what width. All three come from the same layout pass, so a
+    /// plan can never pair a new width's line count with the old width.
+    private struct MeasuredCandidate: Equatable {
+        let text: String
+        let lineCount: Int
+        let width: CGFloat
+    }
+
+    var body: some View {
+        if risesNewLines || stabilizesLinePositions {
+            clipped(preflightedLane)
+                .background(alignment: .top) { candidateProbe }
+                // A boundary move — final promotion, or a new aged prefix —
+                // changes the runs without changing the string, so the probe's
+                // layout does not change and cannot report it.
+                .onChange(of: attributedText) { _, _ in
+                    reconcile()
+                }
+        } else {
+            // History never revises, rises, or needs a stable two-line viewport.
+            clipped(
+                laneLayers(text: text, attributedText: attributedText)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func clipped<Content: View>(_ content: Content) -> some View {
+        if let maximumVisibleLines {
+            content
+                .frame(
+                    height: lineHeight * CGFloat(max(1, maximumVisibleLines)),
+                    alignment: stabilizesLinePositions ? .top : .bottom
+                )
+                .clipped()
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var preflightedLane: some View {
+        if risesNewLines {
+            risingLane
+        } else {
+            visibleLane
+        }
+    }
+
+    private var visibleLane: some View {
+        laneLayers(
+            text: visible?.layout.text ?? "",
+            attributedText: visible?.attributedText ?? AttributedString()
+        )
+        .offset(y: stabilizedLineOffset)
+    }
+
+    private var stabilizedLineOffset: CGFloat {
+        guard stabilizesLinePositions,
+              let maximumVisibleLines,
+              let lineCount = visible?.layout.lineCount,
+              lineCount > maximumVisibleLines else {
+            return 0
+        }
+        return -lineHeight * CGFloat(lineCount - maximumVisibleLines)
+    }
+
+    private var risingLane: some View {
+        let entering = enteringLineIndices
+        // The rise distance belongs to the width the entering lines were
+        // measured at, not to whatever the container may have become since.
+        let translation = CaptionLineRise.translation(forWidth: visible?.layout.width ?? 0)
+
+        return visibleLane
+        .keyframeAnimator(
+            initialValue: 1.0,
+            trigger: riseGeneration,
+            content: { lane, progress in
+                lane.textRenderer(
+                    CaptionLineRiseRenderer(
+                        progress: progress,
+                        enteringLineIndices: entering,
+                        translation: translation
+                    )
+                )
+            },
+            keyframes: { _ in
+                // The content swap and this track start in the same commit, so
+                // the entering lines' first drawn frame is progress 0.
+                MoveKeyframe(0.0)
+                LinearKeyframe(
+                    1.0,
+                    duration: CaptionLineRise.duration,
+                    timingCurve: CaptionLineRise.curve
+                )
+            }
+        )
+        // The flow disables animation wholesale; the renderer's own progress is
+        // the single exception, and nothing else in the lane animates.
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = false
+        }
+    }
+
+    /// Lays the incoming caption out at the visible lane's width without ever
+    /// showing it. The geometry proxy and the published layout come from the
+    /// same pass of this subtree, so the measurement is internally consistent;
+    /// the layout preference is read inside the subtree, so it reports the
+    /// candidate only — never the text already on screen.
+    private var candidateProbe: some View {
+        GeometryReader { proxy in
+            captionText(Text(text.isEmpty ? " " : text))
+                .onPreferenceChange(Text.LayoutKey.self) { layouts in
+                    // The probe publishes one layout; `max` is the honest
+                    // reduction over whatever the subtree reported.
+                    let lineCount = layouts.map(\.layout.count).max() ?? 0
+                    measured = MeasuredCandidate(
+                        text: text,
+                        lineCount: lineCount,
+                        width: proxy.size.width
+                    )
+                    reconcile()
+                }
+        }
+        .opacity(0)
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+
+    private func laneLayers(text: String, attributedText: AttributedString) -> some View {
+        ZStack {
+            if let outlineColor, text.isEmpty == false {
+                outlineLayer(text: text, color: outlineColor)
+            }
+
+            captionText(Text(text.isEmpty ? AttributedString(" ") : attributedText))
+        }
+        // An empty lane still reserves its line box; it just has nothing to show.
+        .opacity(text.isEmpty ? 0 : 1)
+        .accessibilityHidden(text.isEmpty)
+    }
+
+    private func outlineLayer(text: String, color: Color) -> some View {
+        ZStack {
+            ForEach(CaptionFlowContentView.textOutlineOffsets.indices, id: \.self) { index in
+                let offset = CaptionFlowContentView.textOutlineOffsets[index]
+                captionText(Text(text).foregroundStyle(color))
+                    .offset(x: offset.width, y: offset.height)
+            }
+        }
+    }
+
+    private func captionText(_ text: Text) -> some View {
+        text
+            .font(.system(size: fontSize, weight: weight))
+            .multilineTextAlignment(textAlignment)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: frameAlignment)
+    }
+
+    /// Promotes the measured candidate into the visible slot, atomically with the
+    /// rise decision it implies. Refuses to act on anything it has not measured,
+    /// so a caption is never drawn before its plan is known.
+    private func reconcile() {
+        // Only a measurement of the text about to be shown can decide anything.
+        guard let measured, measured.width > 0, measured.text == text else { return }
+
+        let candidate: CaptionLineRiseLayoutSnapshot
+        if text.isEmpty {
+            candidate = .empty(width: measured.width)
+        } else {
+            guard measured.lineCount > 0 else { return }
+            candidate = CaptionLineRiseLayoutSnapshot(
+                text: text,
+                lineCount: measured.lineCount,
+                width: measured.width
+            )
+        }
+
+        let incoming = VisibleCaption(attributedText: attributedText, layout: candidate)
+        guard incoming != visible else { return }
+
+        // A lane's first caption is measured against an empty lane at the same
+        // width, so its opening line rises like any other newly added line.
+        let previous = visible?.layout ?? .empty(width: measured.width)
+        let plan: CaptionLineRisePlan = risesNewLines && reduceMotion == false
+            ? CaptionLineRise.plan(previous: previous, candidate: candidate)
+            : .settled
+
+        enteringLineIndices = plan.enteringLineIndices
+        visible = incoming
+        if plan.isEmpty == false {
+            riseGeneration &+= 1
+        }
+    }
+}
 
 struct LiveLayersHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0.0
@@ -736,7 +1059,6 @@ struct LiveLayersHeightPreferenceKey: PreferenceKey {
         value = nextValue()
     }
 }
-
 
 struct HistoryEntryHeightsPreferenceKey: PreferenceKey {
     static var defaultValue: [UUID: CGFloat] = [:]

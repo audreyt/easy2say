@@ -1838,7 +1838,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let languageID = currentHeardLanguageID.isEmpty
             ? configuredSourceLanguageID
             : currentHeardLanguageID
-        draft.sourceText = speechCorrections.apply(draft.sourceText, languageID: languageID)
+        let corrected = speechCorrections.apply(
+            draft.sourceText,
+            stablePrefixLength: draft.stablePrefixLength,
+            languageID: languageID
+        )
+        draft.sourceText = corrected.text
+        draft.stablePrefixLength = corrected.stablePrefixLength
+        draft.mutableTailText = String(corrected.text.dropFirst(min(corrected.stablePrefixLength, corrected.text.count)))
         partialHandler?(draft)
     }
 

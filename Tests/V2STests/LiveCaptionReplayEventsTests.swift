@@ -24,14 +24,31 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
         var hypothesisEpoch = 0
         var draftEpoch = -1
         var committedEpoch = -1
+        var provisionalFrames = 0
+        var mixedStabilityFrames = 0
         session.installPartialHandlerForTesting { draft in
             if let draft, draft.sourceText.isEmpty == false {
                 state.draftSourceText = draft.sourceText
+                state.draftSourceStablePrefixLength = draft.stablePrefixLength
                 state.draftPromotionID = draft.segmentId
                 state.draftAudioStartMs = draft.audioHypothesisStartMs
                 draftEpoch = hypothesisEpoch
+                provisionalFrames += 1
+                let clampedStableLength = min(draft.stablePrefixLength, draft.sourceText.count)
+                if clampedStableLength > 0, clampedStableLength < draft.sourceText.count {
+                    mixedStabilityFrames += 1
+                }
+                if let current = state.liveCaptionPresentation.currentCaption,
+                   current.sourceText == draft.sourceText {
+                    XCTAssertEqual(
+                        current.sourceStablePrefixLength,
+                        clampedStableLength,
+                        "presentation dropped the analyzer's stable/mutable boundary"
+                    )
+                }
             } else {
                 state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = nil
                 state.draftAudioStartMs = nil
                 draftEpoch = -1
@@ -47,6 +64,7 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
             committedEpoch = hypothesisEpoch
             if sentence.replacesPromotionSegmentID != nil {
                 state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = nil
                 state.draftAudioStartMs = nil
                 draftEpoch = -1
@@ -110,6 +128,12 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
         XCTAssertGreaterThan(vadInjections, 0, "VAD silence injection never fired")
         XCTAssertGreaterThan(vadRejects, 0, "VAD never rejected an incomplete draft")
         XCTAssertFalse(collected.isEmpty, "session emitted no commits")
+        XCTAssertGreaterThan(provisionalFrames, 0, "replay emitted no provisional caption frames")
+        XCTAssertGreaterThan(
+            mixedStabilityFrames,
+            0,
+            "replay never displayed a white stable prefix with a mutable live tail"
+        )
 
         let finals = events.filter(\.isFinal)
         let reduced = reduceReplacedCommits(collected, triggers: triggers)
@@ -159,10 +183,12 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
                 state.translatedText = event.text
                 state.committedPromotionID = UUID()
                 state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = nil
                 committedTurns += 1
             } else {
                 state.draftSourceText = event.text
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = UUID()
             }
             assertIndependentOracle(state: state)
@@ -201,10 +227,12 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
         session.installPartialHandlerForTesting { draft in
             if let draft, draft.sourceText.isEmpty == false {
                 state.draftSourceText = draft.sourceText
+                state.draftSourceStablePrefixLength = draft.stablePrefixLength
                 state.draftPromotionID = draft.segmentId
                 draftEpoch = hypothesisEpoch
             } else {
                 state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = nil
                 draftEpoch = -1
             }
@@ -218,6 +246,7 @@ final class LiveCaptionReplayEventsTests: XCTestCase {
             committedEpoch = hypothesisEpoch
             if sentence.replacesPromotionSegmentID != nil {
                 state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
                 state.draftPromotionID = nil
                 draftEpoch = -1
             }

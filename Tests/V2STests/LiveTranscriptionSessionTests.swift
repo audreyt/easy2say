@@ -2024,8 +2024,8 @@ final class LiveTranscriptionSessionTests: XCTestCase {
         let draft = DraftSegment(
             segmentId: promotionID,
             sourceText: "大家好",
-            stablePrefixLength: 0,
-            mutableTailText: "大家好",
+            stablePrefixLength: 2,
+            mutableTailText: "好",
             avgConfidence: 0.9,
             startMs: 0,
             lastUpdateMs: 0,
@@ -2038,15 +2038,174 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             heardLanguageID: "zh-Hant",
             audioHypothesisStartMs: 1_234
         )
-        model.handlePartialDraftForTesting(draft)
+        model.handlePartialDraftForTesting(draft, targetLanguageID: "zh-Hant")
 
         let state = model.overlayStateForTesting
         XCTAssertEqual(state?.draftSourceText, "大家好")
+        XCTAssertEqual(state?.draftSourceStablePrefixLength, 2)
+        XCTAssertEqual(state?.draftTranslatedText, "大家好")
+        XCTAssertEqual(state?.draftTranslatedStablePrefixLength, 2)
         XCTAssertEqual(state?.draftPromotionID, promotionID)
         XCTAssertEqual(state?.draftAudioStartMs, 1_234)
         XCTAssertEqual(
             state?.sourceName, InputSource.preview.name,
             "draft update must refresh the overlay source name"
+        )
+    }
+
+    @MainActor
+    func testSamePromotionStableSourceBoundaryIgnoresLowerAdvertisedLengthWhenPrefixSurvives() {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-same-promotion-hold-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(translatedText: "", sourceText: "", sourceName: "stale name")
+        )
+
+        let promotionID = UUID()
+        let stablePrefix = "歡迎來到我們的"
+        let firstText = "歡迎來到我們的第一場會議"
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: firstText,
+                stablePrefixLength: stablePrefix.count
+            ),
+            targetLanguageID: "zh-Hant"
+        )
+        XCTAssertEqual(
+            model.overlayStateForTesting?.draftSourceStablePrefixLength,
+            stablePrefix.count
+        )
+
+        let grownText = "歡迎來到我們的第一場會議已經開始"
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: grownText,
+                stablePrefixLength: 2
+            ),
+            targetLanguageID: "zh-Hant"
+        )
+
+        let state = model.overlayStateForTesting
+        XCTAssertEqual(state?.draftSourceText, grownText)
+        XCTAssertEqual(state?.draftSourceStablePrefixLength, stablePrefix.count)
+        XCTAssertEqual(state?.draftPromotionID, promotionID)
+        XCTAssertEqual(state?.sourceName, InputSource.preview.name)
+    }
+
+    @MainActor
+    func testSamePromotionStableSourceBoundaryRetreatsWhenPrefixContentChanges() {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-same-promotion-retreat-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(translatedText: "", sourceText: "", sourceName: "stale name")
+        )
+
+        let promotionID = UUID()
+        let stablePrefix = "歡迎來到我們的"
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: "歡迎來到我們的第一場會議",
+                stablePrefixLength: stablePrefix.count
+            ),
+            targetLanguageID: "zh-Hant"
+        )
+
+        let correctedText = "歡迎來到你們的第一場會議"
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: correctedText,
+                stablePrefixLength: 3
+            ),
+            targetLanguageID: "zh-Hant"
+        )
+
+        let state = model.overlayStateForTesting
+        XCTAssertEqual(state?.draftSourceText, correctedText)
+        XCTAssertEqual(state?.draftSourceStablePrefixLength, 3)
+        XCTAssertEqual(state?.draftPromotionID, promotionID)
+        XCTAssertEqual(state?.sourceName, InputSource.preview.name)
+    }
+
+    @MainActor
+    func testSamePromotionIdenticalTextAdvancesMirroredStableBoundariesFromZeroToTwo() {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-same-promotion-advance-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: SourceCatalogService()
+        )
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(translatedText: "", sourceText: "", sourceName: "stale name")
+        )
+
+        let promotionID = UUID()
+        let text = "大家好"
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: text,
+                stablePrefixLength: 0
+            ),
+            sourceLanguageID: "zh-Hant",
+            targetLanguageID: "zh-Hant"
+        )
+        XCTAssertEqual(model.overlayStateForTesting?.draftSourceStablePrefixLength, 0)
+        XCTAssertEqual(model.overlayStateForTesting?.draftTranslatedStablePrefixLength, 0)
+
+        model.handlePartialDraftForTesting(
+            liveCaptionDraftSegment(
+                id: promotionID,
+                text: text,
+                stablePrefixLength: 2
+            ),
+            sourceLanguageID: "zh-Hant",
+            targetLanguageID: "zh-Hant"
+        )
+
+        let state = model.overlayStateForTesting
+        XCTAssertEqual(state?.draftSourceText, text)
+        XCTAssertEqual(state?.draftTranslatedText, text)
+        XCTAssertEqual(state?.draftSourceStablePrefixLength, 2)
+        XCTAssertEqual(state?.draftTranslatedStablePrefixLength, 2)
+        XCTAssertEqual(state?.draftPromotionID, promotionID)
+    }
+
+    private func liveCaptionDraftSegment(
+        id: UUID,
+        text: String,
+        stablePrefixLength: Int
+    ) -> DraftSegment {
+        DraftSegment(
+            segmentId: id,
+            sourceText: text,
+            stablePrefixLength: stablePrefixLength,
+            mutableTailText: String(text.dropFirst(min(stablePrefixLength, text.count))),
+            avgConfidence: 0.9,
+            startMs: 0,
+            lastUpdateMs: 0,
+            silenceMs: 0,
+            stabilityScore: 0.5,
+            boundaryScore: 0.5,
+            chunkScore: 0.5,
+            vadProbability: 0.2,
+            words: [],
+            heardLanguageID: "zh-Hant",
+            audioHypothesisStartMs: 1_234
         )
     }
 }

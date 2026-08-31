@@ -20,8 +20,14 @@ struct OverlayPreviewState: Equatable {
 
     // MARK: Draft layer — partial ASR for the current caption slot
     var draftSourceText: String? = nil
+    /// Character boundary separating source words Apple has kept stable from the
+    /// mutable hypothesis tail.
+    var draftSourceStablePrefixLength: Int = 0
     /// Incremental translation of the current draft text.
     var draftTranslatedText: String? = nil
+    /// Boundary inferred from consecutive translation hypotheses. Text before it
+    /// survived the latest revision; text after it remains visibly provisional.
+    var draftTranslatedStablePrefixLength: Int = 0
     var draftTranslationSourceText: String? = nil
     var draftTranslationPromotionID: UUID? = nil
     var draftPromotionID: UUID? = nil
@@ -51,6 +57,12 @@ struct OverlayPreviewState: Equatable {
             return
         }
 
+        let previousTranslation = draftTranslationPromotionID == promotionID
+            ? draftTranslatedText
+            : nil
+        draftTranslatedStablePrefixLength = previousTranslation.map {
+            LiveCaptionTextStability.commonStablePrefixLength(previous: $0, current: translatedText)
+        } ?? 0
         self.draftTranslatedText = translatedText
         self.draftTranslationSourceText = sourceText
         self.draftTranslationPromotionID = promotionID
@@ -58,6 +70,7 @@ struct OverlayPreviewState: Equatable {
 
     mutating func clearDraftTranslation() {
         draftTranslatedText = nil
+        draftTranslatedStablePrefixLength = 0
         draftTranslationSourceText = nil
         draftTranslationPromotionID = nil
     }
@@ -98,6 +111,94 @@ struct OverlayPreviewState: Equatable {
     }
 }
 
+enum LiveCaptionTextStability {
+    static func commonStablePrefixLength(previous: String, current: String) -> Int {
+        guard previous != current else { return current.count }
+
+        var previousIndex = previous.startIndex
+        var currentIndex = current.startIndex
+        var commonLength = 0
+        while previousIndex < previous.endIndex,
+              currentIndex < current.endIndex,
+              previous[previousIndex] == current[currentIndex] {
+            previous.formIndex(after: &previousIndex)
+            current.formIndex(after: &currentIndex)
+            commonLength += 1
+        }
+
+        guard commonLength > 0 else { return 0 }
+        if currentIndex == current.endIndex {
+            return boundaryBeforeActiveTail(
+                in: current,
+                endingAt: currentIndex,
+                length: commonLength
+            )
+        }
+
+        let previousCharacter = current[current.index(before: currentIndex)]
+        let nextCharacter = current[currentIndex]
+        guard isWordCharacter(previousCharacter),
+              isWordCharacter(nextCharacter),
+              containsCJK(previousCharacter) == false,
+              containsCJK(nextCharacter) == false else {
+            return commonLength
+        }
+
+        return boundaryBeforeActiveTail(
+            in: current,
+            endingAt: currentIndex,
+            length: commonLength
+        )
+    }
+
+    static func separator(between leading: String, and trailing: String) -> String {
+        guard let last = leading.last, let first = trailing.first else { return "" }
+        if last.isWhitespace || first.isWhitespace || first.isPunctuation {
+            return ""
+        }
+        if containsCJK(last) && containsCJK(first) {
+            return ""
+        }
+        if Self.fullWidthPunctuation.contains(last) {
+            return ""
+        }
+        return " "
+    }
+
+    private static func boundaryBeforeActiveTail(
+        in text: String,
+        endingAt endIndex: String.Index,
+        length: Int
+    ) -> Int {
+        guard length > 0 else { return 0 }
+        if containsCJK(text[text.index(before: endIndex)]) {
+            return length - 1
+        }
+
+        var boundary = endIndex
+        var boundaryLength = length
+        while boundary != text.startIndex {
+            let candidate = text.index(before: boundary)
+            guard isWordCharacter(text[candidate]) else { break }
+            boundary = candidate
+            boundaryLength -= 1
+        }
+        return boundaryLength
+    }
+
+    private static func isWordCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber
+    }
+
+    private static func containsCJK(_ character: Character) -> Bool {
+        character.unicodeScalars.contains(where: LanguageIdentity.isCJKScalar)
+    }
+
+    private static let fullWidthPunctuation: Set<Character> = [
+        "，", "。", "！", "？", "、", "；", "："
+    ]
+}
+
 struct OverlayLiveCaptionPresentation: Equatable {
     enum Phase: Equatable {
         case tentative
@@ -114,15 +215,134 @@ struct OverlayLiveCaptionPresentation: Equatable {
         let phase: Phase
         let translatedText: String
         let sourceText: String
+        let translatedStablePrefixLength: Int
+        let sourceStablePrefixLength: Int
+        let translatedAgedPrefixLength: Int
+        let sourceAgedPrefixLength: Int
+
+        init(
+            id: Identity,
+            phase: Phase,
+            translatedText: String,
+            sourceText: String,
+            translatedStablePrefixLength: Int? = nil,
+            sourceStablePrefixLength: Int? = nil,
+            translatedAgedPrefixLength: Int = 0,
+            sourceAgedPrefixLength: Int = 0
+        ) {
+            self.id = id
+            self.phase = phase
+            self.translatedText = translatedText
+            self.sourceText = sourceText
+            self.translatedStablePrefixLength = Self.clampedStablePrefixLength(
+                translatedStablePrefixLength ?? (phase == .committed ? translatedText.count : 0),
+                in: translatedText
+            )
+            self.sourceStablePrefixLength = Self.clampedStablePrefixLength(
+                sourceStablePrefixLength ?? (phase == .committed ? sourceText.count : 0),
+                in: sourceText
+            )
+            self.translatedAgedPrefixLength = Self.clampedAgedPrefixLength(
+                translatedAgedPrefixLength,
+                stablePrefixLength: self.translatedStablePrefixLength
+            )
+            self.sourceAgedPrefixLength = Self.clampedAgedPrefixLength(
+                sourceAgedPrefixLength,
+                stablePrefixLength: self.sourceStablePrefixLength
+            )
+        }
+
+        var translatedStableText: String {
+            String(translatedText.prefix(translatedStablePrefixLength))
+        }
+
+        var translatedMutableText: String {
+            String(translatedText.dropFirst(translatedStablePrefixLength))
+        }
+
+        var sourceStableText: String {
+            String(sourceText.prefix(sourceStablePrefixLength))
+        }
+
+        var sourceMutableText: String {
+            String(sourceText.dropFirst(sourceStablePrefixLength))
+        }
+
+        private static func clampedStablePrefixLength(_ length: Int, in text: String) -> Int {
+            min(max(0, length), text.count)
+        }
+
+        private static func clampedAgedPrefixLength(_ length: Int, stablePrefixLength: Int) -> Int {
+            min(max(0, length), stablePrefixLength)
+        }
     }
 
     let precedingCommittedCaption: Caption?
     let currentCaption: Caption?
+
+    /// One visual lane per language. A preceding commit remains white while the
+    /// current mutable suffix updates in place; layout clips the lane to its newest
+    /// two wrapped lines.
+    var displayCaption: Caption? {
+        guard let currentCaption else {
+            return precedingCommittedCaption
+        }
+        guard let precedingCommittedCaption else {
+            return currentCaption
+        }
+
+        let translated = Self.joinedLane(
+            leadingText: precedingCommittedCaption.translatedText,
+            trailingText: currentCaption.translatedText,
+            trailingStablePrefixLength: currentCaption.translatedStablePrefixLength
+        )
+        let source = Self.joinedLane(
+            leadingText: precedingCommittedCaption.sourceText,
+            trailingText: currentCaption.sourceText,
+            trailingStablePrefixLength: currentCaption.sourceStablePrefixLength
+        )
+        return Caption(
+            id: currentCaption.id,
+            phase: currentCaption.phase,
+            translatedText: translated.text,
+            sourceText: source.text,
+            translatedStablePrefixLength: translated.stablePrefixLength,
+            sourceStablePrefixLength: source.stablePrefixLength,
+            translatedAgedPrefixLength: translated.agedPrefixLength,
+            sourceAgedPrefixLength: source.agedPrefixLength
+        )
+    }
+
+    private static func joinedLane(
+        leadingText: String,
+        trailingText: String,
+        trailingStablePrefixLength: Int
+    ) -> (text: String, stablePrefixLength: Int, agedPrefixLength: Int) {
+        guard leadingText.isEmpty == false else {
+            return (
+                trailingText,
+                min(trailingStablePrefixLength, trailingText.count),
+                0
+            )
+        }
+        guard trailingText.isEmpty == false else {
+            return (leadingText, leadingText.count, 0)
+        }
+
+        let separator = "\n"
+        let text = leadingText + separator + trailingText
+        let trailingStable = min(trailingStablePrefixLength, trailingText.count)
+        return (
+            text,
+            leadingText.count + separator.count + trailingStable,
+            leadingText.count
+        )
+    }
 }
 
 /// Reconstructs one exclusive live caption from a committed row plus the current
-/// draft. Livecaption-style replay updates a single slot in place; partial clauses
-/// must not stack as separate rows.
+/// draft. Replay updates a single slot in place; partial clauses must not stack
+/// as separate rows.
 enum LiveCaptionReplay: Sendable {
     enum Relation: Equatable, Sendable {
         case sameUtterance(displaySourceText: String)
@@ -231,8 +451,6 @@ enum LiveCaptionReplay: Sendable {
         return SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: trimmed)
     }
 
-
-
     private static func containsCJK(_ text: String) -> Bool {
         text.unicodeScalars.contains(where: LanguageIdentity.isCJKScalar)
     }
@@ -278,7 +496,11 @@ extension OverlayPreviewState {
             id: identity,
             phase: .tentative,
             translatedText: draftTranslatedText,
-            sourceText: draftSourceText
+            sourceText: draftSourceText,
+            translatedStablePrefixLength: draftTranslatedStablePrefixLength,
+            sourceStablePrefixLength: draftSourceStablePrefixLength,
+            translatedAgedPrefixLength: 0,
+            sourceAgedPrefixLength: 0
         )
 
         guard let committedCaption else {
@@ -288,28 +510,34 @@ extension OverlayPreviewState {
             )
         }
 
-
-
         switch LiveCaptionReplay.relation(
             committedSourceText: committedCaption.sourceText,
             draftSourceText: draftSourceText
         ) {
         case .sameUtterance(let displaySourceText):
-            let translatedText: String
-            if displaySourceText == draftSourceText {
-                translatedText = draftTranslatedText
-            } else if displaySourceText == committedCaption.sourceText {
-                translatedText = committedCaption.translatedText
-            } else {
-                translatedText = ""
-            }
+            let source = mergedSameUtteranceLane(
+                committedText: committedCaption.sourceText,
+                draftText: draftSourceText,
+                draftStablePrefixLength: draftSourceStablePrefixLength,
+                displayText: displaySourceText
+            )
+            let translated = mergedSameUtteranceLane(
+                committedText: committedCaption.translatedText,
+                draftText: draftTranslatedText,
+                draftStablePrefixLength: draftTranslatedStablePrefixLength,
+                appendIndependent: displaySourceText != draftSourceText
+            )
             return OverlayLiveCaptionPresentation(
                 precedingCommittedCaption: nil,
                 currentCaption: OverlayLiveCaptionPresentation.Caption(
                     id: identity,
                     phase: .tentative,
-                    translatedText: translatedText,
-                    sourceText: displaySourceText
+                    translatedText: translated.text,
+                    sourceText: source.text,
+                    translatedStablePrefixLength: translated.stablePrefixLength,
+                    sourceStablePrefixLength: source.stablePrefixLength,
+                    translatedAgedPrefixLength: 0,
+                    sourceAgedPrefixLength: 0
                 )
             )
         case .independent:
@@ -318,6 +546,74 @@ extension OverlayPreviewState {
                 currentCaption: draftCaption
             )
         }
+    }
+
+    private func mergedSameUtteranceLane(
+        committedText: String,
+        draftText: String,
+        draftStablePrefixLength: Int,
+        displayText preferredDisplayText: String? = nil,
+        appendIndependent: Bool = false
+    ) -> (text: String, stablePrefixLength: Int) {
+        guard draftText.isEmpty == false else {
+            return (committedText, committedText.count)
+        }
+        guard committedText.isEmpty == false else {
+            return (draftText, min(draftStablePrefixLength, draftText.count))
+        }
+
+        let displayText: String
+        if let preferredDisplayText {
+            displayText = preferredDisplayText
+        } else {
+            switch LiveCaptionReplay.relation(
+                committedSourceText: committedText,
+                draftSourceText: draftText
+            ) {
+            case .sameUtterance(let mergedText):
+                displayText = mergedText
+            case .independent:
+                if appendIndependent {
+                    let separator = LiveCaptionTextStability.separator(
+                        between: committedText,
+                        and: draftText
+                    )
+                    displayText = committedText + separator + draftText
+                } else {
+                    displayText = draftText
+                }
+            }
+        }
+
+        var stablePrefixLength = min(draftStablePrefixLength, draftText.count)
+        if displayText == committedText {
+            stablePrefixLength = displayText.count
+        } else if displayText == draftText {
+            if draftText.hasPrefix(committedText) {
+                stablePrefixLength = max(stablePrefixLength, committedText.count)
+            } else if committedText.hasPrefix(draftText) {
+                stablePrefixLength = draftText.count
+            } else {
+                stablePrefixLength = max(
+                    stablePrefixLength,
+                    LiveCaptionTextStability.commonStablePrefixLength(
+                        previous: committedText,
+                        current: draftText
+                    )
+                )
+            }
+        } else if displayText.hasSuffix(draftText) {
+            let draftStart = displayText.count - draftText.count
+            stablePrefixLength = max(
+                min(displayText.count, committedText.count),
+                draftStart + stablePrefixLength
+            )
+        }
+
+        return (
+            displayText,
+            min(max(0, stablePrefixLength), displayText.count)
+        )
     }
 
     private var committedLiveCaption: OverlayLiveCaptionPresentation.Caption? {
@@ -333,7 +629,9 @@ extension OverlayPreviewState {
             id: identity,
             phase: .committed,
             translatedText: translatedText,
-            sourceText: sourceText
+            sourceText: sourceText,
+            translatedAgedPrefixLength: 0,
+            sourceAgedPrefixLength: 0
         )
     }
 }

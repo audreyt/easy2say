@@ -23,7 +23,11 @@ struct AudienceDisplayView: View {
                     showsScrollbarPadding: false,
                     updatesModelHistoryVisibleCount: false,
                     reservesColumnHeaderSpace: false,
-                    columnHeaderOpacity: isHovering ? 1.0 : 0.0
+                    columnHeaderOpacity: isHovering ? 1.0 : 0.0,
+                    showsHistory: false,
+                    alignsTopDownCaptionsLeading: true,
+                    animatesLiveCaptionLineEntrance: false,
+                    stabilizesLiveCaptionLinePositions: true
                 )
                 .padding(.horizontal, horizontalPadding)
                 .padding(.bottom, bottomPadding)

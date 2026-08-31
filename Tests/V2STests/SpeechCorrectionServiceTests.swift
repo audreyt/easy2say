@@ -622,6 +622,193 @@ final class SpeechCorrectionServiceTests: XCTestCase {
         XCTAssertFalse(shared.contains("資料庫"))
     }
 
+    func testBoundaryAwareApplyWhollyStableAliasExpandsBoundary() throws {
+        let table = try table(language: "en", canonical: "Riverton", aliases: ["Rivertn"])
+        let rawText = "Rivertn is ready"
+        let rawStablePrefixLength = 7 // exactly covers "Rivertn"
+
+        let result = table.apply(rawText, stablePrefixLength: rawStablePrefixLength, languageID: "en")
+        XCTAssertEqual(result.text, "Riverton is ready")
+        XCTAssertEqual(result.stablePrefixLength, 8)
+        let derivedTail = String(result.text.dropFirst(result.stablePrefixLength))
+        XCTAssertEqual(derivedTail, " is ready")
+    }
+
+    func testBoundaryAwareApplyWhollyStableAliasContractsBoundary() throws {
+        let table = try table(language: "en", canonical: "River", aliases: ["Riverton"])
+        let rawText = "Riverton is ready"
+        let rawStablePrefixLength = 8 // exactly covers "Riverton"
+
+        let result = table.apply(rawText, stablePrefixLength: rawStablePrefixLength, languageID: "en")
+        XCTAssertEqual(result.text, "River is ready")
+        XCTAssertEqual(result.stablePrefixLength, 5)
+        let derivedTail = String(result.text.dropFirst(result.stablePrefixLength))
+        XCTAssertEqual(derivedTail, " is ready")
+    }
+
+    func testBoundaryAwareApplyInsideAliasConservativelyMapsBeforeReplacement() throws {
+        let table = try table(language: "en", canonical: "Riverton", aliases: ["Rivertn"])
+
+        // Boundary inside alias at index 0..<7 with no preceding prefix
+        let rawText1 = "Rivertn is ready"
+        let rawStablePrefixLength1 = 4 // bisects "Rivertn"
+        let result1 = table.apply(rawText1, stablePrefixLength: rawStablePrefixLength1, languageID: "en")
+        XCTAssertEqual(result1.text, "Riverton is ready")
+        XCTAssertEqual(result1.stablePrefixLength, 0)
+        let derivedTail1 = String(result1.text.dropFirst(result1.stablePrefixLength))
+        XCTAssertEqual(derivedTail1, "Riverton is ready")
+
+        // Boundary inside alias at index 6..<13 with preceding stable prefix "Hello " (6 chars)
+        let rawText2 = "Hello Rivertn is ready"
+        let rawStablePrefixLength2 = 10 // bisects "Rivertn" (6 + 4)
+        let result2 = table.apply(rawText2, stablePrefixLength: rawStablePrefixLength2, languageID: "en")
+        XCTAssertEqual(result2.text, "Hello Riverton is ready")
+        XCTAssertEqual(result2.stablePrefixLength, 6)
+        let derivedTail2 = String(result2.text.dropFirst(result2.stablePrefixLength))
+        XCTAssertEqual(derivedTail2, "Riverton is ready")
+    }
+
+    func testBoundaryAwareApplyEntirelyMutableLeavesPreAliasBoundaryUnchanged() throws {
+        let table = try table(language: "en", canonical: "Riverton", aliases: ["Rivertn"])
+
+        // Alias starts after the stable boundary
+        let rawText1 = "Hello Rivertn is ready"
+        let rawStablePrefixLength1 = 5 // covers "Hello"
+        let result1 = table.apply(rawText1, stablePrefixLength: rawStablePrefixLength1, languageID: "en")
+        XCTAssertEqual(result1.text, "Hello Riverton is ready")
+        XCTAssertEqual(result1.stablePrefixLength, 5)
+        let derivedTail1 = String(result1.text.dropFirst(result1.stablePrefixLength))
+        XCTAssertEqual(derivedTail1, " Riverton is ready")
+
+        // Alias starts immediately at the stable boundary (index 6 after "Hello ")
+        let rawText2 = "Hello Rivertn is ready"
+        let rawStablePrefixLength2 = 6 // covers "Hello ", alias starts at index 6
+        let result2 = table.apply(rawText2, stablePrefixLength: rawStablePrefixLength2, languageID: "en")
+        XCTAssertEqual(result2.text, "Hello Riverton is ready")
+        XCTAssertEqual(result2.stablePrefixLength, 6)
+        let derivedTail2 = String(result2.text.dropFirst(result2.stablePrefixLength))
+        XCTAssertEqual(derivedTail2, "Riverton is ready")
+    }
+
+    func testBoundaryAwareApplyNoMatchAndBoundaryClamping() throws {
+        let table = try table(language: "en", canonical: "Riverton", aliases: ["Rivertn"])
+
+        // No match in text
+        let noMatchText = "The quick brown fox"
+        let resultNoMatch = table.apply(noMatchText, stablePrefixLength: 9, languageID: "en")
+        XCTAssertEqual(resultNoMatch.text, "The quick brown fox")
+        XCTAssertEqual(resultNoMatch.stablePrefixLength, 9)
+        XCTAssertEqual(String(resultNoMatch.text.dropFirst(resultNoMatch.stablePrefixLength)), " brown fox")
+
+        // Empty table
+        let emptyResult = SpeechCorrectionTable.empty.apply("Hello world", stablePrefixLength: 5, languageID: "en")
+        XCTAssertEqual(emptyResult.text, "Hello world")
+        XCTAssertEqual(emptyResult.stablePrefixLength, 5)
+
+        // Empty text
+        let emptyTextResult = table.apply("", stablePrefixLength: 0, languageID: "en")
+        XCTAssertEqual(emptyTextResult.text, "")
+        XCTAssertEqual(emptyTextResult.stablePrefixLength, 0)
+
+        // Boundary at 0
+        let zeroBoundary = table.apply("Rivertn is ready", stablePrefixLength: 0, languageID: "en")
+        XCTAssertEqual(zeroBoundary.text, "Riverton is ready")
+        XCTAssertEqual(zeroBoundary.stablePrefixLength, 0)
+
+        // Boundary at text end
+        let endBoundary = table.apply("Rivertn is ready", stablePrefixLength: "Rivertn is ready".count, languageID: "en")
+        XCTAssertEqual(endBoundary.text, "Riverton is ready")
+        XCTAssertEqual(endBoundary.stablePrefixLength, "Riverton is ready".count)
+
+        // Negative boundary clamped to 0
+        let negativeBoundary = table.apply("Rivertn is ready", stablePrefixLength: -5, languageID: "en")
+        XCTAssertEqual(negativeBoundary.text, "Riverton is ready")
+        XCTAssertEqual(negativeBoundary.stablePrefixLength, 0)
+
+        // Overflow boundary clamped to text count
+        let overflowBoundary = table.apply("Rivertn is ready", stablePrefixLength: 999, languageID: "en")
+        XCTAssertEqual(overflowBoundary.text, "Riverton is ready")
+        XCTAssertEqual(overflowBoundary.stablePrefixLength, "Riverton is ready".count)
+    }
+
+    func testBoundaryAwareApplyUnicodeAndCJKPrefix() throws {
+        // CJK character expansion: "深學" (2 chars) -> "深度學習" (4 chars)
+        let cjkTable = try table(language: "zh-Hant", canonical: "深度學習", aliases: ["深學"])
+
+        // Wholly stable CJK alias at index 0..<2
+        let rawCJK = "深學模型發布" // 6 Character count
+        let whollyStable = cjkTable.apply(rawCJK, stablePrefixLength: 2, languageID: "zh-Hant")
+        XCTAssertEqual(whollyStable.text, "深度學習模型發布")
+        XCTAssertEqual(whollyStable.stablePrefixLength, 4)
+        XCTAssertEqual(String(whollyStable.text.dropFirst(whollyStable.stablePrefixLength)), "模型發布")
+
+        // Boundary inside CJK alias at index 1 (bisecting "深學")
+        let insideCJK = cjkTable.apply(rawCJK, stablePrefixLength: 1, languageID: "zh-Hant")
+        XCTAssertEqual(insideCJK.text, "深度學習模型發布")
+        XCTAssertEqual(insideCJK.stablePrefixLength, 0)
+        XCTAssertEqual(String(insideCJK.text.dropFirst(insideCJK.stablePrefixLength)), "深度學習模型發布")
+
+        // CJK alias with prefix: "今天深學模型" (6 chars), alias at 2..<4
+        let rawWithPrefix = "今天深學模型"
+        let prefixWhollyStable = cjkTable.apply(rawWithPrefix, stablePrefixLength: 4, languageID: "zh-Hant")
+        XCTAssertEqual(prefixWhollyStable.text, "今天深度學習模型")
+        XCTAssertEqual(prefixWhollyStable.stablePrefixLength, 6)
+        XCTAssertEqual(String(prefixWhollyStable.text.dropFirst(prefixWhollyStable.stablePrefixLength)), "模型")
+
+        let prefixInside = cjkTable.apply(rawWithPrefix, stablePrefixLength: 3, languageID: "zh-Hant")
+        XCTAssertEqual(prefixInside.text, "今天深度學習模型")
+        XCTAssertEqual(prefixInside.stablePrefixLength, 2)
+        XCTAssertEqual(String(prefixInside.text.dropFirst(prefixInside.stablePrefixLength)), "深度學習模型")
+
+        // Unicode diacritics / Latin expansion: "café" (4 chars) -> "Caffè" (5 chars)
+        let cafeTable = try table(language: "en", canonical: "Caffè", aliases: ["café"])
+        let cafeResult = cafeTable.apply("café latte please", stablePrefixLength: 4, languageID: "en")
+        XCTAssertEqual(cafeResult.text, "Caffè latte please")
+        XCTAssertEqual(cafeResult.stablePrefixLength, 5)
+        XCTAssertEqual(String(cafeResult.text.dropFirst(cafeResult.stablePrefixLength)), " latte please")
+    }
+
+    func testBoundaryAwareApplyMultipleReplacementsAcrossBoundary() throws {
+        let multiTable = try SpeechCorrectionService.compile(Data("""
+        {
+          "version": 1,
+          "languages": {
+            "en": {
+              "corrections": [
+                {"canonical": "ACME", "aliases": ["ACM"]},
+                {"canonical": "Riverton", "aliases": ["Rivertn"]}
+              ]
+            }
+          }
+        }
+        """.utf8))
+
+        // Raw: "ACM is better than Rivertn" (count: 26)
+        // Alias 1 "ACM" at 0..<3 (length 3 -> 4)
+        // Alias 2 "Rivertn" at 19..<26 (length 7 -> 8)
+
+        // Case 1: stablePrefixLength = 3 ("ACM" wholly stable, "Rivertn" wholly mutable)
+        let result1 = multiTable.apply("ACM is better than Rivertn", stablePrefixLength: 3, languageID: "en")
+        XCTAssertEqual(result1.text, "ACME is better than Riverton")
+        XCTAssertEqual(result1.stablePrefixLength, 4)
+        XCTAssertEqual(String(result1.text.dropFirst(result1.stablePrefixLength)), " is better than Riverton")
+
+        // Case 2: stablePrefixLength = 22 (inside "Rivertn", 19 < 22 < 26)
+        // Replacement 1 is wholly stable -> 4 chars ("ACME")
+        // Middle text " is better than " -> 16 chars
+        // Boundary inside Replacement 2 -> conservatively maps before Replacement 2 (output index 4 + 16 = 20)
+        let result2 = multiTable.apply("ACM is better than Rivertn", stablePrefixLength: 22, languageID: "en")
+        XCTAssertEqual(result2.text, "ACME is better than Riverton")
+        XCTAssertEqual(result2.stablePrefixLength, 20)
+        XCTAssertEqual(String(result2.text.dropFirst(result2.stablePrefixLength)), "Riverton")
+
+        // Case 3: stablePrefixLength = 26 (both replacements wholly stable)
+        let result3 = multiTable.apply("ACM is better than Rivertn", stablePrefixLength: 26, languageID: "en")
+        XCTAssertEqual(result3.text, "ACME is better than Riverton")
+        XCTAssertEqual(result3.stablePrefixLength, 28) // 4 + 16 + 8 = 28
+        XCTAssertEqual(String(result3.text.dropFirst(result3.stablePrefixLength)), "")
+    }
+
     private func table(
         language: String,
         canonical: String,

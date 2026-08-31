@@ -88,6 +88,60 @@ struct OverlayColor: Codable, Equatable {
     }
 }
 
+/// The three visual runs of one live-caption lane, in display order.
+///
+/// Aged text is a preceding utterance still sharing the live slot; stable text
+/// is what the analyzer has committed; mutable text is the tail it may still
+/// revise. All three draw from the configured subtitle RGB and differ only in
+/// alpha, so a caption never shifts hue as it settles.
+struct OverlayCaptionRuns: Equatable {
+    let text: String
+    let aged: String
+    let stable: String
+    let mutable: String
+
+    static let agedOpacity: Double = 0.52
+    static let stableOpacity: Double = 1.0
+    static let mutableOpacity: Double = 0.45
+
+    /// Splits `text` at the two boundaries, clamping `agedPrefixLength` into the
+    /// text and `stablePrefixLength` into the remainder after it. A caller that
+    /// passes an aged boundary past the stable one gets an empty stable run
+    /// rather than a scrambled lane.
+    init(text: String, agedPrefixLength: Int, stablePrefixLength: Int) {
+        let agedBoundary = min(max(0, agedPrefixLength), text.count)
+        let stableBoundary = min(max(agedBoundary, stablePrefixLength), text.count)
+
+        self.text = text
+        self.aged = String(text.prefix(agedBoundary))
+        self.stable = String(text.dropFirst(agedBoundary).prefix(stableBoundary - agedBoundary))
+        self.mutable = String(text.dropFirst(stableBoundary))
+    }
+
+    /// The lane as one attributed string: aged at `agedOpacity`, stable at
+    /// `stableOpacity`, mutable at `mutableOpacity`, all from `baseColor`.
+    /// Empty runs are omitted, so fully settled text yields a single run.
+    func attributedString(baseColor: Color) -> AttributedString {
+        var attributed = AttributedString()
+        append(aged, opacity: Self.agedOpacity, baseColor: baseColor, into: &attributed)
+        append(stable, opacity: Self.stableOpacity, baseColor: baseColor, into: &attributed)
+        append(mutable, opacity: Self.mutableOpacity, baseColor: baseColor, into: &attributed)
+        return attributed
+    }
+
+    private func append(
+        _ run: String,
+        opacity: Double,
+        baseColor: Color,
+        into attributed: inout AttributedString
+    ) {
+        guard run.isEmpty == false else { return }
+        var part = AttributedString(run)
+        part.foregroundColor = baseColor.opacity(opacity)
+        attributed += part
+    }
+}
+
 /// How the translated and original captions are arranged inside the overlay.
 ///
 /// Two axes, spelled out as four explicit choices rather than a flag pair: rows or

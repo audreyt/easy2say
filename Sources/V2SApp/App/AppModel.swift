@@ -2240,12 +2240,26 @@ final class AppModel: ObservableObject {
             heardLanguageID: sourceLanguageID,
             heardText: draftText
         )
+        let incomingStablePrefixLength = min(draft?.stablePrefixLength ?? 0, draftText.count)
+        let isSamePromotion = draftPromotionID != nil
+            && overlayState?.draftPromotionID == draftPromotionID
+        let draftStablePrefixLength: Int
+        if isSamePromotion,
+           lastDraftStablePrefix.isEmpty == false,
+           draftText.hasPrefix(lastDraftStablePrefix) {
+            draftStablePrefixLength = max(incomingStablePrefixLength, lastDraftStablePrefix.count)
+        } else {
+            draftStablePrefixLength = incomingStablePrefixLength
+        }
         activeDraftUsesInverseGlossary = isReversed
         if isReversed {
             overlayState?.draftTranslatedText = draftText
+            overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
             overlayState?.draftSourceText = nil
+            overlayState?.draftSourceStablePrefixLength = 0
         } else {
             overlayState?.draftSourceText = draftText
+            overlayState?.draftSourceStablePrefixLength = draftStablePrefixLength
             overlayState?.clearDraftTranslationIfMismatched(
                 sourceText: draftText,
                 promotionID: draftPromotionID
@@ -2256,9 +2270,14 @@ final class AppModel: ObservableObject {
         overlayState?.sourceName = source.name
         dismissListeningPlaceholderIfNeeded()
 
-        let stablePrefix = String(draftText.prefix(min(draft?.stablePrefixLength ?? 0, draftText.count)))
-        lastDraftStablePrefix = stablePrefix
+        lastDraftStablePrefix = String(draftText.prefix(draftStablePrefixLength))
 
+        if shouldReserveDraftTranslationSlot(
+            sourceLanguageID: sourceLanguageID,
+            targetLanguageID: targetLanguageID
+        ) == false {
+            overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
+        }
         guard draftText != lastDraftTranslationSource
                 || draftPromotionID != lastDraftTranslationPromotionID
                 || source.id != lastDraftSourceID else {
@@ -2285,13 +2304,16 @@ final class AppModel: ObservableObject {
             draftTranslationGeneration &+= 1
             if isReversed {
                 overlayState?.draftTranslatedText = draftText
+                overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
                 overlayState?.draftSourceText = draftText
+                overlayState?.draftSourceStablePrefixLength = draftStablePrefixLength
             } else {
                 overlayState?.setDraftTranslation(
                     draftText,
                     sourceText: draftText,
                     promotionID: draftPromotionID
                 )
+                overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
             }
         }
     }
@@ -2328,6 +2350,7 @@ final class AppModel: ObservableObject {
         draftClearTask?.cancel()
         draftClearTask = nil
         overlayState?.draftSourceText = nil
+        overlayState?.draftSourceStablePrefixLength = 0
         overlayState?.draftPromotionID = nil
         overlayState?.draftAudioStartMs = nil
         overlayState?.clearDraftTranslation()
@@ -2366,15 +2389,19 @@ final class AppModel: ObservableObject {
                       activeDraftTargetLanguageID == targetLanguageID else {
                     return
                 }
+                let stablePrefixLength = min(lastDraftStablePrefix.count, text.count)
                 if usesInverseGlossary {
                     overlayState?.draftTranslatedText = text
+                    overlayState?.draftTranslatedStablePrefixLength = stablePrefixLength
                     overlayState?.draftSourceText = text
+                    overlayState?.draftSourceStablePrefixLength = stablePrefixLength
                 } else {
                     overlayState?.setDraftTranslation(
                         text,
                         sourceText: text,
                         promotionID: promotionID
                     )
+                    overlayState?.draftTranslatedStablePrefixLength = stablePrefixLength
                 }
                 return
             }
@@ -2541,11 +2568,16 @@ final class AppModel: ObservableObject {
                 draftTranslationTask?.cancel()
                 draftTranslationTask = nil
                 draftTranslationGeneration &+= 1
+                let mirroredStablePrefixLength = min(
+                    overlayState?.draftSourceStablePrefixLength ?? 0,
+                    draftText.count
+                )
                 overlayState?.setDraftTranslation(
                     draftText,
                     sourceText: draftText,
                     promotionID: overlayState?.draftPromotionID
                 )
+                overlayState?.draftTranslatedStablePrefixLength = mirroredStablePrefixLength
             }
         } else {
             draftTranslationTask?.cancel()

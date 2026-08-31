@@ -179,6 +179,8 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(current.phase, .committed)
         XCTAssertEqual(current.sourceText, "Corrected caption.")
         XCTAssertEqual(current.translatedText, "已修正字幕。")
+        XCTAssertEqual(current.sourceAgedPrefixLength, 0)
+        XCTAssertEqual(current.translatedAgedPrefixLength, 0)
     }
 
     func testDraftKeepsPreviousCommitOutsideCurrentCaptionSlot() throws {
@@ -228,7 +230,6 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(current.sourceText, "Unrelated later hypothesis text")
     }
 
-
     func testPartialContinuationCollapsesToExclusiveCurrentCaption() throws {
         let committedPromotionID = UUID()
         let draftPromotionID = UUID()
@@ -270,6 +271,61 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(current.phase, .tentative)
     }
 
+    func testSameUtteranceEnglishContinuationRetainsChineseCommittedTranslationPrefix() throws {
+        let committedPromotionID = UUID()
+        let draftPromotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "歡迎來到",
+            sourceText: "Welcome to our first",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = committedPromotionID
+        state.draftSourceText = "session."
+        state.draftPromotionID = draftPromotionID
+        state.setDraftTranslation(
+            "第一場會議。",
+            sourceText: "session.",
+            promotionID: draftPromotionID
+        )
+
+        let presentation = state.liveCaptionPresentation
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        let display = try XCTUnwrap(presentation.displayCaption)
+        XCTAssertEqual(display.sourceText, "Welcome to our first session.")
+        XCTAssertEqual(display.translatedText, "歡迎來到第一場會議。")
+        XCTAssertEqual(display.sourceAgedPrefixLength, 0)
+        XCTAssertEqual(display.translatedAgedPrefixLength, 0)
+        XCTAssertEqual(display.phase, .tentative)
+    }
+
+    func testSameUtteranceCumulativeSourceKeepsLatestIndependentTarget() throws {
+        let committedPromotionID = UUID()
+        let draftPromotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "歡迎來到",
+            sourceText: "Welcome to our first",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = committedPromotionID
+        state.draftSourceText = "Welcome to our first session."
+        state.draftPromotionID = draftPromotionID
+        state.setDraftTranslation(
+            "第一場會議。",
+            sourceText: "Welcome to our first session.",
+            promotionID: draftPromotionID
+        )
+
+        let presentation = state.liveCaptionPresentation
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        let display = try XCTUnwrap(presentation.displayCaption)
+        XCTAssertEqual(display.sourceText, "Welcome to our first session.")
+        XCTAssertEqual(display.translatedText, "第一場會議。")
+        XCTAssertNotEqual(display.translatedText, "歡迎來到第一場會議。")
+        XCTAssertEqual(display.sourceAgedPrefixLength, 0)
+        XCTAssertEqual(display.translatedAgedPrefixLength, 0)
+        XCTAssertEqual(display.phase, .tentative)
+    }
+
     func testReplaySequenceNeverLayersOverlappingPartials() throws {
         var state = OverlayPreviewState(
             translatedText: "",
@@ -305,7 +361,6 @@ final class OverlayPreviewStateTests: XCTestCase {
         }
     }
 
-
     func testDraftTextRevisionKeepsPromotionIdentity() throws {
         let promotionID = UUID()
         var state = OverlayPreviewState(
@@ -325,6 +380,370 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertNotEqual(first.sourceText, revised.sourceText)
         XCTAssertEqual(first.phase, .tentative)
         XCTAssertEqual(revised.phase, .tentative)
+    }
+
+    func testDraftTranslationPromotesOnlyThePrefixThatSurvivesRevision() throws {
+        let promotionID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        state.draftSourceText = "它可能有時候"
+        state.draftPromotionID = promotionID
+
+        state.setDraftTranslation(
+            "sometimes on day zero",
+            sourceText: "它可能有時候",
+            promotionID: promotionID
+        )
+        let first = try XCTUnwrap(state.liveCaptionPresentation.currentCaption)
+        XCTAssertEqual(first.translatedStableText, "")
+        XCTAssertEqual(first.translatedMutableText, "sometimes on day zero")
+
+        state.setDraftTranslation(
+            "sometimes on day zero, as soon as",
+            sourceText: "它可能有時候，day zero",
+            promotionID: promotionID
+        )
+        let extended = try XCTUnwrap(state.liveCaptionPresentation.currentCaption)
+        XCTAssertEqual(extended.translatedStableText, "sometimes on day zero")
+        XCTAssertEqual(extended.translatedMutableText, ", as soon as")
+
+        state.setDraftTranslation(
+            "sometimes on day zero, once the model",
+            sourceText: "它可能有時候，day zero，就是模型",
+            promotionID: promotionID
+        )
+        let revised = try XCTUnwrap(state.liveCaptionPresentation.currentCaption)
+        XCTAssertEqual(revised.translatedStableText, "sometimes on day zero, ")
+        XCTAssertEqual(revised.translatedMutableText, "once the model")
+    }
+
+    func testCommonStablePrefixKeepsCJKAndRetreatsLatinWord() {
+        XCTAssertEqual(
+            LiveCaptionTextStability.commonStablePrefixLength(
+                previous: "sometimes on day zero",
+                current: "sometimes on day zero"
+            ),
+            "sometimes on day zero".count
+        )
+        XCTAssertEqual(
+            LiveCaptionTextStability.commonStablePrefixLength(
+                previous: "hello wor",
+                current: "hello world extra"
+            ),
+            "hello ".count
+        )
+        XCTAssertEqual(
+            LiveCaptionTextStability.commonStablePrefixLength(
+                previous: "保留最近",
+                current: "保留最近的字幕"
+            ),
+            "保留最近".count
+        )
+    }
+
+    func testIndependentDraftJoinsOldAndNewWithPerLaneAgedPrefixes() throws {
+        var state = OverlayPreviewState(
+            translatedText: "Previous translation.",
+            sourceText: "Hello everyone.",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        state.draftSourceText = "Welcome to our first session"
+        state.draftSourceStablePrefixLength = "Welcome to our first ".count
+        let draftPromotionID = UUID()
+        state.draftPromotionID = draftPromotionID
+        state.setDraftTranslation(
+            "歡迎來到我們的第一場會議",
+            sourceText: "Welcome to our first session",
+            promotionID: draftPromotionID
+        )
+        state.draftTranslatedStablePrefixLength = "歡迎來到我們的".count
+
+        let presentation = state.liveCaptionPresentation
+        XCTAssertNotNil(presentation.precedingCommittedCaption)
+        let display = try XCTUnwrap(presentation.displayCaption)
+
+        XCTAssertEqual(display.sourceText, "Hello everyone.\nWelcome to our first session")
+        XCTAssertEqual(
+            display.translatedText,
+            "Previous translation.\n歡迎來到我們的第一場會議"
+        )
+        XCTAssertEqual(display.sourceAgedPrefixLength, "Hello everyone.".count)
+        XCTAssertEqual(display.translatedAgedPrefixLength, "Previous translation.".count)
+        XCTAssertNotEqual(
+            display.sourceAgedPrefixLength,
+            display.translatedAgedPrefixLength
+        )
+        XCTAssertEqual(display.sourceMutableText, "session")
+        XCTAssertEqual(display.translatedMutableText, "第一場會議")
+
+        let sourceRuns = OverlayCaptionRuns(
+            text: display.sourceText,
+            agedPrefixLength: display.sourceAgedPrefixLength,
+            stablePrefixLength: display.sourceStablePrefixLength
+        )
+        XCTAssertEqual(sourceRuns.aged, "Hello everyone.")
+        XCTAssertEqual(sourceRuns.stable, "\nWelcome to our first ")
+        XCTAssertEqual(sourceRuns.mutable, "session")
+
+        let translatedRuns = OverlayCaptionRuns(
+            text: display.translatedText,
+            agedPrefixLength: display.translatedAgedPrefixLength,
+            stablePrefixLength: display.translatedStablePrefixLength
+        )
+        XCTAssertEqual(translatedRuns.aged, "Previous translation.")
+        XCTAssertEqual(translatedRuns.stable, "\n歡迎來到我們的")
+        XCTAssertEqual(translatedRuns.mutable, "第一場會議")
+    }
+
+    func testIndependentEmptyCurrentLaneKeepsRetainedTextUnaged() throws {
+        var state = OverlayPreviewState(
+            translatedText: "Previous translation.",
+            sourceText: "Hello everyone.",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        state.draftSourceText = "Welcome to our first session"
+        state.draftSourceStablePrefixLength = "Welcome to our first ".count
+        state.draftPromotionID = UUID()
+
+        let display = try XCTUnwrap(state.liveCaptionPresentation.displayCaption)
+        XCTAssertEqual(display.sourceText, "Hello everyone.\nWelcome to our first session")
+        XCTAssertEqual(display.sourceAgedPrefixLength, "Hello everyone.".count)
+        XCTAssertEqual(display.translatedText, "Previous translation.")
+        XCTAssertEqual(display.translatedAgedPrefixLength, 0)
+        XCTAssertEqual(display.translatedStablePrefixLength, "Previous translation.".count)
+        XCTAssertEqual(display.translatedMutableText, "")
+    }
+
+    func testSameUtteranceKeepsCommittedPrefixWhiteWhileTailRevises() throws {
+        var state = OverlayPreviewState(
+            translatedText: "Welcome to our first",
+            sourceText: "Welcome to our first",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        state.draftSourceText = "first session is starting"
+        state.draftSourceStablePrefixLength = "first ".count
+        let draftPromotionID = UUID()
+        state.draftPromotionID = draftPromotionID
+        state.setDraftTranslation(
+            "Welcome to our first session is starting",
+            sourceText: "first session is starting",
+            promotionID: draftPromotionID
+        )
+        state.draftTranslatedStablePrefixLength = "Welcome to our first ".count
+
+        let presentation = state.liveCaptionPresentation
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        let display = try XCTUnwrap(presentation.displayCaption)
+        XCTAssertEqual(display.sourceText, "Welcome to our first session is starting")
+        XCTAssertEqual(display.sourceStableText, "Welcome to our first ")
+        XCTAssertEqual(display.sourceMutableText, "session is starting")
+        XCTAssertEqual(display.translatedStableText, "Welcome to our first ")
+        XCTAssertEqual(display.translatedMutableText, "session is starting")
+        XCTAssertEqual(display.sourceAgedPrefixLength, 0)
+        XCTAssertEqual(display.translatedAgedPrefixLength, 0)
+
+        state.draftSourceText = "first session has started"
+        let revised = try XCTUnwrap(state.liveCaptionPresentation.displayCaption)
+        XCTAssertEqual(revised.sourceStableText, "Welcome to our first ")
+        XCTAssertEqual(revised.sourceMutableText, "session has started")
+        XCTAssertEqual(revised.sourceAgedPrefixLength, 0)
+    }
+
+    @MainActor
+    func testMacRendererKeepsLiveWindowHeightAtTwoLinesDuringOverflow() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-live-caption-window-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        let hostingView = NSHostingView(
+            rootView: CaptionFlowContentView(
+                model: model,
+                reservesColumnHeaderSpace: false
+            )
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 520, height: 420)
+
+        var shortState = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        shortState.draftSourceText = "Short live tail"
+        shortState.draftPromotionID = UUID()
+        model.setOverlayStateForTesting(shortState)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        hostingView.layoutSubtreeIfNeeded()
+        let shortFrame = try XCTUnwrap(model.liveCaptionFrameForTesting)
+
+        model.resetLiveCaptionFramesForTesting()
+        var overflowingState = shortState
+        overflowingState.draftSourceText = Array(
+            repeating: "the newest words keep replacing the oldest wrapped line",
+            count: 8
+        ).joined(separator: " ")
+        model.setOverlayStateForTesting(overflowingState)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        hostingView.layoutSubtreeIfNeeded()
+        let overflowingFrame = try XCTUnwrap(model.liveCaptionFrameForTesting)
+        let sourceFont = NSFont.systemFont(
+            ofSize: CGFloat(model.overlayStyle.scaledSourceFontSize),
+            weight: .regular
+        )
+        let translatedFont = NSFont.systemFont(
+            ofSize: CGFloat(model.overlayStyle.scaledTranslatedFontSize),
+            weight: .semibold
+        )
+        let sourceLineHeight = ceil(
+            sourceFont.ascender - sourceFont.descender + sourceFont.leading
+        )
+        let translatedLineHeight = ceil(
+            translatedFont.ascender - translatedFont.descender + translatedFont.leading
+        )
+
+        XCTAssertEqual(overflowingFrame.height, shortFrame.height, accuracy: 0.5)
+        XCTAssertEqual(
+            overflowingFrame.height,
+            2.0 * sourceLineHeight
+                + 2.0 * translatedLineHeight
+                + CaptionFlowContentView.captionPairSpacing
+                + CaptionFlowContentView.currentCaptionBottomInset,
+            accuracy: 1.0
+        )
+    }
+
+    @MainActor
+    func testAudienceRendererAppliesIndependentTailUpdatesWithoutACommitDelay() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-live-caption-cadence-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+
+        let promotionID = UUID()
+        let stableSource = "穩定來源："
+        let stableTranslation = "stable translation: "
+        var state = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Reference replay"
+        )
+        state.draftPromotionID = promotionID
+        state.draftSourceText = stableSource + "甲"
+        state.draftSourceStablePrefixLength = stableSource.count
+        state.setDraftTranslation(
+            stableTranslation + "one",
+            sourceText: state.draftSourceText ?? "",
+            promotionID: promotionID
+        )
+        state.draftTranslatedStablePrefixLength = stableTranslation.count
+
+        let hostingView = NSHostingView(
+            rootView: AudienceDisplayView(model: model, onExit: {})
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
+
+        var renderedFrames: [Data] = []
+        for (index, update) in [
+            (sourceTail: "甲", translatedTail: "one"),
+            (sourceTail: "甲乙丙", translatedTail: "one"),
+            (sourceTail: "甲乙丙", translatedTail: "one two three"),
+        ].enumerated() {
+            state.draftSourceText = stableSource + update.sourceTail
+            state.draftSourceStablePrefixLength = stableSource.count
+            if index == 2 {
+                state.setDraftTranslation(
+                    stableTranslation + update.translatedTail,
+                    sourceText: state.draftSourceText ?? "",
+                    promotionID: promotionID
+                )
+                state.draftTranslatedStablePrefixLength = stableTranslation.count
+            }
+            model.setOverlayStateForTesting(state)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+            hostingView.layoutSubtreeIfNeeded()
+            let bitmap = try renderBitmap(
+                hostingView,
+                snapshotName: "easy2say-native-update-\(index).png"
+            )
+            renderedFrames.append(
+                try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            )
+        }
+
+        XCTAssertNotEqual(renderedFrames[0], renderedFrames[1], "source append was not painted")
+        XCTAssertNotEqual(renderedFrames[1], renderedFrames[2], "translation append was not painted")
+    }
+
+    func testCaptionRunsPaintAchromaticBaseRGBWithActiveAlphaOneAndMutableAlpha() {
+        let base = OverlayColor(red: 0.91, green: 0.40, blue: 0.18, alpha: 1)
+        let runs = OverlayCaptionRuns(
+            text: "STABLEtail",
+            agedPrefixLength: 0,
+            stablePrefixLength: 6
+        )
+        XCTAssertEqual(runs.aged, "")
+        XCTAssertEqual(runs.stable, "STABLE")
+        XCTAssertEqual(runs.mutable, "tail")
+
+        let colors = captionRunColors(runs.attributedString(baseColor: base.color))
+        XCTAssertEqual(colors.count, 2)
+        XCTAssertEqual(colors[0].text, "STABLE")
+        assertCaptionColor(colors[0].color, matchesBase: base, alpha: 1)
+        XCTAssertEqual(colors[1].text, "tail")
+        assertCaptionColor(colors[1].color, matchesBase: base, alpha: 0.45)
+    }
+
+    func testCaptionRunsPaintAgedPrefixAtAgedOpacity() {
+        let base = OverlayColor(red: 0.91, green: 0.40, blue: 0.18, alpha: 1)
+        let runs = OverlayCaptionRuns(
+            text: "OLD\nNEWtail",
+            agedPrefixLength: 3,
+            stablePrefixLength: 7
+        )
+        XCTAssertEqual(runs.aged, "OLD")
+        XCTAssertEqual(runs.stable, "\nNEW")
+        XCTAssertEqual(runs.mutable, "tail")
+
+        let colors = captionRunColors(runs.attributedString(baseColor: base.color))
+        XCTAssertEqual(colors.count, 3)
+        XCTAssertEqual(colors[0].text, "OLD")
+        assertCaptionColor(colors[0].color, matchesBase: base, alpha: 0.52)
+        XCTAssertEqual(colors[1].text, "\nNEW")
+        assertCaptionColor(colors[1].color, matchesBase: base, alpha: 1)
+        XCTAssertEqual(colors[2].text, "tail")
+        assertCaptionColor(colors[2].color, matchesBase: base, alpha: 0.45)
+    }
+
+    func testCaptionRunsPaintTranslationMutableTailAtMutableOpacity() throws {
+        let base = OverlayColor.defaultSubtitle
+        let text = "sometimes, uh, on day zero, as soon as"
+        let runs = OverlayCaptionRuns(
+            text: text,
+            agedPrefixLength: 0,
+            stablePrefixLength: "sometimes, uh, on day zero, ".count
+        )
+        XCTAssertEqual(runs.mutable, "as soon as")
+
+        let colors = captionRunColors(runs.attributedString(baseColor: base.color))
+        XCTAssertEqual(colors.last?.text, "as soon as")
+        let mutableColor = try XCTUnwrap(colors.last?.color)
+        assertCaptionColor(
+            mutableColor,
+            matchesBase: base,
+            alpha: OverlayCaptionRuns.mutableOpacity
+        )
     }
 
     @MainActor
@@ -500,6 +919,270 @@ final class OverlayPreviewStateTests: XCTestCase {
     }
 
     @MainActor
+    func testAudienceTopDownCaptionStartsAtLeadingEdge() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-audience-leading-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .originalOnly
+        model.overlayStyle.captionLayout = .topDown
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(
+                translatedText: "",
+                sourceText: "FULL SCREEN LEADING EDGE",
+                sourceName: "Test"
+            )
+        )
+
+        let hostingView = NSHostingView(
+            rootView: AudienceDisplayView(model: model, onExit: {})
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        let bitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-audience-leading.png"
+        )
+        let glyphBounds = try XCTUnwrap(brightPixelBounds(in: bitmap))
+
+        XCTAssertLessThan(
+            glyphBounds.minX,
+            hostingView.bounds.width * 0.2,
+            "top-down audience captions must start at the content's leading edge"
+        )
+    }
+
+    @MainActor
+    func testAudienceLineAppendHasNoAnimatedIntermediatePosition() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-audience-stable-frame-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .originalOnly
+        model.overlayStyle.captionLayout = .topDown
+
+        let promotionID = UUID()
+        let initialText = "Stable caption anchor"
+        var state = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        state.draftPromotionID = promotionID
+        state.draftSourceText = initialText
+        state.draftSourceStablePrefixLength = initialText.count
+        model.setOverlayStateForTesting(state)
+
+        let hostingView = NSHostingView(
+            rootView: AudienceDisplayView(model: model, onExit: {})
+                .background(Color.black)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        let initialBitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-audience-stable-initial.png"
+        )
+        let initialBounds = try XCTUnwrap(brightPixelBounds(in: initialBitmap))
+        let initialLeadingPixels = brightPixelCoordinates(
+            in: initialBitmap,
+            within: initialBounds
+        )
+        XCTAssertFalse(initialLeadingPixels.isEmpty)
+
+        func assertStableIncrement(
+            _ updatedText: String,
+            snapshotStem: String,
+            preservesLeadingGlyphs: Bool = true
+        ) throws -> CGRect {
+            state.draftSourceText = updatedText
+            model.setOverlayStateForTesting(state)
+
+            RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+            let earlyBitmap = try renderBitmap(
+                hostingView,
+                snapshotName: "\(snapshotStem)-early.png"
+            )
+            let earlyPixels = try XCTUnwrap(
+                earlyBitmap.representation(using: .png, properties: [:])
+            )
+            let earlyBounds = try XCTUnwrap(brightPixelBounds(in: earlyBitmap))
+            if preservesLeadingGlyphs {
+                XCTAssertEqual(
+                    brightPixelCoordinates(in: earlyBitmap, within: initialBounds),
+                    initialLeadingPixels,
+                    "unchanged leading glyphs moved during \(snapshotStem)"
+                )
+            }
+
+            RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+            let settledBitmap = try renderBitmap(
+                hostingView,
+                snapshotName: "\(snapshotStem)-settled.png"
+            )
+            let settledPixels = try XCTUnwrap(
+                settledBitmap.representation(using: .png, properties: [:])
+            )
+            XCTAssertEqual(
+                earlyPixels,
+                settledPixels,
+                "full-screen captions moved after \(snapshotStem) was painted"
+            )
+            return earlyBounds
+        }
+
+        let sameLineBounds = try assertStableIncrement(
+            initialText + " stays",
+            snapshotStem: "easy2say-audience-stable-same-line"
+        )
+        XCTAssertLessThan(
+            sameLineBounds.height,
+            initialBounds.height * 1.5,
+            "the first increment must remain on the existing visual line"
+        )
+
+        let wrappedText = initialText
+            + String(repeating: " keeps every existing line fixed", count: 2)
+        let wrappedBounds = try assertStableIncrement(
+            wrappedText,
+            snapshotStem: "easy2say-audience-stable-wrap"
+        )
+        XCTAssertGreaterThan(
+            wrappedBounds.height,
+            initialBounds.height * 1.5,
+            "the second increment must exercise a real one-line to two-line wrap"
+        )
+
+        let extendedBounds = try assertStableIncrement(
+            wrappedText + " now",
+            snapshotStem: "easy2say-audience-stable-second-line"
+        )
+        XCTAssertGreaterThan(
+            extendedBounds.height,
+            initialBounds.height * 1.5,
+            "the third increment must continue revising the second visual line"
+        )
+        XCTAssertEqual(
+            extendedBounds.height,
+            wrappedBounds.height,
+            accuracy: 1.0,
+            "extending the second line must not create a new vertical layout"
+        )
+
+        let overflowBounds = try assertStableIncrement(
+            wrappedText + String(repeating: " while rollover stays atomic", count: 6),
+            snapshotStem: "easy2say-audience-stable-rollover",
+            preservesLeadingGlyphs: false
+        )
+        XCTAssertGreaterThan(
+            overflowBounds.height,
+            initialBounds.height * 1.5,
+            "overflow must leave the newest two visual lines visible"
+        )
+        XCTAssertLessThan(
+            overflowBounds.height,
+            initialBounds.height * 2.6,
+            "overflow must remain clipped to a stable two-line viewport"
+        )
+    }
+
+    private func brightPixelBounds(in bitmap: NSBitmapImageRep) -> CGRect? {
+        var minX = bitmap.pixelsWide
+        var minY = bitmap.pixelsHigh
+        var maxX = -1
+        var maxY = -1
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                let brightness = max(
+                    color.redComponent,
+                    max(color.greenComponent, color.blueComponent)
+                )
+                guard brightness > 0.12 else { continue }
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxX = max(maxX, x)
+                maxY = max(maxY, y)
+            }
+        }
+
+        guard maxX >= minX, maxY >= minY else { return nil }
+        return CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX + 1,
+            height: maxY - minY + 1
+        )
+    }
+
+    private func brightPixelCoordinates(
+        in bitmap: NSBitmapImageRep,
+        within bounds: CGRect
+    ) -> Set<Int> {
+        let minX = max(0, Int(bounds.minX.rounded(.down)))
+        let minY = max(0, Int(bounds.minY.rounded(.down)))
+        let maxX = min(bitmap.pixelsWide - 1, Int(bounds.maxX.rounded(.up)) - 1)
+        let maxY = min(bitmap.pixelsHigh - 1, Int(bounds.maxY.rounded(.up)) - 1)
+        guard minX <= maxX, minY <= maxY else { return [] }
+
+        var coordinates: Set<Int> = []
+        for y in minY...maxY {
+            for x in minX...maxX {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                let brightness = max(
+                    color.redComponent,
+                    max(color.greenComponent, color.blueComponent)
+                )
+                if brightness > 0.12 {
+                    coordinates.insert(y * bitmap.pixelsWide + x)
+                }
+            }
+        }
+        return coordinates
+    }
+
+    @MainActor
     private func renderBitmap(
         _ view: NSView,
         snapshotName: String
@@ -517,6 +1200,32 @@ final class OverlayPreviewStateTests: XCTestCase {
             try data.write(to: url)
         }
         return bitmap
+    }
+
+    private func captionRunColors(
+        _ attributed: AttributedString
+    ) -> [(text: String, color: OverlayColor)] {
+        var result: [(text: String, color: OverlayColor)] = []
+        for run in attributed.runs {
+            let text = String(attributed[run.range].characters)
+            guard text.isEmpty == false else { continue }
+            guard let color = attributed[run.range].foregroundColor else { continue }
+            result.append((text, OverlayColor(color: color)))
+        }
+        return result
+    }
+
+    private func assertCaptionColor(
+        _ actual: OverlayColor,
+        matchesBase base: OverlayColor,
+        alpha: Double,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.red, base.red, accuracy: 0.03, file: file, line: line)
+        XCTAssertEqual(actual.green, base.green, accuracy: 0.03, file: file, line: line)
+        XCTAssertEqual(actual.blue, base.blue, accuracy: 0.03, file: file, line: line)
+        XCTAssertEqual(actual.alpha, alpha, accuracy: 0.03, file: file, line: line)
     }
 
     private func assertFrame(
