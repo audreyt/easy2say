@@ -499,6 +499,28 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(translatedRuns.mutable, "第一場會議")
     }
 
+    func testIndependentDraftDoesNotRepeatAnUnchangedLane() throws {
+        var state = OverlayPreviewState(
+            translatedText: "UNCHANGED TRANSLATION",
+            sourceText: "Previous source",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        let promotionID = UUID()
+        state.draftPromotionID = promotionID
+        state.draftSourceText = "Current unrelated source"
+        state.setDraftTranslation(
+            "UNCHANGED TRANSLATION",
+            sourceText: "Current unrelated source",
+            promotionID: promotionID
+        )
+
+        let display = try XCTUnwrap(state.liveCaptionPresentation.displayCaption)
+        XCTAssertEqual(display.translatedText, "UNCHANGED TRANSLATION")
+        XCTAssertEqual(display.translatedAgedPrefixLength, 0)
+        XCTAssertEqual(display.sourceText, "Previous source\nCurrent unrelated source")
+    }
+
     func testIndependentEmptyCurrentLaneKeepsRetainedTextUnaged() throws {
         var state = OverlayPreviewState(
             translatedText: "Previous translation.",
@@ -900,6 +922,17 @@ final class OverlayPreviewStateTests: XCTestCase {
         let earlyPixels = try XCTUnwrap(
             earlyBitmap.representation(using: .png, properties: [:])
         )
+        let rowBands = brightPixelRowBands(in: earlyBitmap)
+        XCTAssertEqual(rowBands.count, 4)
+        if rowBands.count == 4 {
+            let historyLaneGap = rowBands[1].lowerBound - rowBands[0].upperBound - 1
+            let liveLaneGap = rowBands[3].lowerBound - rowBands[2].upperBound - 1
+            XCTAssertLessThanOrEqual(
+                liveLaneGap,
+                historyLaneGap + 4,
+                "single-line live translation and source lanes must not reserve an empty text row"
+            )
+        }
 
         RunLoop.main.run(until: Date().addingTimeInterval(0.45))
         let settledBitmap = try renderBitmap(
@@ -916,6 +949,229 @@ final class OverlayPreviewStateTests: XCTestCase {
             settledPixels,
             "caption rollover painted an intermediate crossfade frame"
         )
+    }
+
+    @MainActor
+    func testMacRendererNeverShowsArchivedCaptionBesideItsStaleLiveCopy() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-caption-exclusive-rollover-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+
+        let previousPromotionID = UUID()
+        let currentPromotionID = UUID()
+        let previousHistoryID = UUID()
+        let previousTranslation = "ARCHIVED TRANSLATION"
+        let previousSource = "ARCHIVED SOURCE"
+        let currentTranslation = "CURRENT TRANSLATION"
+        let currentSource = "CURRENT SOURCE"
+
+        var previousState = OverlayPreviewState(
+            translatedText: previousTranslation,
+            sourceText: previousSource,
+            sourceName: "Test"
+        )
+        previousState.captionEpoch = 1
+        previousState.committedPromotionID = previousPromotionID
+        previousState.committedCaptionID = previousHistoryID
+        previousState.draftPromotionID = currentPromotionID
+        previousState.draftSourceText = currentSource
+        previousState.setDraftTranslation(
+            currentTranslation,
+            sourceText: currentSource,
+            promotionID: currentPromotionID
+        )
+
+        var currentState = OverlayPreviewState(
+            translatedText: currentTranslation,
+            sourceText: currentSource,
+            sourceName: "Test"
+        )
+        currentState.captionEpoch = 2
+        currentState.committedPromotionID = currentPromotionID
+        currentState.history = [
+            OverlayHistoryEntry(
+                id: previousHistoryID,
+                translatedText: previousTranslation,
+                sourceText: previousSource
+            )
+        ]
+
+        let hostingView = NSHostingView(
+            rootView: CaptionFlowContentView(
+                model: model,
+                reservesColumnHeaderSpace: false
+            )
+            .background(Color.black)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 420)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        model.setOverlayStateForTesting(previousState)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+        model.resetRenderedCaptionStatesForTesting()
+
+        model.setOverlayStateForTesting(currentState)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.65))
+
+        let states = model.renderedCaptionStatesForTesting
+        XCTAssertFalse(states.isEmpty)
+        XCTAssertTrue(states.last?.historyEntryIDs.contains(previousHistoryID) == true)
+        XCTAssertFalse(
+            states.contains { state in
+                state.historyEntryIDs.contains(previousHistoryID)
+                    && state.liveHistoryEntryIDs.contains(previousHistoryID)
+            },
+            "one caption identity must never occupy the live and history layers together"
+        )
+        XCTAssertFalse(
+            states.contains { state in
+                guard state.historyEntryIDs.contains(previousHistoryID) else { return false }
+                return state.liveTexts.contains { liveText in
+                    liveText
+                        .split(separator: "\n")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .contains(previousTranslation)
+                        || liveText
+                            .split(separator: "\n")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .contains(previousSource)
+                }
+            },
+            "an archived caption must wait until its stale live copy has left the visible lane"
+        )
+    }
+
+    @MainActor
+    func testMacRendererPaintsIdenticalTranslationAndSourceOnlyOnce() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-caption-identical-lanes-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(
+                translatedText: "IDENTICAL CAPTION",
+                sourceText: "IDENTICAL CAPTION",
+                sourceName: "Test"
+            )
+        )
+
+        let hostingView = NSHostingView(
+            rootView: CaptionFlowContentView(
+                model: model,
+                reservesColumnHeaderSpace: false
+            )
+            .background(Color.black)
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 420)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+        let bitmap = try renderBitmap(
+            hostingView,
+            snapshotName: "easy2say-native-identical-lanes.png"
+        )
+        XCTAssertEqual(
+            brightPixelRowBands(in: bitmap).count,
+            1,
+            "identical translation and source lanes must share one visual row"
+        )
+    }
+
+    @MainActor
+    func testMacRendererRetainsDistinctRepeatedHistoryEntries() throws {
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-caption-identical-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+
+        let olderID = UUID()
+        let newerID = UUID()
+        var state = OverlayPreviewState(
+            translatedText: "CURRENT TRANSLATION",
+            sourceText: "CURRENT SOURCE",
+            sourceName: "Test"
+        )
+        state.history = [
+            OverlayHistoryEntry(
+                id: olderID,
+                translatedText: "REPEATED TRANSLATION",
+                sourceText: "REPEATED SOURCE"
+            ),
+            OverlayHistoryEntry(
+                id: newerID,
+                translatedText: "REPEATED TRANSLATION",
+                sourceText: "REPEATED SOURCE"
+            )
+        ]
+        model.setOverlayStateForTesting(state)
+
+        let hostingView = NSHostingView(
+            rootView: CaptionFlowContentView(
+                model: model,
+                reservesColumnHeaderSpace: false
+            )
+        )
+        hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 420)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.setFrameOrigin(NSPoint(x: -2_000, y: -2_000))
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.45))
+
+        let renderedIDs = try XCTUnwrap(model.renderedCaptionStatesForTesting.last).historyEntryIDs
+        XCTAssertTrue(renderedIDs.contains(olderID))
+        XCTAssertTrue(renderedIDs.contains(newerID))
+        XCTAssertEqual(model.overlayHistoryForTesting.map(\.id), [olderID, newerID])
     }
 
     @MainActor
@@ -1152,6 +1408,38 @@ final class OverlayPreviewStateTests: XCTestCase {
             width: maxX - minX + 1,
             height: maxY - minY + 1
         )
+    }
+
+    private func brightPixelRowBands(in bitmap: NSBitmapImageRep) -> [ClosedRange<Int>] {
+        var brightRows: [Int] = []
+        for y in 0..<bitmap.pixelsHigh {
+            let isBright = (0..<bitmap.pixelsWide).contains { x in
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    return false
+                }
+                return max(
+                    color.redComponent,
+                    max(color.greenComponent, color.blueComponent)
+                ) > 0.12
+            }
+            if isBright {
+                brightRows.append(y)
+            }
+        }
+
+        guard let first = brightRows.first else { return [] }
+        var result: [ClosedRange<Int>] = []
+        var lowerBound = first
+        var previous = first
+        for row in brightRows.dropFirst() {
+            if row > previous + 1 {
+                result.append(lowerBound...previous)
+                lowerBound = row
+            }
+            previous = row
+        }
+        result.append(lowerBound...previous)
+        return result
     }
 
     private func brightPixelCoordinates(

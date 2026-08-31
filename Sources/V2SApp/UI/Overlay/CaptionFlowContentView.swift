@@ -15,18 +15,31 @@ struct CaptionFlowContentView: View {
     @State private var lastLiveLayersHeight: CGFloat = 0.0
     @State private var measuredHistoryEntryHeights: [UUID: CGFloat] = [:]
 
+    @State private var liveVisibleLaneTexts: Set<String> = []
+    @State private var liveVisibleHistoryEntryIDs: Set<UUID> = []
+
     var body: some View {
         Group {
             if let state = model.overlayState {
                 GeometryReader { proxy in
                     let captionAreaHeight = proxy.size.height - captionColumnHeaderHeight
                     let availableHistoryHeight = availableHistoryHeight(for: captionAreaHeight, state: state)
+                    let visibleLiveHistoryEntryIDs = liveVisibleHistoryEntryIDs.isEmpty
+                        ? initialVisibleHistoryEntryIDs(for: state)
+                        : liveVisibleHistoryEntryIDs
                     let visibleHistoryEntries = showsHistory
-                        ? historyVisibleEntries(from: state.history, availableHeight: availableHistoryHeight)
+                        ? historyVisibleEntries(
+                            from: state.history,
+                            availableHeight: availableHistoryHeight,
+                            liveHistoryEntryIDs: visibleLiveHistoryEntryIDs
+                        )
                         : []
                     let visibleHistoryCount = visibleHistoryEntries.count
+                    ZStack(alignment: liveFlowAlignment) {
+                        if shouldReserveCurrentCaptionSlot(for: state) {
+                            currentCaptionSlotPlaceholder
+                        }
 
-                    ZStack(alignment: .bottom) {
                         VStack(alignment: liveStackHorizontalAlignment, spacing: Self.liveStackSpacing) {
                             ForEach(Array(visibleHistoryEntries.enumerated()), id: \.element.id) { index, entry in
                                 historyEntry(
@@ -44,7 +57,7 @@ struct CaptionFlowContentView: View {
                             transaction.disablesAnimations = true
                         }
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .bottom)
+                        .frame(maxWidth: .infinity, alignment: liveFlowAlignment)
                     }
                     .padding(.top, captionColumnHeaderHeight)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -61,15 +74,43 @@ struct CaptionFlowContentView: View {
                             measuredHistoryEntryHeights[id] = ceil(height)
                         }
                     }
+                    .onPreferenceChange(LiveCaptionVisibleTextsPreferenceKey.self) { texts in
+                        liveVisibleLaneTexts = texts
+                        recordRenderedCaptionState(
+                            liveTexts: texts,
+                            liveHistoryEntryIDs: liveVisibleHistoryEntryIDs,
+                            historyEntryIDs: visibleHistoryEntries.map(\.id)
+                        )
+                    }
+                    .onPreferenceChange(LiveCaptionVisibleHistoryEntryIDsPreferenceKey.self) { ids in
+                        liveVisibleHistoryEntryIDs = ids
+                        recordRenderedCaptionState(
+                            liveTexts: liveVisibleLaneTexts,
+                            liveHistoryEntryIDs: ids,
+                            historyEntryIDs: visibleHistoryEntries.map(\.id)
+                        )
+                    }
                     .onAppear {
                         if updatesModelHistoryVisibleCount {
                             model.updateOverlayHistoryVisibleCount(visibleHistoryCount)
                         }
+                        recordRenderedCaptionState(
+                            liveTexts: liveVisibleLaneTexts,
+                            liveHistoryEntryIDs: liveVisibleHistoryEntryIDs,
+                            historyEntryIDs: visibleHistoryEntries.map(\.id)
+                        )
                     }
                     .onChange(of: visibleHistoryCount) { _, newCount in
                         if updatesModelHistoryVisibleCount {
                             model.updateOverlayHistoryVisibleCount(newCount)
                         }
+                    }
+                    .onChange(of: visibleHistoryEntries.map(\.id)) { _, ids in
+                        recordRenderedCaptionState(
+                            liveTexts: liveVisibleLaneTexts,
+                            liveHistoryEntryIDs: liveVisibleHistoryEntryIDs,
+                            historyEntryIDs: ids
+                        )
                     }
                     .onChange(of: state.history.map(\.id)) { _, ids in
                         let validIDs = Set(ids)
@@ -84,6 +125,8 @@ struct CaptionFlowContentView: View {
                         if newState != .running {
                             lastLiveLayersHeight = 0
                             measuredHistoryEntryHeights = [:]
+                            liveVisibleLaneTexts = []
+                            liveVisibleHistoryEntryIDs = []
                         }
                     }
                 }
@@ -98,6 +141,27 @@ struct CaptionFlowContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    private func recordRenderedCaptionState(
+        liveTexts: Set<String>,
+        liveHistoryEntryIDs: Set<UUID>,
+        historyEntryIDs: [UUID]
+    ) {
+#if DEBUG
+        model.recordRenderedCaptionStateForTesting(
+            liveTexts: liveTexts,
+            liveHistoryEntryIDs: liveHistoryEntryIDs,
+            historyEntryIDs: historyEntryIDs
+        )
+#endif
+    }
+
+    private var liveFlowAlignment: Alignment {
+        if stabilizesLiveCaptionLinePositions {
+            return usesLeadingCaptionAlignment ? .topLeading : .top
+        }
+        return usesLeadingCaptionAlignment ? .bottomLeading : .bottom
     }
 
     // MARK: - Continuous flow
@@ -122,13 +186,15 @@ struct CaptionFlowContentView: View {
                 text: caption.translatedText,
                 color: baseSubtitleColor,
                 agedPrefixLength: caption.translatedAgedPrefixLength,
-                stablePrefixLength: caption.translatedStablePrefixLength
+                stablePrefixLength: caption.translatedStablePrefixLength,
+                representedHistoryEntryIDs: caption.representedHistoryEntryIDs
             ),
             source: CaptionLaneContent(
                 text: caption.sourceText,
                 color: baseSubtitleColor,
                 agedPrefixLength: caption.sourceAgedPrefixLength,
-                stablePrefixLength: caption.sourceStablePrefixLength
+                stablePrefixLength: caption.sourceStablePrefixLength,
+                representedHistoryEntryIDs: caption.representedHistoryEntryIDs
             ),
             reservesEmptyLines: true,
             maximumVisibleLines: Self.liveCaptionLineLimit,
@@ -136,11 +202,7 @@ struct CaptionFlowContentView: View {
         )
         .padding(.bottom, Self.currentCaptionBottomInset)
 
-#if DEBUG
-        return layer.background(currentCaptionFrameReader)
-#else
         return layer
-#endif
     }
 
 #if DEBUG
@@ -212,27 +274,41 @@ struct CaptionFlowContentView: View {
         .background(historyEntryHeightReader(for: entry.id))
     }
 
-    private func historyVisibleEntries(from history: [OverlayHistoryEntry], availableHeight: CGFloat) -> [OverlayHistoryEntry] {
+    private func historyVisibleEntries(
+        from history: [OverlayHistoryEntry],
+        availableHeight: CGFloat,
+        liveHistoryEntryIDs: Set<UUID>
+    ) -> [OverlayHistoryEntry] {
         guard availableHeight > 0 else { return [] }
         let offset = min(max(model.overlayHistoryScrollOffset, 0), max(0, history.count - 1))
         let upperBound = max(0, history.count - offset)
         guard upperBound > 0 else { return [] }
 
-        var lowerBound = upperBound
+        var newestFirst: [OverlayHistoryEntry] = []
         var consumedHeight: CGFloat = 0
+        var index = upperBound - 1
 
-        while lowerBound > 0 {
-            let entry = history[lowerBound - 1]
+        while index >= 0 {
+            defer { index -= 1 }
+            let entry = history[index]
+            guard liveHistoryEntryIDs.contains(entry.id) == false else { continue }
+
             let nextHeight = historyEntryHeight(for: entry) + Self.liveStackSpacing
-            if lowerBound == upperBound || consumedHeight + nextHeight <= availableHeight {
+            if newestFirst.isEmpty || consumedHeight + nextHeight <= availableHeight {
+                newestFirst.append(entry)
                 consumedHeight += nextHeight
-                lowerBound -= 1
             } else {
                 break
             }
         }
 
-        return Array(history[lowerBound..<upperBound])
+        return Array(newestFirst.reversed())
+    }
+
+    private func initialVisibleHistoryEntryIDs(
+        for state: OverlayPreviewState
+    ) -> Set<UUID> {
+        state.liveCaptionPresentation.displayCaption?.representedHistoryEntryIDs ?? []
     }
 
     private func availableHistoryHeight(for height: CGFloat, state: OverlayPreviewState) -> CGFloat {
@@ -258,9 +334,18 @@ struct CaptionFlowContentView: View {
             source: entry.sourceText
         )
         let translatedText = usesFallback ? entry.sourceText : entry.translatedText
+        let suppression = duplicateLaneSuppression(
+            translated: translatedText,
+            source: entry.sourceText
+        )
         return estimatedCaptionPairHeight(
-            showsTranslated: showsTranslatedSubtitle && translatedText.isEmpty == false,
-            showsSource: showsOriginalSubtitle && entry.sourceText.isEmpty == false && usesFallback == false
+            showsTranslated: showsTranslatedSubtitle
+                && translatedText.isEmpty == false
+                && suppression.translated == false,
+            showsSource: showsOriginalSubtitle
+                && entry.sourceText.isEmpty == false
+                && usesFallback == false
+                && suppression.source == false
         )
     }
 
@@ -274,7 +359,7 @@ struct CaptionFlowContentView: View {
     }
 
     private var currentCaptionSlotPlaceholder: some View {
-        Color.clear
+        let placeholder = Color.clear
             .frame(maxWidth: .infinity)
             .frame(
                 height: estimatedCaptionPairHeight(
@@ -284,6 +369,12 @@ struct CaptionFlowContentView: View {
                 ) + Self.currentCaptionBottomInset
             )
             .accessibilityHidden(true)
+
+#if DEBUG
+        return placeholder.background(currentCaptionFrameReader)
+#else
+        return placeholder
+#endif
     }
 
     private var liveLayersHeightReader: some View {
@@ -308,12 +399,17 @@ struct CaptionFlowContentView: View {
         maximumVisibleLines: Int? = nil,
         risesNewLines: Bool = false
     ) -> some View {
+        let suppression = duplicateLaneSuppression(
+            translated: translated.text,
+            source: source.text
+        )
         if usesColumnCaptions {
             HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
                 inLayoutOrder(
                     translated: {
                         captionColumn {
-                            if translated.text.isEmpty == false || reservesEmptyLines {
+                            if suppression.translated == false,
+                               translated.text.isEmpty == false || reservesEmptyLines {
                                 translatedText(
                                     translated,
                                     maximumVisibleLines: maximumVisibleLines,
@@ -325,7 +421,8 @@ struct CaptionFlowContentView: View {
                     },
                     original: {
                         captionColumn {
-                            if source.text.isEmpty == false || reservesEmptyLines {
+                            if suppression.source == false,
+                               source.text.isEmpty == false || reservesEmptyLines {
                                 sourceText(
                                     source,
                                     maximumVisibleLines: maximumVisibleLines,
@@ -385,6 +482,10 @@ struct CaptionFlowContentView: View {
         // The fallback lane borrows the original's text and run boundaries but
         // keeps the translation lane's colour, so history ageing still applies.
         let primaryTranslated = usesFallback ? source.recolored(translated.color) : translated
+        let suppression = duplicateLaneSuppression(
+            translated: primaryTranslated.text,
+            source: source.text
+        )
         let showsTranslatedLine = showsTranslatedSubtitle
             && (primaryTranslated.text.isEmpty == false || reservesEmptyLines)
         let showsSourceLine = showsOriginalSubtitle
@@ -395,7 +496,8 @@ struct CaptionFlowContentView: View {
             inLayoutOrder(
                 translated: {
                     Group {
-                        if primaryTranslated.text.isEmpty == false || showsTranslatedLine {
+                        if suppression.translated == false,
+                           primaryTranslated.text.isEmpty == false || showsTranslatedLine {
                             translatedText(
                                 primaryTranslated,
                                 maximumVisibleLines: maximumVisibleLines,
@@ -410,7 +512,8 @@ struct CaptionFlowContentView: View {
                 },
                 original: {
                     Group {
-                        if (source.text.isEmpty == false && usesFallback == false) || showsSourceLine {
+                        if suppression.source == false,
+                           (source.text.isEmpty == false && usesFallback == false) || showsSourceLine {
                             sourceText(
                                 source,
                                 maximumVisibleLines: maximumVisibleLines,
@@ -422,6 +525,18 @@ struct CaptionFlowContentView: View {
                 }
             )
         }
+    }
+
+    private func duplicateLaneSuppression(
+        translated: String,
+        source: String
+    ) -> (translated: Bool, source: Bool) {
+        guard showsTranslatedSubtitle,
+              showsOriginalSubtitle,
+              CaptionTextVisibility.areEquivalent(translated, source) else {
+            return (false, false)
+        }
+        return captionLayout.leadsWithTranslation ? (false, true) : (true, false)
     }
 
     private func usesSourceAsTranslationFallback(translated: String, source: String) -> Bool {
@@ -633,6 +748,7 @@ struct CaptionFlowContentView: View {
         CaptionLaneText(
             text: lane.text,
             attributedText: lane.runs.attributedString(baseColor: lane.color),
+            representedHistoryEntryIDs: lane.representedHistoryEntryIDs,
             fontSize: fontSize,
             weight: weight,
             lineHeight: lineHeight,
@@ -687,17 +803,20 @@ struct CaptionLaneContent: Equatable {
     let agedPrefixLength: Int
     /// `nil` means the lane is settled text with no revisable tail — history.
     let stablePrefixLength: Int?
+    let representedHistoryEntryIDs: Set<UUID>
 
     init(
         text: String,
         color: Color,
         agedPrefixLength: Int = 0,
-        stablePrefixLength: Int? = nil
+        stablePrefixLength: Int? = nil,
+        representedHistoryEntryIDs: Set<UUID> = []
     ) {
         self.text = text
         self.color = color
         self.agedPrefixLength = agedPrefixLength
         self.stablePrefixLength = stablePrefixLength
+        self.representedHistoryEntryIDs = representedHistoryEntryIDs
     }
 
     var runs: OverlayCaptionRuns {
@@ -713,7 +832,8 @@ struct CaptionLaneContent: Equatable {
             text: text,
             color: color,
             agedPrefixLength: agedPrefixLength,
-            stablePrefixLength: stablePrefixLength
+            stablePrefixLength: stablePrefixLength,
+            representedHistoryEntryIDs: representedHistoryEntryIDs
         )
     }
 }
@@ -827,6 +947,7 @@ struct CaptionLineRiseRenderer: TextRenderer {
 struct CaptionLaneText: View {
     let text: String
     let attributedText: AttributedString
+    let representedHistoryEntryIDs: Set<UUID>
     let fontSize: Double
     let weight: Font.Weight
     let lineHeight: CGFloat
@@ -845,11 +966,11 @@ struct CaptionLaneText: View {
     @State private var riseGeneration: Int = 0
 
     /// What the lane is drawing right now, paired with the settled layout it was
-    /// measured at. One value, so caption text and its rise decision can only
-    /// ever commit together.
+    /// measured at. One value, so text and identity can only commit together.
     private struct VisibleCaption: Equatable {
         let attributedText: AttributedString
         let layout: CaptionLineRiseLayoutSnapshot
+        let representedHistoryEntryIDs: Set<UUID>
     }
 
     /// One hidden measurement: which string was laid out, into how many visual
@@ -871,6 +992,9 @@ struct CaptionLaneText: View {
                 .onChange(of: attributedText) { _, _ in
                     reconcile()
                 }
+                .onChange(of: representedHistoryEntryIDs) { _, _ in
+                    reconcile()
+                }
         } else {
             // History never revises, rises, or needs a stable two-line viewport.
             clipped(
@@ -881,16 +1005,21 @@ struct CaptionLaneText: View {
 
     @ViewBuilder
     private func clipped<Content: View>(_ content: Content) -> some View {
-        if let maximumVisibleLines {
+        if maximumVisibleLines != nil {
             content
                 .frame(
-                    height: lineHeight * CGFloat(max(1, maximumVisibleLines)),
+                    height: lineHeight * CGFloat(visibleLineCount),
                     alignment: stabilizesLinePositions ? .top : .bottom
                 )
                 .clipped()
         } else {
             content
         }
+    }
+
+    private var visibleLineCount: Int {
+        guard let maximumVisibleLines else { return 1 }
+        return min(max(1, visible?.layout.lineCount ?? 1), max(1, maximumVisibleLines))
     }
 
     @ViewBuilder
@@ -908,6 +1037,17 @@ struct CaptionLaneText: View {
             attributedText: visible?.attributedText ?? AttributedString()
         )
         .offset(y: stabilizedLineOffset)
+        .preference(
+            key: LiveCaptionVisibleTextsPreferenceKey.self,
+            value: Set([visible?.layout.text].compactMap { text in
+                guard let text, text.isEmpty == false else { return nil }
+                return text
+            })
+        )
+        .preference(
+            key: LiveCaptionVisibleHistoryEntryIDsPreferenceKey.self,
+            value: visible?.representedHistoryEntryIDs ?? []
+        )
     }
 
     private var stabilizedLineOffset: CGFloat {
@@ -1034,7 +1174,11 @@ struct CaptionLaneText: View {
             )
         }
 
-        let incoming = VisibleCaption(attributedText: attributedText, layout: candidate)
+        let incoming = VisibleCaption(
+            attributedText: attributedText,
+            layout: candidate,
+            representedHistoryEntryIDs: representedHistoryEntryIDs
+        )
         guard incoming != visible else { return }
 
         // A lane's first caption is measured against an empty lane at the same
@@ -1052,6 +1196,23 @@ struct CaptionLaneText: View {
     }
 }
 
+enum CaptionTextVisibility {
+    static func normalized(_ text: String) -> String? {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    static func areEquivalent(_ lhs: String, _ rhs: String) -> Bool {
+        guard let lhs = normalized(lhs), let rhs = normalized(rhs) else {
+            return false
+        }
+        return lhs == rhs
+    }
+}
+
 struct LiveLayersHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0.0
 
@@ -1065,6 +1226,22 @@ struct HistoryEntryHeightsPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout [UUID: CGFloat], nextValue: () -> [UUID: CGFloat]) {
         value.merge(nextValue()) { _, new in new }
+    }
+}
+
+struct LiveCaptionVisibleTextsPreferenceKey: PreferenceKey {
+    static var defaultValue: Set<String> = []
+
+    static func reduce(value: inout Set<String>, nextValue: () -> Set<String>) {
+        value.formUnion(nextValue())
+    }
+}
+
+struct LiveCaptionVisibleHistoryEntryIDsPreferenceKey: PreferenceKey {
+    static var defaultValue: Set<UUID> = []
+
+    static func reduce(value: inout Set<UUID>, nextValue: () -> Set<UUID>) {
+        value.formUnion(nextValue())
     }
 }
 

@@ -39,6 +39,7 @@ struct OverlayPreviewState: Equatable {
     // MARK: Caption identity
     var captionEpoch: Int = 0
     var committedPromotionID: UUID? = nil
+    var committedCaptionID: UUID? = nil
     var committedAudioStartMs: Int? = nil
 
     // MARK: Derived helpers
@@ -219,6 +220,7 @@ struct OverlayLiveCaptionPresentation: Equatable {
         let sourceStablePrefixLength: Int
         let translatedAgedPrefixLength: Int
         let sourceAgedPrefixLength: Int
+        let representedHistoryEntryIDs: Set<UUID>
 
         init(
             id: Identity,
@@ -228,7 +230,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
             translatedStablePrefixLength: Int? = nil,
             sourceStablePrefixLength: Int? = nil,
             translatedAgedPrefixLength: Int = 0,
-            sourceAgedPrefixLength: Int = 0
+            sourceAgedPrefixLength: Int = 0,
+            representedHistoryEntryIDs: Set<UUID> = []
         ) {
             self.id = id
             self.phase = phase
@@ -250,6 +253,7 @@ struct OverlayLiveCaptionPresentation: Equatable {
                 sourceAgedPrefixLength,
                 stablePrefixLength: self.sourceStablePrefixLength
             )
+            self.representedHistoryEntryIDs = representedHistoryEntryIDs
         }
 
         var translatedStableText: String {
@@ -301,6 +305,12 @@ struct OverlayLiveCaptionPresentation: Equatable {
             trailingText: currentCaption.sourceText,
             trailingStablePrefixLength: currentCaption.sourceStablePrefixLength
         )
+        var representedHistoryEntryIDs = currentCaption.representedHistoryEntryIDs
+        if translated.includesLeadingText || source.includesLeadingText {
+            representedHistoryEntryIDs.formUnion(
+                precedingCommittedCaption.representedHistoryEntryIDs
+            )
+        }
         return Caption(
             id: currentCaption.id,
             phase: currentCaption.phase,
@@ -309,7 +319,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
             translatedStablePrefixLength: translated.stablePrefixLength,
             sourceStablePrefixLength: source.stablePrefixLength,
             translatedAgedPrefixLength: translated.agedPrefixLength,
-            sourceAgedPrefixLength: source.agedPrefixLength
+            sourceAgedPrefixLength: source.agedPrefixLength,
+            representedHistoryEntryIDs: representedHistoryEntryIDs
         )
     }
 
@@ -317,16 +328,33 @@ struct OverlayLiveCaptionPresentation: Equatable {
         leadingText: String,
         trailingText: String,
         trailingStablePrefixLength: Int
-    ) -> (text: String, stablePrefixLength: Int, agedPrefixLength: Int) {
+    ) -> (
+        text: String,
+        stablePrefixLength: Int,
+        agedPrefixLength: Int,
+        includesLeadingText: Bool
+    ) {
         guard leadingText.isEmpty == false else {
             return (
                 trailingText,
                 min(trailingStablePrefixLength, trailingText.count),
-                0
+                0,
+                false
             )
         }
         guard trailingText.isEmpty == false else {
-            return (leadingText, leadingText.count, 0)
+            return (leadingText, leadingText.count, 0, true)
+        }
+
+        let normalizedLeading = leadingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTrailing = trailingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedLeading == normalizedTrailing {
+            return (
+                trailingText,
+                min(trailingStablePrefixLength, trailingText.count),
+                0,
+                false
+            )
         }
 
         let separator = "\n"
@@ -335,7 +363,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
         return (
             text,
             leadingText.count + separator.count + trailingStable,
-            leadingText.count
+            leadingText.count,
+            true
         )
     }
 }
@@ -631,7 +660,8 @@ extension OverlayPreviewState {
             translatedText: translatedText,
             sourceText: sourceText,
             translatedAgedPrefixLength: 0,
-            sourceAgedPrefixLength: 0
+            sourceAgedPrefixLength: 0,
+            representedHistoryEntryIDs: committedCaptionID.map { [$0] } ?? []
         )
     }
 }

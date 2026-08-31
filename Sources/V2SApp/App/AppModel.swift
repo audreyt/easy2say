@@ -2470,6 +2470,7 @@ final class AppModel: ObservableObject {
         overlayState?.translatedText = ""
         overlayState?.sourceText = ""
         overlayState?.committedPromotionID = nil
+        overlayState?.committedCaptionID = nil
         displayedCaption = nil
         displayedCaptionLastVisualUpdateAt = Date.distantPast
         displayedCaptionLastVisualUpdateWasLateTranslation = false
@@ -2494,6 +2495,7 @@ final class AppModel: ObservableObject {
         translatedText: String,
         sourceText: String,
         promotionID: UUID? = nil,
+        captionID: UUID? = nil,
         bumpEpoch: Bool = false,
         lateTranslation: Bool = false,
         audioStartMs: Int? = nil,
@@ -2515,6 +2517,9 @@ final class AppModel: ObservableObject {
         }
         if let promotionID {
             overlayState?.committedPromotionID = promotionID
+        }
+        if let captionID {
+            overlayState?.committedCaptionID = captionID
         }
         if assignCommittedAudioStart {
             overlayState?.committedAudioStartMs = audioStartMs
@@ -2843,7 +2848,8 @@ final class AppModel: ObservableObject {
             updateCommittedOverlay(
                 translatedText: panes.translatedText,
                 sourceText: panes.sourceText,
-                promotionID: newPromotionID
+                promotionID: newPromotionID,
+                captionID: captionID
             )
             upsertTranscriptEntry(
                 id: captionID,
@@ -3186,6 +3192,7 @@ final class AppModel: ObservableObject {
                 translatedText: panes.translatedText,
                 sourceText: panes.sourceText,
                 promotionID: caption.promotionID,
+                captionID: caption.id,
                 bumpEpoch: true,
                 audioStartMs: caption.audioStartMs,
                 assignCommittedAudioStart: true
@@ -4225,6 +4232,13 @@ final class AppModel: ObservableObject {
 #if DEBUG
     private(set) var liveCaptionFrameForTesting: CGRect?
     private(set) var liveCaptionFramesForTesting: [CGRect] = []
+    struct RenderedCaptionStateForTesting: Equatable {
+        let liveTexts: Set<String>
+        let liveHistoryEntryIDs: Set<UUID>
+        let historyEntryIDs: [UUID]
+    }
+
+    private(set) var renderedCaptionStatesForTesting: [RenderedCaptionStateForTesting] = []
 
     /// Overrides the committed-caption idle-archive delay. `nil` keeps the
     /// production delay; `.infinity` suspends idle archiving entirely, which
@@ -4245,6 +4259,24 @@ final class AppModel: ObservableObject {
 
     func resetLiveCaptionFramesForTesting() {
         liveCaptionFramesForTesting = []
+    }
+
+    func recordRenderedCaptionStateForTesting(
+        liveTexts: Set<String>,
+        liveHistoryEntryIDs: Set<UUID>,
+        historyEntryIDs: [UUID]
+    ) {
+        let state = RenderedCaptionStateForTesting(
+            liveTexts: liveTexts,
+            liveHistoryEntryIDs: liveHistoryEntryIDs,
+            historyEntryIDs: historyEntryIDs
+        )
+        guard renderedCaptionStatesForTesting.last != state else { return }
+        renderedCaptionStatesForTesting.append(state)
+    }
+
+    func resetRenderedCaptionStatesForTesting() {
+        renderedCaptionStatesForTesting = []
     }
 
     func enqueueRecognizedSentenceForTesting(

@@ -518,6 +518,10 @@ final class LiveTranscriptionSessionTests: XCTestCase {
         XCTAssertEqual(model.displayedCaptionForTesting?.sourceText, "Thank you very much.")
         XCTAssertEqual(model.overlayHistoryForTesting.count, 1)
         XCTAssertEqual(model.overlayHistoryForTesting.first?.sourceText, "Thank you very much.")
+        XCTAssertEqual(
+            model.overlayHistoryForTesting.first?.id,
+            model.transcriptEntriesForTesting.first?.id
+        )
         XCTAssertEqual(model.transcriptEntriesForTesting.count, 2)
         XCTAssertEqual(model.transcriptEntriesForTesting[0].sourceText, "Thank you very much.")
         XCTAssertEqual(model.transcriptEntriesForTesting[1].sourceText, "Thank you very much.")
