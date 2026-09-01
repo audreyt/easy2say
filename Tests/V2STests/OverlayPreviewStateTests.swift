@@ -521,6 +521,358 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(display.sourceText, "Previous source\nCurrent unrelated source")
     }
 
+    func testAudienceProjectionNeverDeduplicatesOnlyOneLanguageLane() throws {
+        let firstHistoryID = UUID()
+        let secondHistoryID = UUID()
+        let sameSource = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "First translation",
+                sourceText: "相同來源",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .committed,
+                translatedText: "Second translation",
+                sourceText: "相同來源",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let overlaySameSource = try XCTUnwrap(sameSource.displayCaption)
+        XCTAssertEqual(overlaySameSource.sourceText, "相同來源")
+        XCTAssertEqual(
+            overlaySameSource.translatedText,
+            "First translation\nSecond translation"
+        )
+
+        let audienceSameSource = try XCTUnwrap(sameSource.audienceDisplayCaption)
+        XCTAssertEqual(audienceSameSource.sourceText, "相同來源\n相同來源")
+        XCTAssertEqual(
+            audienceSameSource.translatedText,
+            "First translation\nSecond translation"
+        )
+        XCTAssertEqual(
+            audienceSameSource.representedHistoryEntryIDs,
+            Set([firstHistoryID, secondHistoryID])
+        )
+
+        let sameTranslation = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "Same translation",
+                sourceText: "First source",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .committed,
+                translatedText: "Same translation",
+                sourceText: "Second source",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let overlaySameTranslation = try XCTUnwrap(sameTranslation.displayCaption)
+        XCTAssertEqual(overlaySameTranslation.translatedText, "Same translation")
+        XCTAssertEqual(
+            overlaySameTranslation.sourceText,
+            "First source\nSecond source"
+        )
+
+        let audienceSameTranslation = try XCTUnwrap(sameTranslation.audienceDisplayCaption)
+        XCTAssertEqual(
+            audienceSameTranslation.translatedText,
+            "Same translation\nSame translation"
+        )
+        XCTAssertEqual(
+            audienceSameTranslation.sourceText,
+            "First source\nSecond source"
+        )
+    }
+
+    func testAudienceProjectionReservesBothRowsWhenEitherSourceIsMissing() throws {
+        let emptyRow = "\u{00A0}"
+        let firstHistoryID = UUID()
+        let secondHistoryID = UUID()
+        let missingPrecedingSource = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "Unpaired older translation",
+                sourceText: "",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .committed,
+                translatedText: "Current translation",
+                sourceText: "Current source",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let current = try XCTUnwrap(missingPrecedingSource.audienceDisplayCaption)
+        XCTAssertEqual(current.sourceText, "\(emptyRow)\nCurrent source")
+        XCTAssertEqual(
+            current.translatedText,
+            "Unpaired older translation\nCurrent translation"
+        )
+        XCTAssertEqual(
+            current.representedHistoryEntryIDs,
+            Set([firstHistoryID, secondHistoryID])
+        )
+
+        let missingCurrentSource = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "Older translation",
+                sourceText: "Older source",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .tentative,
+                translatedText: "Newest translation without source",
+                sourceText: "",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let newest = try XCTUnwrap(missingCurrentSource.audienceDisplayCaption)
+        XCTAssertEqual(newest.sourceText, "Older source\n\(emptyRow)")
+        XCTAssertEqual(
+            newest.translatedText,
+            "Older translation\nNewest translation without source"
+        )
+        XCTAssertEqual(
+            newest.representedHistoryEntryIDs,
+            Set([firstHistoryID, secondHistoryID])
+        )
+
+        let onlyCurrent = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: nil,
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .tentative,
+                translatedText: "",
+                sourceText: "Only source",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+        let single = try XCTUnwrap(onlyCurrent.audienceDisplayCaption)
+        XCTAssertEqual(single.sourceText, "Only source")
+        XCTAssertEqual(single.translatedText, "")
+        XCTAssertEqual(single.representedHistoryEntryIDs, [secondHistoryID])
+    }
+
+    func testAudienceProjectionKeepsSourcePairWhenEitherTranslationIsPending() throws {
+        let firstHistoryID = UUID()
+        let secondHistoryID = UUID()
+        let missingPrecedingTranslation = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "",
+                sourceText: "First source",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .tentative,
+                translatedText: "Second translation",
+                sourceText: "Second source",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let secondTranslation = try XCTUnwrap(
+            missingPrecedingTranslation.audienceDisplayCaption
+        )
+        XCTAssertEqual(secondTranslation.sourceText, "First source\nSecond source")
+        XCTAssertEqual(secondTranslation.translatedText, "\u{00A0}\nSecond translation")
+        XCTAssertEqual(
+            secondTranslation.representedHistoryEntryIDs,
+            Set([firstHistoryID, secondHistoryID])
+        )
+
+        let missingCurrentTranslation = OverlayLiveCaptionPresentation(
+            precedingCommittedCaption: .init(
+                id: .promotion(firstHistoryID),
+                phase: .committed,
+                translatedText: "First translation",
+                sourceText: "First source",
+                representedHistoryEntryIDs: [firstHistoryID]
+            ),
+            currentCaption: .init(
+                id: .promotion(secondHistoryID),
+                phase: .tentative,
+                translatedText: "",
+                sourceText: "Second source",
+                representedHistoryEntryIDs: [secondHistoryID]
+            )
+        )
+
+        let firstTranslation = try XCTUnwrap(
+            missingCurrentTranslation.audienceDisplayCaption
+        )
+        XCTAssertEqual(firstTranslation.sourceText, "First source\nSecond source")
+        XCTAssertEqual(firstTranslation.translatedText, "First translation\n\u{00A0}")
+        XCTAssertEqual(
+            firstTranslation.representedHistoryEntryIDs,
+            Set([firstHistoryID, secondHistoryID])
+        )
+    }
+
+    @MainActor
+    func testNativeAudienceProjectionMaintainsRowPairingAcrossDuplicateAndPendingLanes() throws {
+        struct RenderCase {
+            let name: String
+            let presentation: OverlayLiveCaptionPresentation
+            let sourceRows: [String]
+            let translatedRows: [String]
+        }
+
+        let settingsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v2s-audience-paired-projection-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: settingsURL) }
+        let model = AppModel(
+            settingsStore: SettingsStore(fileURL: settingsURL),
+            sourceCatalogService: NullSourceCatalog()
+        )
+        model.subtitleDisplayMode = .both
+        model.setOverlayStateForTesting(
+            OverlayPreviewState(
+                translatedText: "",
+                sourceText: "",
+                sourceName: "Test"
+            )
+        )
+
+        let emptyRow = "\u{00A0}"
+        let firstHistoryID = UUID()
+        let secondHistoryID = UUID()
+        let cases = [
+            RenderCase(
+                name: "same source, different translations",
+                presentation: OverlayLiveCaptionPresentation(
+                    precedingCommittedCaption: .init(
+                        id: .promotion(firstHistoryID),
+                        phase: .committed,
+                        translatedText: "First translation",
+                        sourceText: "相同來源",
+                        representedHistoryEntryIDs: [firstHistoryID]
+                    ),
+                    currentCaption: .init(
+                        id: .promotion(secondHistoryID),
+                        phase: .committed,
+                        translatedText: "Second translation",
+                        sourceText: "相同來源",
+                        representedHistoryEntryIDs: [secondHistoryID]
+                    )
+                ),
+                sourceRows: ["相同來源", "相同來源"],
+                translatedRows: ["First translation", "Second translation"]
+            ),
+            RenderCase(
+                name: "first translation pending",
+                presentation: OverlayLiveCaptionPresentation(
+                    precedingCommittedCaption: .init(
+                        id: .promotion(firstHistoryID),
+                        phase: .committed,
+                        translatedText: "",
+                        sourceText: "First source",
+                        representedHistoryEntryIDs: [firstHistoryID]
+                    ),
+                    currentCaption: .init(
+                        id: .promotion(secondHistoryID),
+                        phase: .tentative,
+                        translatedText: "Second translation",
+                        sourceText: "Second source",
+                        representedHistoryEntryIDs: [secondHistoryID]
+                    )
+                ),
+                sourceRows: ["First source", "Second source"],
+                translatedRows: [emptyRow, "Second translation"]
+            ),
+            RenderCase(
+                name: "second source pending",
+                presentation: OverlayLiveCaptionPresentation(
+                    precedingCommittedCaption: .init(
+                        id: .promotion(firstHistoryID),
+                        phase: .committed,
+                        translatedText: "First translation",
+                        sourceText: "First source",
+                        representedHistoryEntryIDs: [firstHistoryID]
+                    ),
+                    currentCaption: .init(
+                        id: .promotion(secondHistoryID),
+                        phase: .tentative,
+                        translatedText: "Second translation",
+                        sourceText: "",
+                        representedHistoryEntryIDs: [secondHistoryID]
+                    )
+                ),
+                sourceRows: ["First source", emptyRow],
+                translatedRows: ["First translation", "Second translation"]
+            ),
+        ]
+
+        for testCase in cases {
+            model.resetRenderedCaptionStatesForTesting()
+            let hostingView = NSHostingView(
+                rootView: CaptionFlowContentView(
+                    model: model,
+                    liveCaptionPresentationOverride: testCase.presentation,
+                    liveCaptionProjection: .audienceUtterancePairs,
+                    reservesColumnHeaderSpace: false,
+                    showsHistory: false,
+                    alignsTopDownCaptionsLeading: true,
+                    animatesLiveCaptionLineEntrance: false,
+                    stabilizesLiveCaptionLinePositions: true
+                )
+            )
+            hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
+            hostingView.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+            hostingView.layoutSubtreeIfNeeded()
+
+            let rendered = try XCTUnwrap(
+                model.renderedCaptionStatesForTesting.last,
+                testCase.name
+            )
+            let sourceText = testCase.sourceRows.joined(separator: "\n")
+            let translatedText = testCase.translatedRows.joined(separator: "\n")
+            XCTAssertEqual(
+                rendered.liveTexts,
+                Set([sourceText, translatedText]),
+                "\(testCase.name): native renderer lane text"
+            )
+            let renderedSourceRows = sourceText
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
+            let renderedTranslatedRows = translatedText
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
+            XCTAssertEqual(
+                renderedSourceRows.count,
+                renderedTranslatedRows.count,
+                "\(testCase.name): source/translation row counts"
+            )
+            XCTAssertEqual(renderedSourceRows, testCase.sourceRows, testCase.name)
+            XCTAssertEqual(renderedTranslatedRows, testCase.translatedRows, testCase.name)
+            XCTAssertEqual(
+                rendered.liveHistoryEntryIDs,
+                Set([firstHistoryID, secondHistoryID]),
+                "\(testCase.name): both row identities"
+            )
+        }
+    }
+
     func testIndependentEmptyCurrentLaneKeepsRetainedTextUnaged() throws {
         var state = OverlayPreviewState(
             translatedText: "Previous translation.",
@@ -671,8 +1023,13 @@ final class OverlayPreviewStateTests: XCTestCase {
         )
         state.draftTranslatedStablePrefixLength = stableTranslation.count
 
+        let presentationState = AudienceDisplayPresentationState()
         let hostingView = NSHostingView(
-            rootView: AudienceDisplayView(model: model, onExit: {})
+            rootView: AudienceDisplayView(
+                model: model,
+                presentationState: presentationState,
+                onExit: {}
+            )
         )
         hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
 
@@ -693,6 +1050,7 @@ final class OverlayPreviewStateTests: XCTestCase {
                 state.draftTranslatedStablePrefixLength = stableTranslation.count
             }
             model.setOverlayStateForTesting(state)
+            presentationState.consume(state)
             RunLoop.main.run(until: Date().addingTimeInterval(0.08))
             hostingView.layoutSubtreeIfNeeded()
             let bitmap = try renderBitmap(
@@ -1195,7 +1553,13 @@ final class OverlayPreviewStateTests: XCTestCase {
         )
 
         let hostingView = NSHostingView(
-            rootView: AudienceDisplayView(model: model, onExit: {})
+            rootView: AudienceDisplayView(
+                model: model,
+                presentationState: AudienceDisplayPresentationState(
+                    initialOverlayState: model.overlayState
+                ),
+                onExit: {}
+            )
         )
         hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
         let window = NSWindow(
@@ -1228,8 +1592,59 @@ final class OverlayPreviewStateTests: XCTestCase {
 
     @MainActor
     func testAudienceLineAppendHasNoAnimatedIntermediatePosition() throws {
+        let presentationState = AudienceDisplayPresentationState()
+        try assertLineAppendHasNoAnimatedIntermediatePosition(
+            snapshotPrefix: "easy2say-audience",
+            consumeOverlayState: { presentationState.consume($0) }
+        ) { model in
+            AnyView(
+                AudienceDisplayView(
+                    model: model,
+                    presentationState: presentationState,
+                    onExit: {}
+                )
+                    .background(Color.black)
+            )
+        }
+    }
+
+    @MainActor
+    func testPresenterOverlayLineAppendKeepsExistingGlyphsFixed() throws {
+        try assertLineAppendHasNoAnimatedIntermediatePosition(
+            snapshotPrefix: "easy2say-overlay",
+            history: [
+                OverlayHistoryEntry(
+                    translatedText: "",
+                    sourceText: "Past"
+                ),
+                OverlayHistoryEntry(
+                    translatedText: "",
+                    sourceText: "Done"
+                )
+            ]
+        ) { model in
+            model.updateOverlayStyle { style in
+                style.backgroundOpacity = 0
+            }
+            return AnyView(
+                OverlayView(
+                    model: model,
+                    interactionState: OverlayInteractionState()
+                )
+                .background(Color.black)
+            )
+        }
+    }
+
+    @MainActor
+    private func assertLineAppendHasNoAnimatedIntermediatePosition(
+        snapshotPrefix: String,
+        history: [OverlayHistoryEntry] = [],
+        consumeOverlayState: (OverlayPreviewState?) -> Void = { _ in },
+        makeRootView: (AppModel) -> AnyView
+    ) throws {
         let settingsURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("v2s-audience-stable-frame-\(UUID().uuidString).json")
+            .appendingPathComponent("v2s-line-stability-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: settingsURL) }
 
         let model = AppModel(
@@ -1246,15 +1661,14 @@ final class OverlayPreviewStateTests: XCTestCase {
             sourceText: "",
             sourceName: "Test"
         )
+        state.history = history
         state.draftPromotionID = promotionID
         state.draftSourceText = initialText
         state.draftSourceStablePrefixLength = initialText.count
         model.setOverlayStateForTesting(state)
+        consumeOverlayState(state)
 
-        let hostingView = NSHostingView(
-            rootView: AudienceDisplayView(model: model, onExit: {})
-                .background(Color.black)
-        )
+        let hostingView = NSHostingView(rootView: makeRootView(model))
         hostingView.frame = NSRect(x: 0, y: 0, width: 960, height: 540)
         let window = NSWindow(
             contentRect: hostingView.frame,
@@ -1273,22 +1687,23 @@ final class OverlayPreviewStateTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.35))
         let initialBitmap = try renderBitmap(
             hostingView,
-            snapshotName: "easy2say-audience-stable-initial.png"
+            snapshotName: "\(snapshotPrefix)-stable-initial.png"
         )
         let initialBounds = try XCTUnwrap(brightPixelBounds(in: initialBitmap))
-        let initialLeadingPixels = brightPixelCoordinates(
+        let initialPrefixPixels = brightPixelCoordinates(
             in: initialBitmap,
             within: initialBounds
         )
-        XCTAssertFalse(initialLeadingPixels.isEmpty)
+        XCTAssertFalse(initialPrefixPixels.isEmpty)
 
         func assertStableIncrement(
             _ updatedText: String,
             snapshotStem: String,
-            preservesLeadingGlyphs: Bool = true
+            preservesPrefixGlyphs: Bool = true
         ) throws -> CGRect {
             state.draftSourceText = updatedText
             model.setOverlayStateForTesting(state)
+            consumeOverlayState(state)
 
             RunLoop.main.run(until: Date().addingTimeInterval(0.08))
             let earlyBitmap = try renderBitmap(
@@ -1299,11 +1714,11 @@ final class OverlayPreviewStateTests: XCTestCase {
                 earlyBitmap.representation(using: .png, properties: [:])
             )
             let earlyBounds = try XCTUnwrap(brightPixelBounds(in: earlyBitmap))
-            if preservesLeadingGlyphs {
+            if preservesPrefixGlyphs {
                 XCTAssertEqual(
                     brightPixelCoordinates(in: earlyBitmap, within: initialBounds),
-                    initialLeadingPixels,
-                    "unchanged leading glyphs moved during \(snapshotStem)"
+                    initialPrefixPixels,
+                    "unchanged prefix glyphs moved during \(snapshotStem)"
                 )
             }
 
@@ -1318,14 +1733,14 @@ final class OverlayPreviewStateTests: XCTestCase {
             XCTAssertEqual(
                 earlyPixels,
                 settledPixels,
-                "full-screen captions moved after \(snapshotStem) was painted"
+                "captions moved after \(snapshotStem) was painted"
             )
             return earlyBounds
         }
 
         let sameLineBounds = try assertStableIncrement(
             initialText + " stays",
-            snapshotStem: "easy2say-audience-stable-same-line"
+            snapshotStem: "\(snapshotPrefix)-stable-same-line"
         )
         XCTAssertLessThan(
             sameLineBounds.height,
@@ -1337,21 +1752,21 @@ final class OverlayPreviewStateTests: XCTestCase {
             + String(repeating: " keeps every existing line fixed", count: 2)
         let wrappedBounds = try assertStableIncrement(
             wrappedText,
-            snapshotStem: "easy2say-audience-stable-wrap"
+            snapshotStem: "\(snapshotPrefix)-stable-wrap"
         )
         XCTAssertGreaterThan(
-            wrappedBounds.height,
-            initialBounds.height * 1.5,
+            wrappedBounds.height - sameLineBounds.height,
+            20,
             "the second increment must exercise a real one-line to two-line wrap"
         )
 
         let extendedBounds = try assertStableIncrement(
             wrappedText + " now",
-            snapshotStem: "easy2say-audience-stable-second-line"
+            snapshotStem: "\(snapshotPrefix)-stable-second-line"
         )
         XCTAssertGreaterThan(
-            extendedBounds.height,
-            initialBounds.height * 1.5,
+            extendedBounds.height - sameLineBounds.height,
+            20,
             "the third increment must continue revising the second visual line"
         )
         XCTAssertEqual(
@@ -1363,18 +1778,18 @@ final class OverlayPreviewStateTests: XCTestCase {
 
         let overflowBounds = try assertStableIncrement(
             wrappedText + String(repeating: " while rollover stays atomic", count: 6),
-            snapshotStem: "easy2say-audience-stable-rollover",
-            preservesLeadingGlyphs: false
+            snapshotStem: "\(snapshotPrefix)-stable-rollover",
+            preservesPrefixGlyphs: false
         )
         XCTAssertGreaterThan(
-            overflowBounds.height,
-            initialBounds.height * 1.5,
+            overflowBounds.height - sameLineBounds.height,
+            20,
             "overflow must leave the newest two visual lines visible"
         )
-        XCTAssertLessThan(
+        XCTAssertLessThanOrEqual(
             overflowBounds.height,
-            initialBounds.height * 2.6,
-            "overflow must remain clipped to a stable two-line viewport"
+            max(wrappedBounds.height, extendedBounds.height) + 8,
+            "overflow must remain clipped to the same two-line viewport"
         )
     }
 

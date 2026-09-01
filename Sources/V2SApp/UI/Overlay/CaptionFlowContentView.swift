@@ -2,7 +2,14 @@ import AppKit
 import SwiftUI
 
 struct CaptionFlowContentView: View {
+    enum LiveCaptionProjection {
+        case overlayLaneDeduplication
+        case audienceUtterancePairs
+    }
+
     @ObservedObject var model: AppModel
+    var liveCaptionPresentationOverride: OverlayLiveCaptionPresentation? = nil
+    var liveCaptionProjection: LiveCaptionProjection = .overlayLaneDeduplication
     var showsScrollbarPadding: Bool = false
     var updatesModelHistoryVisibleCount: Bool = false
     var reservesColumnHeaderSpace: Bool = true
@@ -165,13 +172,35 @@ struct CaptionFlowContentView: View {
     }
 
     // MARK: - Continuous flow
+    private func liveCaptionPresentation(
+        for state: OverlayPreviewState
+    ) -> OverlayLiveCaptionPresentation {
+        liveCaptionPresentationOverride ?? state.liveCaptionPresentation
+    }
+
+    private func liveDisplayCaption(
+        for state: OverlayPreviewState
+    ) -> OverlayLiveCaptionPresentation.Caption? {
+        let presentation = liveCaptionPresentation(for: state)
+        switch liveCaptionProjection {
+        case .overlayLaneDeduplication:
+            return presentation.displayCaption
+        case .audienceUtterancePairs:
+            return presentation.audienceDisplayCaption
+        }
+    }
+
 
     private func liveLayers(_ state: OverlayPreviewState) -> some View {
-        let presentation = state.liveCaptionPresentation
 
         return Group {
-            if let displayCaption = presentation.displayCaption {
-                currentCaptionLayer(displayCaption)
+            if let displayCaption = liveDisplayCaption(for: state) {
+                if stabilizesLiveCaptionLinePositions {
+                    currentCaptionLayer(displayCaption)
+                        .frame(height: currentCaptionSlotHeight, alignment: .top)
+                } else {
+                    currentCaptionLayer(displayCaption)
+                }
             } else if shouldReserveCurrentCaptionSlot(for: state) {
                 currentCaptionSlotPlaceholder
             }
@@ -308,7 +337,7 @@ struct CaptionFlowContentView: View {
     private func initialVisibleHistoryEntryIDs(
         for state: OverlayPreviewState
     ) -> Set<UUID> {
-        state.liveCaptionPresentation.displayCaption?.representedHistoryEntryIDs ?? []
+        liveDisplayCaption(for: state)?.representedHistoryEntryIDs ?? []
     }
 
     private func availableHistoryHeight(for height: CGFloat, state: OverlayPreviewState) -> CGFloat {
@@ -320,7 +349,7 @@ struct CaptionFlowContentView: View {
     }
 
     private func shouldReserveCurrentCaptionSlot(for state: OverlayPreviewState) -> Bool {
-        state.liveCaptionPresentation.displayCaption != nil
+        liveDisplayCaption(for: state) != nil
             || model.shouldReserveCommittedCaptionSlot
     }
 
@@ -351,7 +380,11 @@ struct CaptionFlowContentView: View {
 
     private func estimatedLiveLayersHeight(for state: OverlayPreviewState) -> CGFloat {
         guard shouldReserveCurrentCaptionSlot(for: state) else { return 0 }
-        return estimatedCaptionPairHeight(
+        return currentCaptionSlotHeight
+    }
+
+    private var currentCaptionSlotHeight: CGFloat {
+        estimatedCaptionPairHeight(
             showsTranslated: showsTranslatedSubtitle,
             showsSource: showsOriginalSubtitle,
             linesPerLane: Self.liveCaptionLineLimit
@@ -361,13 +394,7 @@ struct CaptionFlowContentView: View {
     private var currentCaptionSlotPlaceholder: some View {
         let placeholder = Color.clear
             .frame(maxWidth: .infinity)
-            .frame(
-                height: estimatedCaptionPairHeight(
-                    showsTranslated: showsTranslatedSubtitle,
-                    showsSource: showsOriginalSubtitle,
-                    linesPerLane: Self.liveCaptionLineLimit
-                ) + Self.currentCaptionBottomInset
-            )
+            .frame(height: currentCaptionSlotHeight)
             .accessibilityHidden(true)
 
 #if DEBUG
@@ -531,6 +558,9 @@ struct CaptionFlowContentView: View {
         translated: String,
         source: String
     ) -> (translated: Bool, source: Bool) {
+        guard case .overlayLaneDeduplication = liveCaptionProjection else {
+            return (false, false)
+        }
         guard showsTranslatedSubtitle,
               showsOriginalSubtitle,
               CaptionTextVisibility.areEquivalent(translated, source) else {

@@ -33,7 +33,10 @@ struct OverlayView: View {
         CaptionFlowContentView(
             model: model,
             showsScrollbarPadding: true,
-            updatesModelHistoryVisibleCount: true
+            updatesModelHistoryVisibleCount: true,
+            alignsTopDownCaptionsLeading: true,
+            animatesLiveCaptionLineEntrance: false,
+            stabilizesLiveCaptionLinePositions: true
         )
         .background(backgroundView)
         .overlay(

@@ -34,7 +34,7 @@ Easy2Say listens through the device microphone, transcribes with Apple Speech, t
 - **One screen, two languages.** The source and translation each receive half the display.
 - **Made for either orientation.** Portrait stacks both halves; landscape places them side by side.
 - **Made to share.** Flip the other person’s half 180° to read naturally across a table.
-- **Fullscreen and audience display.** Fullscreen captions fill the iPhone or iPad screen. On Mac, open an audience view on any display or projector.
+- **Fullscreen and audience display.** Fullscreen captions fill the iPhone or iPad screen. On Mac, the resizable Audience Display can use any display or projector, switch to full screen, and keep the two latest utterances visible across pauses until the next utterance arrives.
 - **Two-way by design.** Two people can speak their own languages into one microphone and read each utterance in the language they understand.
 - **Private by construction.** No account, network client, cloud transcription, analytics, or telemetry.
 - **Scroll back without stopping.** Use the overlay scrollbar on Mac or the transcript sheet on iPhone and iPad while captions continue.
@@ -79,7 +79,7 @@ The release bundle contains the complete model and tokenizer. WhisperKit’s net
 | Live microphone captions | Yes | Yes |
 | On-device speech recognition and translation | Yes | Yes |
 | Caption presentation | Equal source and translation halves | Translucent vertical or side-by-side overlay; either direction |
-| Fullscreen presentation | Full-screen captions; tap to show controls | Audience Display on any selected screen |
+| Fullscreen presentation | Full-screen captions; tap to show controls | Windowed or full-screen Audience Display on any selected screen; the latest two utterances persist across pauses |
 | Capture another app’s audio | No; iOS is microphone-only | Yes |
 | Float captions over other apps | No; captions stay inside Easy2Say | Yes |
 

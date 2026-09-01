@@ -3,24 +3,40 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class AudienceDisplayWindowController {
+final class AudienceDisplayWindowController: NSObject, NSWindowDelegate {
     private let model: AppModel
     private let window: AudienceDisplayWindow
+    private let presentationState: AudienceDisplayPresentationState
     private var cancellables = Set<AnyCancellable>()
     private var localKeyMonitor: Any?
+    private var selectedDisplayID: String?
+    private var hidesAfterExitingFullScreen = false
+    private var repositionsAfterExitingFullScreen = false
+    private var repositionsOnNextShow = false
+
+#if DEBUG
+    private var exitFullScreenOverrideForTesting: (() -> Void)?
+#endif
 
     init(model: AppModel) {
         self.model = model
+        self.presentationState = AudienceDisplayPresentationState(
+            initialOverlayState: model.overlayState
+        )
+        self.selectedDisplayID = Self.targetDisplaySelection(for: model.overlayStyle)
+
         let initialScreen = Self.targetScreen(for: model)
-        let initialFrame = initialScreen?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        let initialFrame = Self.defaultWindowFrame(for: initialScreen)
         self.window = AudienceDisplayWindow(
-            contentRect: initialFrame,
-            styleMask: [.borderless],
+            contentRect: NSWindow.contentRect(forFrameRect: initialFrame, styleMask: styleMask),
+            styleMask: styleMask,
             backing: .buffered,
             defer: false,
             screen: initialScreen
         )
 
+        super.init()
         configureWindow()
         bindModel()
     }
@@ -32,31 +48,39 @@ final class AudienceDisplayWindowController {
     }
 
     private func configureWindow() {
+        window.delegate = self
+        window.title = model.localized(.audienceDisplay)
         window.isOpaque = true
         window.backgroundColor = .black
-        window.hasShadow = false
-        window.level = .screenSaver
-        window.collectionBehavior = [
-            .canJoinAllSpaces,
-            .fullScreenAuxiliary,
-            .stationary,
-            .ignoresCycle
-        ]
+        window.hasShadow = true
+        window.level = .normal
+        window.collectionBehavior = [.managed, .fullScreenPrimary]
         window.hidesOnDeactivate = false
         window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
+        window.contentMinSize = NSSize(width: 480, height: 270)
         window.sharingType = Self.sharingType(invisibleInRecording: model.overlayStyle.invisibleInRecording)
 
-        let rootView = AudienceDisplayView(model: model) { [weak self] in
-            self?.dismissAudienceDisplay()
+        let rootView = AudienceDisplayView(
+            model: model,
+            presentationState: presentationState
+        ) { [weak self] in
+            self?.handleEscape()
         }
         window.contentView = NSHostingView(rootView: rootView)
 
         window.onEscapePressed = { [weak self] in
-            self?.dismissAudienceDisplay()
+            self?.handleEscape()
         }
     }
 
     private func bindModel() {
+        model.$overlayState
+            .sink { [weak self] overlayState in
+                self?.presentationState.consume(overlayState)
+            }
+            .store(in: &cancellables)
+
         model.$isAudienceDisplayVisible
             .removeDuplicates()
             .sink { [weak self] isVisible in
@@ -73,8 +97,21 @@ final class AudienceDisplayWindowController {
             .sink { [weak self] newStyle in
                 guard let self else { return }
                 self.window.sharingType = Self.sharingType(invisibleInRecording: newStyle.invisibleInRecording)
-                if self.model.isAudienceDisplayVisible {
-                    self.syncWindowPosition()
+
+                let newDisplayID = Self.targetDisplaySelection(for: newStyle)
+                let targetChanged = newDisplayID != self.selectedDisplayID
+                self.selectedDisplayID = newDisplayID
+                guard targetChanged else { return }
+
+                guard self.model.isAudienceDisplayVisible else {
+                    self.repositionsOnNextShow = true
+                    return
+                }
+
+                if self.presentationState.isFullScreen {
+                    self.repositionsAfterExitingFullScreen = true
+                } else {
+                    self.moveWindowToTargetScreen()
                 }
             }
             .store(in: &cancellables)
@@ -82,13 +119,23 @@ final class AudienceDisplayWindowController {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in
                 guard let self, self.model.isAudienceDisplayVisible else { return }
-                self.syncWindowPosition()
+                self.ensureWindowIsVisible()
             }
             .store(in: &cancellables)
     }
 
     private func showWindow() {
-        syncWindowPosition()
+        hidesAfterExitingFullScreen = false
+        if repositionsOnNextShow {
+            if presentationState.isFullScreen || window.styleMask.contains(.fullScreen) {
+                repositionsAfterExitingFullScreen = true
+            } else {
+                repositionsOnNextShow = false
+                moveWindowToTargetScreen()
+            }
+        } else {
+            ensureWindowIsVisible()
+        }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         installKeyMonitor()
@@ -96,16 +143,52 @@ final class AudienceDisplayWindowController {
 
     private func hideWindow() {
         removeKeyMonitor()
-        window.orderOut(nil)
+        if presentationState.isFullScreen || window.styleMask.contains(.fullScreen) {
+            hidesAfterExitingFullScreen = true
+            exitFullScreen()
+        } else {
+            window.orderOut(nil)
+        }
     }
 
     func dismissAudienceDisplay() {
         model.hideAudienceDisplay()
     }
 
-    private func syncWindowPosition() {
-        guard let screen = Self.targetScreen(for: model) else { return }
-        window.setFrame(screen.frame, display: true, animate: false)
+    private func handleEscape() {
+        if presentationState.isFullScreen || window.styleMask.contains(.fullScreen) {
+            exitFullScreen()
+        } else {
+            dismissAudienceDisplay()
+        }
+    }
+
+    private func exitFullScreen() {
+#if DEBUG
+        if let exitFullScreenOverrideForTesting {
+            exitFullScreenOverrideForTesting()
+            return
+        }
+#endif
+        window.toggleFullScreen(nil)
+    }
+
+    private func moveWindowToTargetScreen() {
+        guard presentationState.isFullScreen == false,
+              let screen = Self.targetScreen(for: model) else {
+            return
+        }
+        window.setFrame(Self.defaultWindowFrame(for: screen), display: true, animate: false)
+    }
+
+    private func ensureWindowIsVisible() {
+        guard presentationState.isFullScreen == false else { return }
+        let intersectsVisibleScreen = NSScreen.screens.contains { screen in
+            screen.visibleFrame.intersects(window.frame)
+        }
+        if intersectsVisibleScreen == false {
+            moveWindowToTargetScreen()
+        }
     }
 
     private func installKeyMonitor() {
@@ -113,7 +196,7 @@ final class AudienceDisplayWindowController {
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.model.isAudienceDisplayVisible else { return event }
             if event.keyCode == 53 { // Escape
-                self.dismissAudienceDisplay()
+                self.handleEscape()
                 return nil
             }
             return event
@@ -127,12 +210,62 @@ final class AudienceDisplayWindowController {
         }
     }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        dismissAudienceDisplay()
+        return false
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        presentationState.setFullScreen(true)
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        presentationState.setFullScreen(true)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        presentationState.setFullScreen(false)
+
+        if hidesAfterExitingFullScreen {
+            hidesAfterExitingFullScreen = false
+            if repositionsAfterExitingFullScreen {
+                repositionsAfterExitingFullScreen = false
+                repositionsOnNextShow = true
+            }
+            window.orderOut(nil)
+            return
+        }
+        if repositionsAfterExitingFullScreen {
+            repositionsAfterExitingFullScreen = false
+            repositionsOnNextShow = false
+            moveWindowToTargetScreen()
+        }
+    }
+
     static func targetScreen(for model: AppModel) -> NSScreen? {
-        if let targetDisplayID = model.overlayStyle.audienceTargetDisplayID ?? model.overlayStyle.targetDisplayID,
+        if let targetDisplayID = targetDisplaySelection(for: model.overlayStyle),
            let matchedScreen = NSScreen.screens.first(where: { $0.displayIDString == targetDisplayID }) {
             return matchedScreen
         }
         return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    static func defaultWindowFrame(for screen: NSScreen?) -> NSRect {
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 960, height: 540)
+        let maximumWidth = visibleFrame.width * 0.78
+        let maximumHeight = visibleFrame.height * 0.78
+        let width = min(1_280, maximumWidth, maximumHeight * (16.0 / 9.0))
+        let height = width * (9.0 / 16.0)
+        return NSRect(
+            x: (visibleFrame.midX - (width / 2)).rounded(),
+            y: (visibleFrame.midY - (height / 2)).rounded(),
+            width: width.rounded(),
+            height: height.rounded()
+        )
+    }
+
+    private static func targetDisplaySelection(for style: OverlayStyle) -> String? {
+        style.audienceTargetDisplayID ?? style.targetDisplayID
     }
 
     private static func sharingType(invisibleInRecording: Bool) -> NSWindow.SharingType {
@@ -152,6 +285,10 @@ final class AudienceDisplayWindowController {
         window.frame
     }
 
+    func setWindowFrameForTesting(_ frame: NSRect) {
+        window.setFrame(frame, display: false)
+    }
+
     var windowLevelForTesting: NSWindow.Level {
         window.level
     }
@@ -160,17 +297,48 @@ final class AudienceDisplayWindowController {
         window.styleMask
     }
 
+    var windowCollectionBehaviorForTesting: NSWindow.CollectionBehavior {
+        window.collectionBehavior
+    }
+
     var windowIsOpaqueForTesting: Bool {
         window.isOpaque
+    }
+
+    var windowHasShadowForTesting: Bool {
+        window.hasShadow
+    }
+
+    var presentationIsFullScreenForTesting: Bool {
+        presentationState.isFullScreen
+    }
+
+    func setFullScreenStateForTesting(
+        _ isFullScreen: Bool,
+        onExitFullScreen: (() -> Void)? = nil
+    ) {
+        presentationState.setFullScreen(isFullScreen)
+        exitFullScreenOverrideForTesting = onExitFullScreen
+    }
+
+    func completeFullScreenExitForTesting() {
+        exitFullScreenOverrideForTesting = nil
+        windowDidExitFullScreen(
+            Notification(name: NSWindow.didExitFullScreenNotification, object: window)
+        )
     }
 
     func sendEscapeForTesting() {
         window.cancelOperation(nil)
     }
+
+    func performCloseForTesting() {
+        window.performClose(nil)
+    }
 #endif
 }
 
-// MARK: - Custom Fullscreen Window
+// MARK: - Audience Window
 
 private final class AudienceDisplayWindow: NSWindow {
     var onEscapePressed: (() -> Void)?

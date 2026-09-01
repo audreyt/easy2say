@@ -294,26 +294,78 @@ struct OverlayLiveCaptionPresentation: Equatable {
         guard let precedingCommittedCaption else {
             return currentCaption
         }
+        return Self.combinedCaption(
+            preceding: precedingCommittedCaption,
+            current: currentCaption,
+            deduplicatesEqualLaneText: true,
+            preservesEmptyLaneRows: false
+        )
+    }
 
-        let translated = Self.joinedLane(
-            leadingText: precedingCommittedCaption.translatedText,
-            trailingText: currentCaption.translatedText,
-            trailingStablePrefixLength: currentCaption.translatedStablePrefixLength
+    /// Audience Display preserves each retained utterance as one atomic row in
+    /// both language lanes. Equal text is never collapsed in only one lane, and
+    /// a missing source or translation gets an invisible non-breaking-space row
+    /// so the two lane sequences cannot become misaligned.
+    var audienceDisplayCaption: Caption? {
+        guard let currentCaption else {
+            return precedingCommittedCaption
+        }
+        guard let precedingCommittedCaption else {
+            return currentCaption
+        }
+        return Self.combinedCaption(
+            preceding: precedingCommittedCaption,
+            current: currentCaption,
+            deduplicatesEqualLaneText: false,
+            preservesEmptyLaneRows: true
         )
-        let source = Self.joinedLane(
-            leadingText: precedingCommittedCaption.sourceText,
-            trailingText: currentCaption.sourceText,
-            trailingStablePrefixLength: currentCaption.sourceStablePrefixLength
+    }
+
+    private static func combinedCaption(
+        preceding: Caption,
+        current: Caption,
+        deduplicatesEqualLaneText: Bool,
+        preservesEmptyLaneRows: Bool
+    ) -> Caption {
+        let precedingTranslated = projectedLane(
+            text: preceding.translatedText,
+            stablePrefixLength: preceding.translatedStablePrefixLength,
+            preservesEmptyRow: preservesEmptyLaneRows
         )
-        var representedHistoryEntryIDs = currentCaption.representedHistoryEntryIDs
+        let currentTranslated = projectedLane(
+            text: current.translatedText,
+            stablePrefixLength: current.translatedStablePrefixLength,
+            preservesEmptyRow: preservesEmptyLaneRows
+        )
+        let precedingSource = projectedLane(
+            text: preceding.sourceText,
+            stablePrefixLength: preceding.sourceStablePrefixLength,
+            preservesEmptyRow: preservesEmptyLaneRows
+        )
+        let currentSource = projectedLane(
+            text: current.sourceText,
+            stablePrefixLength: current.sourceStablePrefixLength,
+            preservesEmptyRow: preservesEmptyLaneRows
+        )
+        let translated = joinedLane(
+            leadingText: precedingTranslated.text,
+            trailingText: currentTranslated.text,
+            trailingStablePrefixLength: currentTranslated.stablePrefixLength,
+            deduplicatesEqualText: deduplicatesEqualLaneText
+        )
+        let source = joinedLane(
+            leadingText: precedingSource.text,
+            trailingText: currentSource.text,
+            trailingStablePrefixLength: currentSource.stablePrefixLength,
+            deduplicatesEqualText: deduplicatesEqualLaneText
+        )
+        var representedHistoryEntryIDs = current.representedHistoryEntryIDs
         if translated.includesLeadingText || source.includesLeadingText {
-            representedHistoryEntryIDs.formUnion(
-                precedingCommittedCaption.representedHistoryEntryIDs
-            )
+            representedHistoryEntryIDs.formUnion(preceding.representedHistoryEntryIDs)
         }
         return Caption(
-            id: currentCaption.id,
-            phase: currentCaption.phase,
+            id: current.id,
+            phase: current.phase,
             translatedText: translated.text,
             sourceText: source.text,
             translatedStablePrefixLength: translated.stablePrefixLength,
@@ -324,10 +376,26 @@ struct OverlayLiveCaptionPresentation: Equatable {
         )
     }
 
+
+    private static func projectedLane(
+        text: String,
+        stablePrefixLength: Int,
+        preservesEmptyRow: Bool
+    ) -> (text: String, stablePrefixLength: Int) {
+        let isEmpty = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard preservesEmptyRow, isEmpty else {
+            return (text, min(stablePrefixLength, text.count))
+        }
+        return (audienceEmptyLaneRow, audienceEmptyLaneRow.count)
+    }
+
+    private static let audienceEmptyLaneRow = "\u{00A0}"
+
     private static func joinedLane(
         leadingText: String,
         trailingText: String,
-        trailingStablePrefixLength: Int
+        trailingStablePrefixLength: Int,
+        deduplicatesEqualText: Bool
     ) -> (
         text: String,
         stablePrefixLength: Int,
@@ -346,15 +414,17 @@ struct OverlayLiveCaptionPresentation: Equatable {
             return (leadingText, leadingText.count, 0, true)
         }
 
-        let normalizedLeading = leadingText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedTrailing = trailingText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedLeading == normalizedTrailing {
-            return (
-                trailingText,
-                min(trailingStablePrefixLength, trailingText.count),
-                0,
-                false
-            )
+        if deduplicatesEqualText {
+            let normalizedLeading = leadingText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedTrailing = trailingText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalizedLeading == normalizedTrailing {
+                return (
+                    trailingText,
+                    min(trailingStablePrefixLength, trailingText.count),
+                    0,
+                    false
+                )
+            }
         }
 
         let separator = "\n"
