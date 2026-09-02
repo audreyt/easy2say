@@ -332,7 +332,6 @@ struct ControlBar: View {
         } label: {
             MicrophoneChip(value: selectedSourceDisplay, accent: accent)
         }
-        .disabled(model.sessionState == .running)
         .accessibilityLabel(model.localized(.inputSource))
     }
 

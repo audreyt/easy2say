@@ -251,6 +251,7 @@ struct HomeView: View {
                 secondaryLanguageID: model.conversationSecondaryLanguageID
             )
             model.applySpeechSupport(to: conversation)
+            model.applyIOSSelectedMicrophonePreference()
             await conversation.start()
             refreshMicrophoneAuthorization()
         }

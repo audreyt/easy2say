@@ -98,6 +98,13 @@ final class ConversationAudioTap: NSObject, AVCaptureAudioDataOutputSampleBuffer
             throw TapError.captureUnavailable(device.localizedName)
         }
 
+#if os(iOS)
+        // Manual session management, matching LiveTranscriptionSession: the shared
+        // category (with its Bluetooth option) and any preferred input the user
+        // picked must survive this capture session starting.
+        session.automaticallyConfiguresApplicationAudioSession = false
+#endif
+
         session.beginConfiguration()
         session.addInput(input)
         output.setSampleBufferDelegate(self, queue: captureQueue)
@@ -105,9 +112,8 @@ final class ConversationAudioTap: NSObject, AVCaptureAudioDataOutputSampleBuffer
         session.commitConfiguration()
 
 #if os(iOS)
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement)
-        try audioSession.setActive(true)
+        try IOSAudioSessionConfigurator.applyRecordCategory()
+        try AVAudioSession.sharedInstance().setActive(true)
 #endif
 
         self.session = session
