@@ -1070,20 +1070,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         // built-in), and only `setPreferredInput` can steer capture to it — route
         // ports are not AVCaptureDevices. The preference is best-effort; when the
         // port has vanished the system keeps routing from its own default.
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try IOSAudioSessionConfigurator.applyRecordCategory()
-            if let preferredPort = audioSession.availableInputs?
-                .first(where: { $0.uid == deviceUniqueID }) {
-                try? audioSession.setPreferredInput(preferredPort)
-            }
-            try audioSession.setActive(true)
-        } catch {
-            let message = localizedErrorDescription(error)
-            Task {
-                await emitError(message)
-            }
+        let audioSession = AVAudioSession.sharedInstance()
+        try IOSAudioSessionConfigurator.applyRecordCategory()
+        if let preferredPort = audioSession.availableInputs?
+            .first(where: { $0.uid == deviceUniqueID }) {
+            // A disappearing route should not prevent capture from falling back to
+            // the system input, but category setup and activation are mandatory when
+            // automatic AVCaptureSession audio-session management is disabled.
+            try? audioSession.setPreferredInput(preferredPort)
         }
+        try audioSession.setActive(true)
 
         guard let device = AVCaptureDevice.default(for: .audio) else {
             throw SessionError.missingMicrophoneDevice

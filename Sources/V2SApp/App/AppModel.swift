@@ -47,9 +47,9 @@ final class AppModel: ObservableObject {
     private let settingsStore: SettingsStore
     private let sourceCatalogService: any SourceCatalogProviding
 #if os(iOS)
-    /// Route-change subscription keeping the source list and selection in step with
-    /// the system's audio route (CarPlay or headsets attaching and detaching).
-    var audioRouteChangeObserver: (any NSObjectProtocol)?
+    /// Audio-route subscriptions keeping the source list and selection in step with
+    /// CarPlay or headsets attaching, detaching, and becoming the active route.
+    var audioRouteObservers: [any NSObjectProtocol] = []
 #endif
     private let translationCoordinator = TranslationCoordinator()
     private let reverseTranslationCoordinator = TranslationCoordinator()
@@ -801,6 +801,12 @@ final class AppModel: ObservableObject {
         } else {
             setStatus(availableSources.isEmpty ? .noInputSourcesDetected : .ready)
         }
+
+#if os(iOS)
+        // Every refresh entry point (foregrounding, either picker, and hot-plug
+        // notifications) must show the route that is actually capturing.
+        syncSelectionToCurrentAudioRoute()
+#endif
     }
 
     func toggleSession() {

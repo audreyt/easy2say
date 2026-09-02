@@ -36,8 +36,6 @@ extension AppModel {
 
     func selectIOSMicrophone(_ source: InputSource) {
         guard source.category == .microphone else { return }
-        selectedSourceIDs = Set([source.id])
-        selectedSourceID = source.id
 
         // Steer the live route immediately so picking a microphone works while a
         // session is already capturing. The resulting route change comes back
@@ -47,14 +45,31 @@ extension AppModel {
         let audioSession = AVAudioSession.sharedInstance()
         guard let port = audioSession.availableInputs?
             .first(where: { $0.uid == source.id }) else {
+            refreshSources()
+            syncSelectionToCurrentAudioRoute()
             return
         }
-        try? audioSession.setPreferredInput(port)
+        do {
+            try IOSAudioSessionConfigurator.applyRecordCategory()
+            try audioSession.setPreferredInput(port)
+            selectedSourceIDs = Set([source.id])
+            selectedSourceID = source.id
+        } catch {
+            // Do not leave the checkmark on a route the system rejected.
+            refreshSources()
+            syncSelectionToCurrentAudioRoute()
+        }
+    }
+
+    func applyIOSSelectedMicrophonePreference() {
+        guard let source = iOSSelectedMicrophoneSource else { return }
+        selectIOSMicrophone(source)
     }
 
     func observeAudioRouteChanges() {
-        guard audioRouteChangeObserver == nil else { return }
-        audioRouteChangeObserver = NotificationCenter.default.addObserver(
+        guard audioRouteObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let routeObserver = center.addObserver(
             forName: AVAudioSession.routeChangeNotification,
             object: AVAudioSession.sharedInstance(),
             queue: .main
@@ -65,6 +80,16 @@ extension AppModel {
                 self?.handleAudioRouteChange(reason: reason)
             }
         }
+        let inputsObserver = center.addObserver(
+            forName: AVAudioSession.availableInputsChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleAvailableAudioInputsChange()
+            }
+        }
+        audioRouteObservers = [routeObserver, inputsObserver]
     }
 
     func handleAudioRouteChange(reason: AVAudioSession.RouteChangeReason?) {
@@ -73,10 +98,41 @@ extension AppModel {
         // it was made in. Clearing the preference lets CarPlay or a headset take
         // the route the way it would in any other app.
         if reason == .newDeviceAvailable {
+            let previousSourceIDs = Set(microphoneSources.map(\.id))
             try? AVAudioSession.sharedInstance().setPreferredInput(nil)
+            refreshSources()
+            let addedSources = microphoneSources.filter {
+                previousSourceIDs.contains($0.id) == false
+            }
+            if addedSources.count == 1, let addedSource = addedSources.first {
+                setIOSSelectedMicrophoneID(addedSource.id)
+            } else if addedSources.isEmpty == false {
+                syncSelectionToCurrentAudioRoute()
+            }
+            return
         }
         refreshSources()
         syncSelectionToCurrentAudioRoute()
+    }
+
+    func handleAvailableAudioInputsChange() {
+        let previousSourceIDs = Set(microphoneSources.map(\.id))
+        refreshSources()
+
+        // A preferred built-in mic can keep the current route unchanged when new
+        // hardware appears. In that case routeChangeNotification alone is not enough
+        // to implement "newly connected devices are used automatically". Clear the
+        // old preference and retain the sole newly exposed port as the startup choice
+        // even while the audio session is inactive and currentRoute has no input yet.
+        let addedSources = microphoneSources.filter { previousSourceIDs.contains($0.id) == false }
+        guard addedSources.isEmpty == false else { return }
+        try? AVAudioSession.sharedInstance().setPreferredInput(nil)
+
+        if addedSources.count == 1, let addedSource = addedSources.first {
+            setIOSSelectedMicrophoneID(addedSource.id)
+        } else {
+            syncSelectionToCurrentAudioRoute()
+        }
     }
 
     /// Mirrors the selection to the input the system is actually routing from, so
@@ -88,8 +144,12 @@ extension AppModel {
             selectedSourceIDs != [currentInputUID] else {
             return
         }
-        selectedSourceIDs = [currentInputUID]
-        selectedSourceID = currentInputUID
+        setIOSSelectedMicrophoneID(currentInputUID)
+    }
+
+    private func setIOSSelectedMicrophoneID(_ sourceID: String) {
+        selectedSourceIDs = [sourceID]
+        selectedSourceID = sourceID
     }
 
     func setIOSInputLanguageID(_ languageID: String) {
