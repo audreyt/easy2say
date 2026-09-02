@@ -1064,9 +1064,35 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 
     private func startMicrophoneCapture(deviceUniqueID: String) throws {
+#if os(iOS)
+        // The audio session must be configured and active before capture starts:
+        // `deviceUniqueID` names an AVAudioSession route port (CarPlay, Bluetooth,
+        // built-in), and only `setPreferredInput` can steer capture to it — route
+        // ports are not AVCaptureDevices. The preference is best-effort; when the
+        // port has vanished the system keeps routing from its own default.
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try IOSAudioSessionConfigurator.applyRecordCategory()
+            if let preferredPort = audioSession.availableInputs?
+                .first(where: { $0.uid == deviceUniqueID }) {
+                try? audioSession.setPreferredInput(preferredPort)
+            }
+            try audioSession.setActive(true)
+        } catch {
+            let message = localizedErrorDescription(error)
+            Task {
+                await emitError(message)
+            }
+        }
+
+        guard let device = AVCaptureDevice.default(for: .audio) else {
+            throw SessionError.missingMicrophoneDevice
+        }
+#else
         guard let device = AVCaptureDevice(uniqueID: deviceUniqueID) else {
             throw SessionError.missingMicrophoneDevice
         }
+#endif
 
         let session = AVCaptureSession()
         let input = try AVCaptureDeviceInput(device: device)
@@ -1084,24 +1110,19 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             )
         }
 
+#if os(iOS)
+        // The session above is the authoritative configuration; left on, the capture
+        // session would reapply its own category on start and drop the Bluetooth
+        // option plus the preferred input.
+        session.automaticallyConfiguresApplicationAudioSession = false
+#endif
+
         session.beginConfiguration()
         session.addInput(input)
         output.setSampleBufferDelegate(self, queue: captureQueue)
         session.addOutput(output)
         session.commitConfiguration()
 
-#if os(iOS)
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .measurement)
-            try audioSession.setActive(true)
-        } catch {
-            let message = localizedErrorDescription(error)
-            Task {
-                await emitError(message)
-            }
-        }
-#endif
         microphoneCaptureSession = session
         session.startRunning()
     }

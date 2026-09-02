@@ -46,6 +46,11 @@ private enum AppBuildInfo {
 final class AppModel: ObservableObject {
     private let settingsStore: SettingsStore
     private let sourceCatalogService: any SourceCatalogProviding
+#if os(iOS)
+    /// Route-change subscription keeping the source list and selection in step with
+    /// the system's audio route (CarPlay or headsets attaching and detaching).
+    var audioRouteChangeObserver: (any NSObjectProtocol)?
+#endif
     private let translationCoordinator = TranslationCoordinator()
     private let reverseTranslationCoordinator = TranslationCoordinator()
 #if os(macOS)
@@ -311,6 +316,10 @@ final class AppModel: ObservableObject {
             persistSettings()
         }
         refreshSources()
+#if os(iOS)
+        syncSelectionToCurrentAudioRoute()
+        observeAudioRouteChanges()
+#endif
         refreshSupportedLanguageOptions()
     }
 

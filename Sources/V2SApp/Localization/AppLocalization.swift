@@ -182,6 +182,7 @@ enum AppTextKey: String, CaseIterable {
     case iosTranslationPlaceholder
     case iosNoMicrophonesTitle
     case iosNoMicrophonesMessage
+    case iosAudioInputHint
     case iosOpenSettings
     case iosTranscriptEmpty
     case iosCopyAll
@@ -539,6 +540,7 @@ enum AppLocalization {
             "iosTranslationPlaceholder": "Translations will appear here.",
             "iosNoMicrophonesTitle": "No microphone available",
             "iosNoMicrophonesMessage": "No audio input is available. Connect a microphone or choose an audio input for the Simulator, then refresh.",
+            "iosAudioInputHint": "When more than one microphone is available — such as CarPlay or a Bluetooth headset — choose which one to listen with. Newly connected devices are used automatically.",
             "iosOpenSettings": "Open Settings",
             "iosTranscriptEmpty": "Your on-device transcript will appear here as you speak.",
             "iosCopyAll": "Copy All",
@@ -759,6 +761,7 @@ enum AppLocalization {
             "iosTranslationPlaceholder": "译文将在这里显示。",
             "iosNoMicrophonesTitle": "没有可用的麦克风",
             "iosNoMicrophonesMessage": "当前没有可用的音频输入。请连接麦克风，或为模拟器选择音频输入后刷新。",
+            "iosAudioInputHint": "当有多个麦克风可用时（例如 CarPlay 或蓝牙耳机），可以选择要使用的麦克风。新连接的设备会自动启用。",
             "iosOpenSettings": "打开设置",
             "iosTranscriptEmpty": "说话时，设备端生成的字幕记录将在这里显示。",
             "iosCopyAll": "全部复制",
@@ -979,6 +982,7 @@ enum AppLocalization {
             "iosTranslationPlaceholder": "譯文會顯示在這裡。",
             "iosNoMicrophonesTitle": "沒有可用的麥克風",
             "iosNoMicrophonesMessage": "目前沒有可用的音訊輸入。請連接麥克風，或為模擬器選擇音訊輸入後重新整理。",
+            "iosAudioInputHint": "當有多個麥克風可用時（例如 CarPlay 或藍牙耳機），可以選擇要使用的麥克風。新連接的裝置會自動啟用。",
             "iosOpenSettings": "開啟設定",
             "iosTranscriptEmpty": "說話時，裝置端產生的字幕紀錄會顯示在這裡。",
             "iosCopyAll": "全部拷貝",

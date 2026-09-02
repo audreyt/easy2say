@@ -19,6 +19,7 @@ struct SettingsSheet: View {
                     VStack(spacing: 16) {
                         captionAppearanceSection
                         displaySection
+                        audioInputSection
                         conversationSection
                         translationFallbackSection
                         interfaceLanguageSection
@@ -107,6 +108,71 @@ struct SettingsSheet: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+    }
+
+    private var audioInputSection: some View {
+        SettingsSectionCard(
+            title: model.localized(.inputSource),
+            symbol: "mic.fill",
+            accent: accent
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Menu {
+                    ForEach(model.microphoneSources) { source in
+                        Button {
+                            model.selectIOSMicrophone(source)
+                        } label: {
+                            if model.iOSSelectedMicrophoneSource?.id == source.id {
+                                Label(source.name, systemImage: "checkmark")
+                            } else {
+                                Text(source.name)
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        model.refreshSources()
+                    } label: {
+                        Label(model.localized(.refreshSources), systemImage: "arrow.clockwise")
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(
+                            model.iOSSelectedMicrophoneSource?.name
+                                ?? model.localized(.iosNoMicrophonesTitle)
+                        )
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.88))
+                        .lineLimit(1)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(accent)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.white.opacity(0.055))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .stroke(Color.white.opacity(0.085), lineWidth: 0.5)
+                    }
+                }
+                .accessibilityLabel(model.localized(.inputSource))
+
+                Text(model.localized(.iosAudioInputHint))
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(IOSTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
