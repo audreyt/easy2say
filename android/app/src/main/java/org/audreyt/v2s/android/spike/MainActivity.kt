@@ -68,8 +68,24 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
 
     private lateinit var audioManager: AudioManager
     private lateinit var audioInputSpinner: Spinner
-    private var audioInputDevices: List<AudioDeviceInfo> = emptyList()
+    private var audioInputRoutes: List<AudioDeviceInfo> = emptyList()
     private var selectedAudioInputId = AUDIO_INPUT_SYSTEM_DEFAULT
+    private val audioInputSelectionListener = object : AdapterView.OnItemSelectedListener {
+        override fun onItemSelected(
+            parent: AdapterView<*>?,
+            view: View?,
+            position: Int,
+            id: Long,
+        ) {
+            val chosenId = audioInputRoutes.getOrNull(position - 1)?.id
+                ?: AUDIO_INPUT_SYSTEM_DEFAULT
+            if (chosenId == selectedAudioInputId) return
+            selectedAudioInputId = chosenId
+            if (active) applyAudioInputRouting()
+        }
+
+        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+    }
     private val audioDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
             refreshAudioInputChoices()
@@ -298,28 +314,14 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
         audioInputCard.addView(sectionLabel("AUDIO INPUT"))
         audioInputSpinner = Spinner(this).apply {
             backgroundTintList = ColorStateList.valueOf(accent)
-            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long,
-                ) {
-                    val chosenId = audioInputDevices.getOrNull(position - 1)?.id
-                        ?: AUDIO_INPUT_SYSTEM_DEFAULT
-                    if (chosenId == selectedAudioInputId) return
-                    selectedAudioInputId = chosenId
-                    if (active) applyAudioInputRouting()
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-            }
+            onItemSelectedListener = audioInputSelectionListener
         }
         audioInputCard.addView(audioInputSpinner)
         audioInputCard.addView(verticalSpace(6))
         audioInputCard.addView(text(
-            "Best effort: capture belongs to the system SpeechRecognizer service, " +
-                "so some devices keep their own microphone routing.",
+            "Android pairs a microphone with the selected communication route. " +
+                "Best effort: capture belongs to the system SpeechRecognizer service, " +
+                "so some devices may keep their own routing.",
             12f,
             secondaryText,
         ))
@@ -475,10 +477,13 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
 
     private fun refreshAudioInputChoices() {
         if (!::audioInputSpinner.isInitialized) return
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-            .filter { it.type in RELEVANT_AUDIO_INPUT_TYPES }
+        // setCommunicationDevice only accepts sink-role devices from this API. The
+        // platform then chooses the matching source (for example the headset mic).
+        // Passing objects from GET_DEVICES_INPUTS makes every routing request invalid.
+        val devices = audioManager.availableCommunicationDevices
+            .filter { it.isSink }
             .distinctBy { it.id }
-        audioInputDevices = devices
+        audioInputRoutes = devices
 
         val labels = buildList {
             add("System default")
@@ -486,6 +491,9 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
         }
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        // Replacing a Spinner adapter can emit a synthetic selection of row zero.
+        // Detach the listener so a hot-plug refresh cannot erase the user's choice.
+        audioInputSpinner.onItemSelectedListener = null
         audioInputSpinner.adapter = adapter
 
         val retainedIndex = devices.indexOfFirst { it.id == selectedAudioInputId }
@@ -497,27 +505,35 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
             audioInputSpinner.setSelection(0)
             if (active) audioManager.clearCommunicationDevice()
         }
+        audioInputSpinner.onItemSelectedListener = audioInputSelectionListener
     }
 
     private fun applyAudioInputRouting() {
-        val device = audioInputDevices.firstOrNull { it.id == selectedAudioInputId }
+        val device = audioInputRoutes.firstOrNull { it.id == selectedAudioInputId }
         if (device == null) {
             audioManager.clearCommunicationDevice()
             return
         }
         if (!audioManager.setCommunicationDevice(device)) {
+            selectedAudioInputId = AUDIO_INPUT_SYSTEM_DEFAULT
+            audioInputSpinner.setSelection(0)
+            audioManager.clearCommunicationDevice()
             toast("Could not route audio input to ${device.productName}.")
         }
     }
 
     private fun audioInputLabel(device: AudioDeviceInfo): String {
         val type = when (device.type) {
-            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "built-in"
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "built-in earpiece / mic"
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "built-in speaker / mic"
             AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired headset"
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired audio"
             AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB"
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth"
             AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth LE"
-            else -> "input"
+            AudioDeviceInfo.TYPE_BLE_SPEAKER -> "Bluetooth LE"
+            AudioDeviceInfo.TYPE_HEARING_AID -> "hearing aid"
+            else -> "communication route"
         }
         return "${device.productName} · $type"
     }
@@ -684,13 +700,5 @@ class MainActivity : Activity(), SpeechSpikeEvents, SystemTranslationEvents {
         private const val MICROPHONE_PERMISSION_REQUEST = 4102
         private const val MAX_TRANSCRIPT_CHARACTERS = 20_000
         private const val AUDIO_INPUT_SYSTEM_DEFAULT = -1
-        private val RELEVANT_AUDIO_INPUT_TYPES = setOf(
-            AudioDeviceInfo.TYPE_BUILTIN_MIC,
-            AudioDeviceInfo.TYPE_WIRED_HEADSET,
-            AudioDeviceInfo.TYPE_USB_DEVICE,
-            AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-            AudioDeviceInfo.TYPE_BLE_HEADSET,
-        )
     }
 }
