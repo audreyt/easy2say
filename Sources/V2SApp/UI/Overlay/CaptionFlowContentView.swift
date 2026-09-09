@@ -1310,7 +1310,10 @@ struct OverlayTranslationHostModifier: ViewModifier {
             isOverlayVisible: model.isOverlayVisible,
             isAudienceVisible: model.isAudienceDisplayVisible
         ) {
-            content.v2sTranslationHost(model: model)
+            // Caption panels are borderless and, at idle, ordered out. A
+            // language download sheet attached here is never seen, so these
+            // hosts only serve translations for installed pairs.
+            content.v2sTranslationHost(model: model, canPresentUI: false)
         } else {
             content
         }
