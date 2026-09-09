@@ -618,23 +618,7 @@ struct LanguageResourceStatusListView: View {
                         Text(status.detail)
                             .font(.caption)
                             .foregroundStyle(.red)
-                        if status.canRetry || status.systemSettingsDestination != nil {
-                            HStack(spacing: 8) {
-                                if status.canRetry, let onRetry {
-                                    Button(retryTitle, action: onRetry)
-                                }
-#if os(macOS)
-                                if let destination = status.systemSettingsDestination,
-                                   let onOpenSystemSettings {
-                                    Button(openSystemSettingsTitle) {
-                                        onOpenSystemSettings(destination)
-                                    }
-                                }
-#endif
-                            }
-                            .controlSize(.small)
-                            .padding(.top, 2)
-                        }
+                        actionButtons(for: status)
                     } else if let progress = status.progress {
                         ProgressView(value: progress)
                             .progressViewStyle(.linear)
@@ -651,11 +635,33 @@ struct LanguageResourceStatusListView: View {
                         Text(status.detail)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        actionButtons(for: status)
                     }
                 }
                 .padding(10)
                 .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func actionButtons(for status: LanguageResourceStatus) -> some View {
+        if status.canRetry || status.systemSettingsDestination != nil {
+            HStack(spacing: 8) {
+                if status.canRetry, let onRetry {
+                    Button(retryTitle, action: onRetry)
+                }
+#if os(macOS)
+                if let destination = status.systemSettingsDestination,
+                   let onOpenSystemSettings {
+                    Button(openSystemSettingsTitle) {
+                        onOpenSystemSettings(destination)
+                    }
+                }
+#endif
+            }
+            .controlSize(.small)
+            .padding(.top, 2)
         }
     }
 }

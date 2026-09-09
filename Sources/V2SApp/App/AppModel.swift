@@ -1624,13 +1624,17 @@ final class AppModel: ObservableObject {
 
     private func scheduleSelectedLanguageResourcePreparation(
         refreshTranslations: Bool = false,
-        openSystemSettingsIfNeeded: Bool = false
+        openSystemSettingsIfNeeded: Bool = false,
+        reason: String = #function
     ) {
         guard isBootstrapping == false else {
             return
         }
 
         let requirements = selectedResourcePreparationRequirements()
+        Logger.session.info(
+            "Language resource preparation scheduled from \(reason, privacy: .public); replaces running task: \(self.languageResourcePreparationTask != nil, privacy: .public)"
+        )
 
         languageResourcePreparationTask?.cancel()
         languageResourceStatuses = []
@@ -2029,9 +2033,27 @@ final class AppModel: ObservableObject {
                         from: sourceLanguageID,
                         to: targetLanguageID
                     )
+                    Logger.session.info("Translation preparation \(statusID, privacy: .public) returned")
+                    if availabilityStatus == .supported {
+                        // Apple's download sheet can close with the download
+                        // declined, or still running, and prepareTranslation()
+                        // returns normally either way. Only a confirmed install
+                        // clears the row.
+                        let installed = await awaitTranslationInstallation(
+                            from: sourceLanguageID,
+                            to: targetLanguageID,
+                            statusID: statusID,
+                            title: title
+                        )
+                        guard installed else {
+                            markManualDownloadRequired()
+                            return
+                        }
+                    }
                     removeLanguageResourceStatus(id: statusID)
                     return
                 } catch is CancellationError {
+                    Logger.session.info("Translation preparation \(statusID, privacy: .public) cancelled")
                     removeLanguageResourceStatus(id: statusID)
                     return
                 } catch {
@@ -2139,6 +2161,74 @@ final class AppModel: ObservableObject {
         }
 
         removeLanguageResourceStatus(id: statusID)
+    }
+
+    /// Polls availability after the download sheet closes. Returns `true` once
+    /// the pair reports installed (or unsupported, which the fallback path
+    /// handles on the next pass), `false` when the ceiling passes first. While
+    /// waiting, the row tells the user the pack is not installed yet and how to
+    /// finish by hand, since the sheet may have been dismissed without a
+    /// download.
+    private func awaitTranslationInstallation(
+        from sourceLanguageID: String,
+        to targetLanguageID: String,
+        statusID: String,
+        title: String
+    ) async -> Bool {
+        let started = Date()
+        let settleGrace: TimeInterval = 3
+        var announcedUnconfirmed = false
+
+        while Task.isCancelled == false {
+            switch await translationAvailabilityStatus(from: sourceLanguageID, to: targetLanguageID) {
+            case .installed, .unsupported:
+                Logger.session.info("Translation preparation \(statusID, privacy: .public) confirmed installed")
+                return true
+            default:
+                break
+            }
+
+            let elapsed = Date().timeIntervalSince(started)
+            if elapsed >= Self.translationPreparationCeiling {
+                Logger.session.warning("Translation preparation \(statusID, privacy: .public) never confirmed installation")
+                return false
+            }
+
+            if announcedUnconfirmed == false, elapsed >= settleGrace {
+                announcedUnconfirmed = true
+                upsertLanguageResourceStatus(
+                    LanguageResourceStatus(
+                        id: statusID,
+                        kind: .translation,
+                        title: title,
+                        detail: localized(.translationDownloadUnconfirmedDetail),
+                        progress: nil,
+                        isError: false,
+                        systemSettingsDestination: .translationLanguages,
+                        canRetry: true
+                    )
+                )
+            } else if announcedUnconfirmed == false {
+                upsertLanguageResourceStatus(
+                    LanguageResourceStatus(
+                        id: statusID,
+                        kind: .translation,
+                        title: title,
+                        detail: localized(.waitingTranslationResourcesInstalling),
+                        progress: nil,
+                        isError: false
+                    )
+                )
+            }
+
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch {
+                return true
+            }
+        }
+
+        return true
     }
 
     private func prepareTranslationResourceWithTimeout(

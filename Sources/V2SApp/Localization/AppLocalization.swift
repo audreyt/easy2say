@@ -130,6 +130,7 @@ enum AppTextKey: String, CaseIterable {
     case waitingTranslationResourcesInstalling
     case manualTranslationDownloadDetail
     case translationDownloadAwaitingApproval
+    case translationDownloadUnconfirmedDetail
     case retryLanguageResourceDownload
     case openSystemSettingsForLanguageResource
     case speechResourcesNotSupportedOnMacOS
@@ -490,6 +491,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "Waiting for translation resources to finish installing...",
             "manualTranslationDownloadDetail": "The automatic download did not start: the system did not receive your confirmation, or the prompt was cancelled. Retry, or open macOS System Settings > General > Language & Region > Translation Languages and download this translation language there.",
             "translationDownloadAwaitingApproval": "macOS will ask you to confirm the download. Click Download in the system dialog to install this translation language.",
+            "translationDownloadUnconfirmedDetail": "The download window closed, but this translation language is not installed yet. If you started the download, it will finish on its own and captions will use it automatically. Otherwise, retry or download it in System Settings.",
             "retryLanguageResourceDownload": "Retry",
             "openSystemSettingsForLanguageResource": "Open System Settings",
             "speechResourcesNotSupportedOnMacOS": "Speech recognition resources are not supported for this language on this macOS version.",
@@ -713,6 +715,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "正在等待翻译资源安装完成...",
             "manualTranslationDownloadDetail": "自动下载未启动：系统未收到你的确认，或提示已被取消。请重试，或打开 macOS 系统设置 > 通用 > 语言与地区 > 翻译语言，在那里下载该翻译语言。",
             "translationDownloadAwaitingApproval": "macOS 会显示下载确认窗口。请在系统对话框中点按“下载”以安装该翻译语言。",
+            "translationDownloadUnconfirmedDetail": "下载窗口已关闭，但该翻译语言尚未安装。如果你已开始下载，它会自行完成并自动生效；否则请重试，或到系统设置下载。",
             "retryLanguageResourceDownload": "重试",
             "openSystemSettingsForLanguageResource": "打开系统设置",
             "speechResourcesNotSupportedOnMacOS": "当前 macOS 版本不支持此语言的语音识别资源。",
@@ -936,6 +939,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "正在等待翻譯資源安裝完成...",
             "manualTranslationDownloadDetail": "自動下載未啟動：系統沒有收到你的確認，或提示已被取消。請重試，或打開 macOS「系統設定」>「一般」>「語言與地區」>「翻譯語言」，在那裡下載此翻譯語言。",
             "translationDownloadAwaitingApproval": "macOS 會顯示下載確認視窗。請在系統對話框中按「下載」以安裝此翻譯語言。",
+            "translationDownloadUnconfirmedDetail": "下載視窗已關閉，但此翻譯語言尚未安裝。若你已開始下載，它會自行完成並自動生效；否則請重試，或到系統設定下載。",
             "retryLanguageResourceDownload": "重試",
             "openSystemSettingsForLanguageResource": "開啟系統設定",
             "speechResourcesNotSupportedOnMacOS": "目前的 macOS 版本不支援此語言的語音辨識資源。",
@@ -1158,6 +1162,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "Esperando a que terminen de instalarse los recursos de traducción...",
             "manualTranslationDownloadDetail": "La descarga automática no se inició: el sistema no recibió tu confirmación o el aviso se canceló. Reintenta, o abre Ajustes del sistema de macOS > General > Idioma y región > Idiomas de traducción y descarga allí este idioma.",
             "translationDownloadAwaitingApproval": "macOS te pedirá que confirmes la descarga. Haz clic en Descargar en el diálogo del sistema para instalar este idioma de traducción.",
+            "translationDownloadUnconfirmedDetail": "La ventana de descarga se cerró, pero este idioma de traducción aún no está instalado. Si iniciaste la descarga, terminará por sí sola y se usará automáticamente. Si no, reintenta o descárgalo en Ajustes del sistema.",
             "retryLanguageResourceDownload": "Reintentar",
             "openSystemSettingsForLanguageResource": "Abrir Ajustes del sistema",
             "speechResourcesNotSupportedOnMacOS": "Los recursos de reconocimiento de voz no son compatibles con este idioma en esta versión de macOS.",
@@ -1335,6 +1340,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "Warte, bis die Übersetzungsressourcen fertig installiert sind...",
             "manualTranslationDownloadDetail": "Der automatische Download wurde nicht gestartet: Das System hat deine Bestätigung nicht erhalten oder die Abfrage wurde abgebrochen. Versuche es erneut oder öffne macOS-Systemeinstellungen > Allgemein > Sprache & Region > Übersetzungssprachen und lade diese Sprache dort herunter.",
             "translationDownloadAwaitingApproval": "macOS bittet dich, den Download zu bestätigen. Klicke im Systemdialog auf „Laden“, um diese Übersetzungssprache zu installieren.",
+            "translationDownloadUnconfirmedDetail": "Das Download-Fenster wurde geschlossen, aber diese Übersetzungssprache ist noch nicht installiert. Falls du den Download gestartet hast, wird er von selbst abgeschlossen und automatisch verwendet. Andernfalls versuche es erneut oder lade sie in den Systemeinstellungen.",
             "retryLanguageResourceDownload": "Erneut versuchen",
             "openSystemSettingsForLanguageResource": "Systemeinstellungen öffnen",
             "speechResourcesNotSupportedOnMacOS": "Spracherkennungsressourcen werden für diese Sprache in dieser macOS-Version nicht unterstützt.",
@@ -1512,6 +1518,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "翻訳リソースのインストール完了を待っています...",
             "manualTranslationDownloadDetail": "自動ダウンロードは開始されませんでした。システムが確認を受け取れなかったか、ダイアログがキャンセルされました。再試行するか、macOS システム設定 > 一般 > 言語と地域 > 翻訳言語 を開いて、この翻訳言語をダウンロードしてください。",
             "translationDownloadAwaitingApproval": "macOS がダウンロードの確認を求めます。システムのダイアログで「ダウンロード」をクリックすると、この翻訳言語がインストールされます。",
+            "translationDownloadUnconfirmedDetail": "ダウンロードウインドウは閉じられましたが、この翻訳言語はまだインストールされていません。ダウンロードを開始していれば自動的に完了して使われます。そうでなければ再試行するか、システム設定からダウンロードしてください。",
             "retryLanguageResourceDownload": "再試行",
             "openSystemSettingsForLanguageResource": "システム設定を開く",
             "speechResourcesNotSupportedOnMacOS": "この macOS バージョンでは、この言語の音声認識リソースはサポートされていません。",
@@ -1689,6 +1696,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "En attente de la fin de l'installation des ressources de traduction...",
             "manualTranslationDownloadDetail": "Le téléchargement automatique n'a pas démarré : le système n'a pas reçu votre confirmation ou l'invite a été annulée. Réessayez, ou ouvrez Réglages Système de macOS > Général > Langue et région > Langues de traduction et téléchargez-y cette langue.",
             "translationDownloadAwaitingApproval": "macOS vous demandera de confirmer le téléchargement. Cliquez sur Télécharger dans la boîte de dialogue du système pour installer cette langue de traduction.",
+            "translationDownloadUnconfirmedDetail": "La fenêtre de téléchargement s'est fermée, mais cette langue de traduction n'est pas encore installée. Si vous avez lancé le téléchargement, il se terminera de lui-même et sera utilisé automatiquement. Sinon, réessayez ou téléchargez-la dans Réglages Système.",
             "retryLanguageResourceDownload": "Réessayer",
             "openSystemSettingsForLanguageResource": "Ouvrir Réglages Système",
             "speechResourcesNotSupportedOnMacOS": "Les ressources de reconnaissance vocale ne sont pas prises en charge pour cette langue sur cette version de macOS.",
@@ -1866,6 +1874,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "번역 리소스 설치 완료를 기다리는 중...",
             "manualTranslationDownloadDetail": "자동 다운로드가 시작되지 않았습니다. 시스템이 확인을 받지 못했거나 안내 창이 취소되었습니다. 다시 시도하거나 macOS 시스템 설정 > 일반 > 언어 및 지역 > 번역 언어를 열어 이 언어를 다운로드하세요.",
             "translationDownloadAwaitingApproval": "macOS가 다운로드 확인을 요청합니다. 시스템 대화상자에서 ‘다운로드’를 클릭하면 이 번역 언어가 설치됩니다.",
+            "translationDownloadUnconfirmedDetail": "다운로드 창이 닫혔지만 이 번역 언어는 아직 설치되지 않았습니다. 다운로드를 시작했다면 자동으로 완료되어 사용됩니다. 그렇지 않다면 다시 시도하거나 시스템 설정에서 다운로드하세요.",
             "retryLanguageResourceDownload": "다시 시도",
             "openSystemSettingsForLanguageResource": "시스템 설정 열기",
             "speechResourcesNotSupportedOnMacOS": "이 macOS 버전에서는 해당 언어의 음성 인식 리소스를 지원하지 않습니다.",
@@ -2043,6 +2052,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "بانتظار اكتمال تثبيت موارد الترجمة...",
             "manualTranslationDownloadDetail": "لم يبدأ التنزيل التلقائي: لم يتلقَّ النظام تأكيدك أو تم إلغاء المطالبة. أعد المحاولة، أو افتح إعدادات نظام macOS > عام > اللغة والمنطقة > لغات الترجمة ونزّل هذه اللغة من هناك.",
             "translationDownloadAwaitingApproval": "سيطلب منك macOS تأكيد التنزيل. انقر على «تنزيل» في مربع حوار النظام لتثبيت لغة الترجمة هذه.",
+            "translationDownloadUnconfirmedDetail": "أُغلقت نافذة التنزيل، لكن لغة الترجمة هذه لم تُثبّت بعد. إذا كنت قد بدأت التنزيل فسيكتمل تلقائيًا ويُستخدم من تلقاء نفسه. وإلا فأعد المحاولة أو نزّلها من إعدادات النظام.",
             "retryLanguageResourceDownload": "إعادة المحاولة",
             "openSystemSettingsForLanguageResource": "فتح إعدادات النظام",
             "speechResourcesNotSupportedOnMacOS": "موارد التعرّف على الكلام غير مدعومة لهذه اللغة على هذا الإصدار من macOS.",
@@ -2220,6 +2230,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "Aguardando a conclusão da instalação dos recursos de tradução...",
             "manualTranslationDownloadDetail": "O download automático não foi iniciado: o sistema não recebeu sua confirmação ou o aviso foi cancelado. Tente novamente ou abra Ajustes do Sistema do macOS > Geral > Idioma e Região > Idiomas de tradução e baixe este idioma por lá.",
             "translationDownloadAwaitingApproval": "O macOS pedirá que você confirme o download. Clique em Baixar na caixa de diálogo do sistema para instalar este idioma de tradução.",
+            "translationDownloadUnconfirmedDetail": "A janela de download foi fechada, mas este idioma de tradução ainda não está instalado. Se você iniciou o download, ele será concluído sozinho e usado automaticamente. Caso contrário, tente novamente ou baixe nos Ajustes do Sistema.",
             "retryLanguageResourceDownload": "Tentar novamente",
             "openSystemSettingsForLanguageResource": "Abrir Ajustes do Sistema",
             "speechResourcesNotSupportedOnMacOS": "Os recursos de reconhecimento de fala não são compatíveis com este idioma nesta versão do macOS.",
@@ -2397,6 +2408,7 @@ enum AppLocalization {
             "waitingTranslationResourcesInstalling": "Ожидание завершения установки ресурсов перевода...",
             "manualTranslationDownloadDetail": "Автоматическая загрузка не началась: система не получила ваше подтверждение или запрос был отменён. Повторите попытку или откройте настройки системы macOS > Основные > Язык и регион > Языки перевода и загрузите этот язык там.",
             "translationDownloadAwaitingApproval": "macOS попросит подтвердить загрузку. Нажмите «Загрузить» в системном диалоге, чтобы установить этот язык перевода.",
+            "translationDownloadUnconfirmedDetail": "Окно загрузки закрыто, но этот язык перевода ещё не установлен. Если вы начали загрузку, она завершится сама и будет использована автоматически. Иначе повторите попытку или загрузите его в настройках системы.",
             "retryLanguageResourceDownload": "Повторить",
             "openSystemSettingsForLanguageResource": "Открыть настройки системы",
             "speechResourcesNotSupportedOnMacOS": "Ресурсы распознавания речи не поддерживаются для этого языка в этой версии macOS.",
