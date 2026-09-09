@@ -581,13 +581,23 @@ struct LanguageResourcesFooter: View {
         )
 
         if !model.languageResourceStatuses.isEmpty {
-            LanguageResourceStatusListView(statuses: model.languageResourceStatuses)
+            LanguageResourceStatusListView(
+                statuses: model.languageResourceStatuses,
+                retryTitle: model.localized(.retryLanguageResourceDownload),
+                openSystemSettingsTitle: model.localized(.openSystemSettingsForLanguageResource),
+                onRetry: model.refreshLanguageResources,
+                onOpenSystemSettings: model.openLanguageResourceSystemSettings
+            )
         }
     }
 }
 
 struct LanguageResourceStatusListView: View {
     let statuses: [LanguageResourceStatus]
+    var retryTitle: String = ""
+    var openSystemSettingsTitle: String = ""
+    var onRetry: (() -> Void)? = nil
+    var onOpenSystemSettings: ((LanguageResourceSystemSettingsDestination) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -608,6 +618,23 @@ struct LanguageResourceStatusListView: View {
                         Text(status.detail)
                             .font(.caption)
                             .foregroundStyle(.red)
+                        if status.canRetry || status.systemSettingsDestination != nil {
+                            HStack(spacing: 8) {
+                                if status.canRetry, let onRetry {
+                                    Button(retryTitle, action: onRetry)
+                                }
+#if os(macOS)
+                                if let destination = status.systemSettingsDestination,
+                                   let onOpenSystemSettings {
+                                    Button(openSystemSettingsTitle) {
+                                        onOpenSystemSettings(destination)
+                                    }
+                                }
+#endif
+                            }
+                            .controlSize(.small)
+                            .padding(.top, 2)
+                        }
                     } else if let progress = status.progress {
                         ProgressView(value: progress)
                             .progressViewStyle(.linear)

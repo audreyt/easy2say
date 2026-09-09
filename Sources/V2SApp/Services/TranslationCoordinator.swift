@@ -66,6 +66,25 @@ final class TranslationCoordinator: ObservableObject {
                 return pair
             }
         }
+
+        /// Whether serving this operation may call `prepareTranslation()`.
+        /// On macOS that call asks the framework to present the language
+        /// download approval sheet on the view that hosts the session, so it
+        /// can only complete from a host whose window can show a sheet.
+        var requiresPresentableHost: Bool {
+            switch self {
+            case .prepare:
+                return true
+            case .translate(_, _, _, _, let prepareIfNeeded, _):
+                return prepareIfNeeded
+            }
+        }
+    }
+
+    private enum RunnerStep {
+        case serve(PendingOperation)
+        case yield
+        case declinePresentation
     }
 
     private enum OperationWaitResult {
@@ -120,6 +139,16 @@ final class TranslationCoordinator: ObservableObject {
     private var pendingOperations: [PendingOperation] = []
     private var activeRunnerID: UUID?
     private var activeOperationID: UUID?
+    /// The operation the runner is currently serving, kept so a cancellation
+    /// can resume its continuation immediately instead of waiting for the
+    /// framework call to return.
+    private var activeOperation: PendingOperation?
+    /// How many more times a declining runner may re-fire the hosts to let a
+    /// presentable host claim the pair. Bounded so a setup with no presentable
+    /// host at all cannot re-fire forever; restored whenever a presentable
+    /// runner serves an operation that needed one.
+    private var presentationRefireBudget = TranslationCoordinator.presentationRefireLimit
+    private static let presentationRefireLimit = 3
     private var cancelledOperationIDs: Set<UUID> = []
     private var generation: Int = 0
     private var runnerAvailabilityWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -333,7 +362,13 @@ final class TranslationCoordinator: ObservableObject {
     }
 
     @available(macOS 15.0, *)
-    func run(using session: TranslationSession) async {
+    /// - Parameter canPresentUI: Whether the hosting view lives in a window
+    ///   that can show the system's language download approval sheet. Hosts
+    ///   anchored to borderless or non-activating panels (the caption overlay,
+    ///   the audience display) and to the transient status bar popover must
+    ///   pass `false`; they keep serving plain translations but leave every
+    ///   operation that may need `prepareTranslation()` to a presentable host.
+    func run(using session: TranslationSession, canPresentUI: Bool = true) async {
         let runnerID = UUID()
 
         while Task.isCancelled == false {
@@ -350,15 +385,30 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         let runnerGeneration = generation
+        var declinedPresentation = false
 
         // Installed before the cancellation guard: ownership is claimed above, so
         // returning without releasing it would leave the coordinator believing a
         // runner is alive and block every later session activation.
         defer {
             if activeRunnerID == runnerID {
+                let hadWaitingRunners = runnerAvailabilityWaiters.isEmpty == false
                 activeRunnerID = nil
                 signalRunnerAvailabilityWaiters()
-                if generation == runnerGeneration, let nextPair = pendingOperations.first?.pair {
+                if declinedPresentation {
+                    // The operation stays queued for a presentable host. If one
+                    // is already waiting for ownership it claims the pair now.
+                    // Otherwise re-fire the hosts so a presentable host the app
+                    // brought forward can start a runner — bounded, because
+                    // re-firing also restarts this runner, which declines again.
+                    if hadWaitingRunners == false,
+                       generation == runnerGeneration,
+                       presentationRefireBudget > 0 {
+                        presentationRefireBudget -= 1
+                        configuration?.invalidate()
+                    }
+                } else if generation == runnerGeneration,
+                          let nextPair = pendingOperations.first?.pair {
                     activate(pair: nextPair)
                 }
             }
@@ -381,15 +431,27 @@ final class TranslationCoordinator: ObservableObject {
                 return
             }
 
-            guard let operation = await nextOperation(
+            let operation: PendingOperation
+            switch await nextOperation(
                 for: anchoredPair,
                 generation: runnerGeneration,
-                idleTimeout: Self.runnerIdleTimeout
-            ) else {
+                idleTimeout: Self.runnerIdleTimeout,
+                canPresentUI: canPresentUI
+            ) {
+            case .serve(let next):
+                operation = next
+            case .yield:
+                return
+            case .declinePresentation:
+                declinedPresentation = true
                 return
             }
 
             activeOperationID = operation.id
+            activeOperation = operation
+            if operation.requiresPresentableHost {
+                presentationRefireBudget = Self.presentationRefireLimit
+            }
 
             switch operation {
             case .prepare(let id, _, let pair, let continuation):
@@ -439,6 +501,7 @@ final class TranslationCoordinator: ObservableObject {
     func reset() {
         generation &+= 1
         cancelOutstandingOperations()
+        presentationRefireBudget = Self.presentationRefireLimit
         currentPair = nil
         configuration = nil
         installedPairs.removeAll()
@@ -525,15 +588,29 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         if activeOperationID == id {
-            cancelledOperationIDs.insert(id)
+            cancelActiveOperation()
         }
+    }
+
+    /// Resume the caller of the in-flight operation with `CancellationError`
+    /// right away. The framework call the runner is blocked in (for example a
+    /// `prepareTranslation()` waiting on the download sheet) cannot be
+    /// interrupted, so `finishOperation` later sees the id in
+    /// `cancelledOperationIDs` and drops the stale result instead of resuming
+    /// the continuation a second time.
+    private func cancelActiveOperation() {
+        guard let operation = activeOperation else {
+            return
+        }
+
+        cancelledOperationIDs.insert(operation.id)
+        activeOperation = nil
+        cancel(operation)
     }
 
     private func cancelOutstandingOperations() {
         cancelledOperationIDs.removeAll()
-        if let activeOperationID {
-            cancelledOperationIDs.insert(activeOperationID)
-        }
+        cancelActiveOperation()
 
         for operation in pendingOperations {
             cancel(operation)
@@ -560,19 +637,26 @@ final class TranslationCoordinator: ObservableObject {
     private func nextOperation(
         for pair: LanguagePair,
         generation: Int,
-        idleTimeout: TimeInterval
-    ) async -> PendingOperation? {
+        idleTimeout: TimeInterval,
+        canPresentUI: Bool
+    ) async -> RunnerStep {
         let deadline = Date().addingTimeInterval(idleTimeout)
 
         while Task.isCancelled == false {
             guard generation == self.generation else {
-                return nil
+                return .yield
             }
 
             if let index = pendingOperations.firstIndex(where: {
                 $0.pair == pair && $0.generation == generation
             }) {
-                return pendingOperations.remove(at: index)
+                if canPresentUI == false, pendingOperations[index].requiresPresentableHost {
+                    // Leave the operation queued for a host that can show the
+                    // system download sheet; serving it here would park the
+                    // framework on a sheet nobody can see.
+                    return .declinePresentation
+                }
+                return .serve(pendingOperations.remove(at: index))
             }
 
             // Any remaining generation-matching operation belongs to a different
@@ -580,15 +664,15 @@ final class TranslationCoordinator: ObservableObject {
             // new session is configured, so yield instead of idling out the full
             // timeout.
             if pendingOperations.contains(where: { $0.generation == generation }) {
-                return nil
+                return .yield
             }
 
             if await waitForOperationSignal(for: pair, generation: generation, until: deadline) == .timedOut {
-                return nil
+                return .yield
             }
         }
 
-        return nil
+        return .yield
     }
 
     private func waitForRunnerAvailability(runnerID: UUID) async {
@@ -700,9 +784,10 @@ final class TranslationCoordinator: ObservableObject {
         error: Error? = nil
     ) {
         activeOperationID = nil
+        activeOperation = nil
 
         if cancelledOperationIDs.remove(id) != nil {
-            continuation.resume(throwing: CancellationError())
+            // Already resumed with CancellationError by cancelActiveOperation.
             return
         }
 
@@ -720,9 +805,10 @@ final class TranslationCoordinator: ObservableObject {
         error: Error? = nil
     ) {
         activeOperationID = nil
+        activeOperation = nil
 
         if cancelledOperationIDs.remove(id) != nil {
-            continuation.resume(throwing: CancellationError())
+            // Already resumed with CancellationError by cancelActiveOperation.
             return
         }
 

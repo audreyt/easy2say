@@ -77,6 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusBarController = statusBarController
         installSingleInstanceWakeObserver()
 
+        // Apple Translation attaches its language download sheet to the view
+        // hosting the session; the Settings window is the only host whose
+        // window can show it.
+        appModel.presentTranslationDownloadHost = { [weak settingsWindowController] in
+            settingsWindowController?.showSettings()
+        }
+
         overlayWindowController.trayIconRectProvider = { [weak self] in
             self?.statusBarController?.statusItemScreenRect
         }
