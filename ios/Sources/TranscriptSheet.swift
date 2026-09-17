@@ -59,7 +59,8 @@ struct TranscriptSheet: View {
                         entry: entry,
                         accent: accent,
                         sourceLabel: model.localized(.origin),
-                        translationLabel: model.localized(.translation)
+                        translationLabel: model.localized(.translation),
+                        speakerLabel: entry.speakerIndex.map { model.speakerLabel(for: $0) }
                     )
                 }
             }
@@ -112,10 +113,11 @@ struct TranscriptSheet: View {
     private func copyAll() {
         let text = model.transcriptEntries
             .map { entry in
+                let prefix = entry.speakerIndex.map { "\(model.speakerLabel(for: $0)): " } ?? ""
                 if entry.translatedText.isEmpty {
-                    return entry.sourceText
+                    return prefix + entry.sourceText
                 }
-                return "\(entry.sourceText)\n\(entry.translatedText)"
+                return "\(prefix)\(entry.sourceText)\n\(entry.translatedText)"
             }
             .joined(separator: "\n\n")
 
@@ -125,13 +127,13 @@ struct TranscriptSheet: View {
         #endif
     }
 }
-
 private struct TranscriptRow: View {
     let index: Int
     let entry: TranscriptEntry
     let accent: Color
     let sourceLabel: String
     let translationLabel: String
+    let speakerLabel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -139,6 +141,12 @@ private struct TranscriptRow: View {
                 Text(String(format: "%02d", index))
                     .font(.system(.caption2, design: .monospaced, weight: .bold))
                     .foregroundStyle(accent.opacity(0.78))
+
+                if let speakerLabel {
+                    Text(speakerLabel)
+                        .font(.system(.caption2, design: .rounded, weight: .semibold))
+                        .foregroundStyle(accent.opacity(0.85))
+                }
 
                 Spacer()
             }

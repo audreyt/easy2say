@@ -4,11 +4,14 @@ struct OverlayHistoryEntry: Identifiable, Equatable {
     let id: UUID
     var translatedText: String
     var sourceText: String
+    /// Display speaker index (0 = first speaker heard), or nil.
+    var speakerIndex: Int? = nil
 
-    init(id: UUID = UUID(), translatedText: String, sourceText: String) {
+    init(id: UUID = UUID(), translatedText: String, sourceText: String, speakerIndex: Int? = nil) {
         self.id = id
         self.translatedText = translatedText
         self.sourceText = sourceText
+        self.speakerIndex = speakerIndex
     }
 }
 
@@ -32,6 +35,9 @@ struct OverlayPreviewState: Equatable {
     var draftTranslationPromotionID: UUID? = nil
     var draftPromotionID: UUID? = nil
     var draftAudioStartMs: Int? = nil
+    /// Provisional speaker for the in-flight draft; flickers as the diarizer
+    /// revises tentative segments.
+    var draftSpeakerIndex: Int? = nil
 
     // MARK: History layer — committed captions the user can scroll back through
     var history: [OverlayHistoryEntry] = []
@@ -41,6 +47,8 @@ struct OverlayPreviewState: Equatable {
     var committedPromotionID: UUID? = nil
     var committedCaptionID: UUID? = nil
     var committedAudioStartMs: Int? = nil
+    /// Display speaker index (0 = first speaker heard) for the committed caption.
+    var committedSpeakerIndex: Int? = nil
 
     // MARK: Derived helpers
 
@@ -221,6 +229,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
         let translatedAgedPrefixLength: Int
         let sourceAgedPrefixLength: Int
         let representedHistoryEntryIDs: Set<UUID>
+        /// Display speaker index (0 = first speaker heard), or nil.
+        let speakerIndex: Int?
 
         init(
             id: Identity,
@@ -231,7 +241,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
             sourceStablePrefixLength: Int? = nil,
             translatedAgedPrefixLength: Int = 0,
             sourceAgedPrefixLength: Int = 0,
-            representedHistoryEntryIDs: Set<UUID> = []
+            representedHistoryEntryIDs: Set<UUID> = [],
+            speakerIndex: Int? = nil
         ) {
             self.id = id
             self.phase = phase
@@ -254,6 +265,7 @@ struct OverlayLiveCaptionPresentation: Equatable {
                 stablePrefixLength: self.sourceStablePrefixLength
             )
             self.representedHistoryEntryIDs = representedHistoryEntryIDs
+            self.speakerIndex = speakerIndex
         }
 
         var translatedStableText: String {
@@ -372,7 +384,8 @@ struct OverlayLiveCaptionPresentation: Equatable {
             sourceStablePrefixLength: source.stablePrefixLength,
             translatedAgedPrefixLength: translated.agedPrefixLength,
             sourceAgedPrefixLength: source.agedPrefixLength,
-            representedHistoryEntryIDs: representedHistoryEntryIDs
+            representedHistoryEntryIDs: representedHistoryEntryIDs,
+            speakerIndex: current.speakerIndex
         )
     }
 
@@ -599,7 +612,8 @@ extension OverlayPreviewState {
             translatedStablePrefixLength: draftTranslatedStablePrefixLength,
             sourceStablePrefixLength: draftSourceStablePrefixLength,
             translatedAgedPrefixLength: 0,
-            sourceAgedPrefixLength: 0
+            sourceAgedPrefixLength: 0,
+            speakerIndex: draftSpeakerIndex
         )
 
         guard let committedCaption else {
@@ -636,7 +650,8 @@ extension OverlayPreviewState {
                     translatedStablePrefixLength: translated.stablePrefixLength,
                     sourceStablePrefixLength: source.stablePrefixLength,
                     translatedAgedPrefixLength: 0,
-                    sourceAgedPrefixLength: 0
+                    sourceAgedPrefixLength: 0,
+                    speakerIndex: draftSpeakerIndex ?? committedCaption.speakerIndex
                 )
             )
         case .independent:
@@ -731,7 +746,8 @@ extension OverlayPreviewState {
             sourceText: sourceText,
             translatedAgedPrefixLength: 0,
             sourceAgedPrefixLength: 0,
-            representedHistoryEntryIDs: committedCaptionID.map { [$0] } ?? []
+            representedHistoryEntryIDs: committedCaptionID.map { [$0] } ?? [],
+            speakerIndex: committedSpeakerIndex
         )
     }
 }

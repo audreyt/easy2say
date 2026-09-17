@@ -1,0 +1,101 @@
+[
+  {
+    "metadataOutputVersion" : "3.0",
+    "shortDescription" : "Silero VAD probability and recurrent-state inference for 16 kHz audio.",
+    "outputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 1)",
+        "shortDescription" : "Speech probability with shape [1, 1].",
+        "shape" : "[1, 1]",
+        "name" : "probability",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 2 × 1 × 128)",
+        "shortDescription" : "Updated recurrent hidden and cell state with shape [2, 1, 128].",
+        "shape" : "[2, 1, 128]",
+        "name" : "state_out",
+        "type" : "MultiArray"
+      }
+    ],
+    "storagePrecision" : "Float32",
+    "modelParameters" : [
+
+    ],
+    "author" : "Silero Team and contributors; converted for v2s",
+    "specificationVersion" : 9,
+    "license" : "MIT (https:\/\/github.com\/snakers4\/silero-vad\/blob\/806dcba3f0b5d95282d0889a074954a2f8c6397b\/LICENSE)",
+    "mlProgramOperationTypeHistogram" : {
+      "Ios18.linear" : 2,
+      "Ios18.mul" : 5,
+      "Ios18.conv" : 6,
+      "Ios18.expandDims" : 2,
+      "Ios18.relu" : 5,
+      "Stack" : 1,
+      "Ios18.sigmoid" : 4,
+      "Ios18.add" : 3,
+      "Ios18.tanh" : 2,
+      "Ios18.sliceByIndex" : 8,
+      "Ios18.squeeze" : 2,
+      "Ios18.sqrt" : 1,
+      "Pad" : 1
+    },
+    "computePrecision" : "Mixed (Float32, Int32)",
+    "stateSchema" : [
+
+    ],
+    "isUpdatable" : "0",
+    "availability" : {
+      "macOS" : "15.0",
+      "tvOS" : "18.0",
+      "visionOS" : "2.0",
+      "watchOS" : "11.0",
+      "iOS" : "18.0",
+      "macCatalyst" : "18.0"
+    },
+    "modelType" : {
+      "name" : "MLModelType_mlProgram"
+    },
+    "inputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 576)",
+        "shortDescription" : "One 576-sample float32 window: 64 prior-context samples followed by 512 new 16 kHz mono samples.",
+        "shape" : "[1, 576]",
+        "name" : "audio",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 2 × 1 × 128)",
+        "shortDescription" : "Float32 recurrent hidden and cell state with shape [2, 1, 128].",
+        "shape" : "[2, 1, 128]",
+        "name" : "recurrent_state",
+        "type" : "MultiArray"
+      }
+    ],
+    "userDefinedMetadata" : {
+      "com.github.apple.coremltools.source" : "torch==2.7.0",
+      "com.github.apple.coremltools.version" : "9.0",
+      "silero_vad_source_sha256" : "e1122837f4154c511485fe0b9c64455f7b929c96fbb8d79fbdb336383ebd3720",
+      "silero_vad_source" : "https:\/\/raw.githubusercontent.com\/snakers4\/silero-vad\/806dcba3f0b5d95282d0889a074954a2f8c6397b\/src\/silero_vad\/data\/silero_vad.jit",
+      "com.github.apple.coremltools.source_dialect" : "TorchScript",
+      "silero_vad_commit" : "806dcba3f0b5d95282d0889a074954a2f8c6397b",
+      "chunk_samples" : "512",
+      "context_samples" : "64",
+      "sample_rate_hz" : "16000"
+    },
+    "generatedClassName" : "SileroVAD",
+    "method" : "predict"
+  }
+]

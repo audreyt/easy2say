@@ -81,7 +81,8 @@ final class AudienceDisplayPresentationState: ObservableObject {
             phase: .committed,
             translatedText: entry.translatedText,
             sourceText: entry.sourceText,
-            representedHistoryEntryIDs: [entry.id]
+            representedHistoryEntryIDs: [entry.id],
+            speakerIndex: entry.speakerIndex
         )
         let incoming = IncomingUtterance(
             caption: caption,
@@ -267,7 +268,8 @@ final class AudienceDisplayPresentationState: ObservableObject {
                 sourceStablePrefixLength: retained.caption.sourceStablePrefixLength,
                 translatedAgedPrefixLength: retained.caption.translatedAgedPrefixLength,
                 sourceAgedPrefixLength: retained.caption.sourceAgedPrefixLength,
-                representedHistoryEntryIDs: representedHistoryEntryIDs
+                representedHistoryEntryIDs: representedHistoryEntryIDs,
+                speakerIndex: retained.caption.speakerIndex ?? incoming.caption.speakerIndex
             )
             return
         }
@@ -293,7 +295,8 @@ final class AudienceDisplayPresentationState: ObservableObject {
                     ? incoming.caption.translatedAgedPrefixLength
                     : retained.caption.translatedAgedPrefixLength,
                 sourceAgedPrefixLength: retained.caption.sourceAgedPrefixLength,
-                representedHistoryEntryIDs: representedHistoryEntryIDs
+                representedHistoryEntryIDs: representedHistoryEntryIDs,
+                speakerIndex: incoming.caption.speakerIndex ?? retained.caption.speakerIndex
             )
             return
         }
@@ -318,7 +321,8 @@ final class AudienceDisplayPresentationState: ObservableObject {
                 ? retained.caption.translatedAgedPrefixLength
                 : incoming.caption.translatedAgedPrefixLength,
             sourceAgedPrefixLength: incoming.caption.sourceAgedPrefixLength,
-            representedHistoryEntryIDs: representedHistoryEntryIDs
+            representedHistoryEntryIDs: representedHistoryEntryIDs,
+            speakerIndex: incoming.caption.speakerIndex ?? retained.caption.speakerIndex
         )
         if let liveIdentity = incoming.liveIdentity {
             retained.latestLiveIdentity = liveIdentity

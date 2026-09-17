@@ -19,6 +19,10 @@ struct RecognizedSentence: Equatable, Sendable {
     let heardLanguageID: String
     let dualLaneEvidence: DualLaneEvidence?
     let audioStartMs: Int?
+    /// Stable display index (0 = first speaker heard) from live diarization,
+    /// or nil when diarization is off, the model is absent, or no speaker
+    /// segment overlaps this sentence's audio range.
+    let speakerIndex: Int?
 
     init(
         text: String,
@@ -26,7 +30,8 @@ struct RecognizedSentence: Equatable, Sendable {
         replacesPromotionSegmentID: UUID? = nil,
         heardLanguageID: String = "",
         dualLaneEvidence: DualLaneEvidence? = nil,
-        audioStartMs: Int? = nil
+        audioStartMs: Int? = nil,
+        speakerIndex: Int? = nil
     ) {
         self.text = text
         self.promotionSegmentID = promotionSegmentID
@@ -34,6 +39,7 @@ struct RecognizedSentence: Equatable, Sendable {
         self.heardLanguageID = heardLanguageID
         self.dualLaneEvidence = dualLaneEvidence
         self.audioStartMs = audioStartMs
+        self.speakerIndex = speakerIndex
     }
 }
 
@@ -158,6 +164,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let text: String
         let promotionSegmentID: UUID?
         let replacesPromotionSegmentID: UUID?
+        /// Display speaker index resolved from the emission's capture-time
+        /// audio range; nil when unattributable.
+        let speakerIndex: Int?
     }
 
     private struct AudioLevelStats {
@@ -334,12 +343,32 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var localASRPreRoll: [Float] = []
     private var localASRSegment: [Float] = []
     private var localASRSpeechActive = false
-    private var localASRPendingSegments: [[Float]] = []
+    /// Capture-time (seconds) of the first sample in `localASRSegment`, so each
+    /// finished segment can be attributed to a speaker.
+    private var localASRSegmentStartCaptureSeconds: Double?
+    private var localASRPendingSegments: [(audio: [Float], startSeconds: Double)] = []
     private var localASRTranscriptionTask: Task<Void, Never>?
     private let localASRPreRollSampleCount = 4_800  // 300 ms at 16 kHz
     private let localASRMinimumSegmentSampleCount = 4_000
     private let localASRMaximumSegmentSampleCount = 240_000  // 15 seconds
 #endif
+
+    // MARK: - Live speaker diarization
+
+    /// Streaming Sortformer diarizer fed the same 16 kHz mono buffers as the
+    /// recognizer. Created in `start()` when the speaker-labels setting is on
+    /// and the bundled model exists; never nilled on stop (stale reads are
+    /// benign — lookups just return nil).
+    private var diarizationEngine: LiveDiarizationEngine?
+    /// Capture-time seconds of the last buffer handed to the diarizer.
+    private var lastBufferStartCaptureSeconds: Double?
+    /// Capture-time seconds of the first buffer the SpeechAnalyzer saw. The
+    /// analyzer's `audioTimeRange`s are relative to its own stream start; this
+    /// origin converts them onto the diarizer's capture-time axis.
+    private var analyzerOriginCaptureSeconds: Double?
+    /// Capture-time seconds at which the current legacy recognition request
+    /// began. Legacy `SFTranscriptionSegment` timestamps are request-relative.
+    private var legacyRequestOriginCaptureSeconds: Double?
 
     private var microphoneCaptureSession: AVCaptureSession?
 #if os(macOS)
@@ -416,6 +445,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         sourceLanguageID: String = "",
         targetLanguageID: String = "",
         speechCorrections: SpeechCorrectionTable = .empty,
+        speakerDiarizationEnabled: Bool = false,
         transcriptHandler: @escaping @MainActor (RecognizedSentence) -> Void,
         partialHandler: @escaping @MainActor (DraftSegment?) -> Void,
         errorHandler: @escaping @MainActor (String) -> Void,
@@ -435,6 +465,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         self.interfaceLanguageID = interfaceLanguageID
         self.errorHandler = errorHandler
         self.fatalErrorHandler = fatalErrorHandler
+        if speakerDiarizationEnabled, LiveDiarizationEngine.isModelBundled {
+            let engine = LiveDiarizationEngine()
+            diarizationEngine = engine
+            engine.start()
+        } else {
+            diarizationEngine = nil
+        }
+        lastBufferStartCaptureSeconds = nil
+        analyzerOriginCaptureSeconds = nil
+        legacyRequestOriginCaptureSeconds = nil
         let startGeneration: Int = try await runOnCaptureQueue {
             self.lifecycleGeneration &+= 1
             self.startupCancelled = false
@@ -579,6 +619,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 #endif
 
         stopModernSpeechRecognizer()
+        diarizationEngine?.stop()
+        lastBufferStartCaptureSeconds = nil
+        analyzerOriginCaptureSeconds = nil
+        legacyRequestOriginCaptureSeconds = nil
         resetRecognitionFailureState()
         recognitionGeneration &+= 1
 #if canImport(WhisperKit)
@@ -729,6 +773,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         recognitionRequest = request
         recognitionTask = task
         recognitionBackend = .legacy
+        // Segment timestamps in this task's results are relative to the first
+        // appended buffer; nil marks the origin pending until that append.
+        legacyRequestOriginCaptureSeconds = nil
         resetRecognitionFailureState()
         resetAudioProcessingState()
         resetLegacyTranscriptionState()
@@ -1261,6 +1308,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let audioLevels = cleanUpSpeechBuffer(processingBuffer)
         boostIfQuiet(buffer: processingBuffer, levels: audioLevels)
 
+        // Feed the diarizer the same 16 kHz mono stream the recognizer hears and
+        // remember where this buffer sits on the capture-time axis.
+        lastBufferStartCaptureSeconds = diarizationEngine?.append(audioBuffer: processingBuffer)
+
         var currentVADResult: VADResult?
         if let vadEngine {
             let vadResult = vadEngine.process(buffer: processingBuffer)
@@ -1304,6 +1355,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         // Always forward audio to the recognizer — VAD is used only
         // for silence-commit timing, not to gate the audio stream.
+        if legacyRequestOriginCaptureSeconds == nil {
+            legacyRequestOriginCaptureSeconds = lastBufferStartCaptureSeconds
+        }
         recognitionRequest.append(recognizerBuffer)
     }
 
@@ -1316,6 +1370,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         guard let analyzerBuffer = makeSpeechAnalyzerBuffer(from: processingBuffer) else {
             return
+        }
+
+        // The analyzer's audioTimeRanges start at the first buffer it receives;
+        // pin that origin to capture time so emissions can be diarized.
+        if analyzerOriginCaptureSeconds == nil {
+            analyzerOriginCaptureSeconds = lastBufferStartCaptureSeconds
         }
 
         continuation.yield(AnalyzerInput(buffer: analyzerBuffer))
@@ -1339,6 +1399,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             && (vadResult?.containsSpeechOnset == true || vadResult?.isSpeech == true)
         if startsSpeech {
             localASRSpeechActive = true
+            // The segment opens with the pre-roll, so its capture-time start is
+            // this buffer's start minus the pre-roll's duration.
+            let preRollSeconds = Double(localASRPreRoll.count) / 16_000
+            localASRSegmentStartCaptureSeconds = (lastBufferStartCaptureSeconds ?? 0) - preRollSeconds
             localASRSegment = localASRPreRoll
             localASRPreRoll.removeAll(keepingCapacity: true)
         }
@@ -1358,14 +1422,19 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let reachesMaximum = localASRSegment.count >= localASRMaximumSegmentSampleCount
         guard localASRSpeechActive, endsSpeech || reachesMaximum else { return }
 
-        enqueueLocalASRSegment(localASRSegment)
+        enqueueLocalASRSegment(
+            localASRSegment,
+            startSeconds: localASRSegmentStartCaptureSeconds
+        )
         localASRSegment.removeAll(keepingCapacity: true)
+        localASRSegmentStartCaptureSeconds = nil
         if endsSpeech, vadResult?.isSpeech == true {
             // One capture buffer can contain offset then a new onset. Preserve the
             // ambiguous buffer as pre-roll for the new segment rather than dropping
             // the newly-started utterance.
             localASRSpeechActive = true
             localASRSegment = samples
+            localASRSegmentStartCaptureSeconds = lastBufferStartCaptureSeconds
         } else {
             localASRSpeechActive = endsSpeech == false
         }
@@ -1374,11 +1443,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private func enqueueLocalASRSegment(_ audio: [Float]) {
+    private func enqueueLocalASRSegment(_ audio: [Float], startSeconds: Double?) {
         guard audio.count >= localASRMinimumSegmentSampleCount else { return }
-        localASRPendingSegments.append(audio)
+        localASRPendingSegments.append((audio: audio, startSeconds: startSeconds ?? 0))
         startNextLocalASRTranscriptionIfNeeded()
     }
+
 
     private func startNextLocalASRTranscriptionIfNeeded() {
         guard localASRTranscriptionTask == nil,
@@ -1404,7 +1474,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return
         }
 
-        let audio = localASRPendingSegments.removeFirst()
+        let pending = localASRPendingSegments.removeFirst()
         let generation = recognitionGeneration
         localASRTranscriptionTask = Task { [weak self] in
             guard let self else { return }
@@ -1419,15 +1489,24 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             }
 
             do {
-                let text = try await transcribe(audio)
+                let text = try await transcribe(pending.audio)
                 guard Task.isCancelled == false else { return }
-                if let prepared = await self.prepareCommittedSentenceForEmission(text, pendingPromotionID: nil) {
+                let segmentRange = CMTimeRange(
+                    start: CMTime(seconds: pending.startSeconds, preferredTimescale: 1000),
+                    duration: CMTime(seconds: Double(pending.audio.count) / 16_000, preferredTimescale: 1000)
+                )
+                if let prepared = await self.prepareCommittedSentenceForEmission(
+                    text,
+                    pendingPromotionID: nil,
+                    audioRange: segmentRange
+                ) {
                     await self.emitRecognizedSentence(
                         RecognizedSentence(
                             text: prepared.text,
                             promotionSegmentID: prepared.promotionSegmentID,
                             replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
-                            heardLanguageID: currentHeardLanguageID
+                            heardLanguageID: currentHeardLanguageID,
+                            speakerIndex: prepared.speakerIndex
                         )
                     )
                 }
@@ -1718,7 +1797,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                     text: prepared.text,
                     promotionSegmentID: prepared.promotionSegmentID,
                     replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
-                    heardLanguageID: currentHeardLanguageID
+                    heardLanguageID: currentHeardLanguageID,
+                    speakerIndex: prepared.speakerIndex
                 )
             )
             pendingPromotionID = nil
@@ -1759,7 +1839,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
                         heardLanguageID: emissionLang,
                         dualLaneEvidence: emission.dualLaneEvidence,
-                        audioStartMs: isTrailingUnit ? parentStartMs : nil
+                        audioStartMs: isTrailingUnit ? parentStartMs : nil,
+                        speakerIndex: prepared.speakerIndex
                     )
                 )
                 pendingPromotionID = nil
@@ -1846,6 +1927,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         draft.sourceText = corrected.text
         draft.stablePrefixLength = corrected.stablePrefixLength
         draft.mutableTailText = String(corrected.text.dropFirst(min(corrected.stablePrefixLength, corrected.text.count)))
+        // Attribute the draft to whoever owns its audio span. The range runs to
+        // "now" on the capture clock so tentative segments still count.
+        if let startMs = draft.audioHypothesisStartMs {
+            draft.speakerIndex = diarizationEngine?.dominantSpeakerIndex(
+                startSeconds: Double(startMs) / 1000,
+                endSeconds: diarizationEngine?.captureSecondsNow ?? Double(startMs) / 1000
+            )
+        }
         partialHandler?(draft)
     }
 
@@ -1942,7 +2031,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         return PreparedSentenceEmission(
             text: candidateText,
             promotionSegmentID: emissionPromotionID,
-            replacesPromotionSegmentID: nil
+            replacesPromotionSegmentID: nil,
+            speakerIndex: speakerIndex(for: audioRange)
+        )
+    }
+
+    /// Resolves the dominant speaker's display index for a capture-time audio
+    /// range. Nil when diarization is off or no segment overlaps.
+    private nonisolated func speakerIndex(for audioRange: CMTimeRange?) -> Int? {
+        guard let audioRange, audioRange.isValid, audioRange.duration.isNumeric else {
+            return nil
+        }
+        return diarizationEngine?.dominantSpeakerIndex(
+            startSeconds: cmTimeSeconds(audioRange.start),
+            endSeconds: cmTimeSeconds(audioRange.end)
         )
     }
 
@@ -2059,7 +2161,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return PreparedSentenceEmission(
                 text: text,
                 promotionSegmentID: newPromotionID,
-                replacesPromotionSegmentID: rootID
+                replacesPromotionSegmentID: rootID,
+                speakerIndex: speakerIndex(for: audioRange ?? previous.audioRange)
             )
         }
 
@@ -2107,6 +2210,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     private func cmTimeSeconds(_ time: CMTime) -> Double {
         time.isNumeric ? CMTimeGetSeconds(time) : 0
+    }
+
+    /// Shifts an analyzer-relative range onto the capture-time axis the
+    /// diarizer uses. Identity when the analyzer origin isn't pinned yet.
+    private func captureTimeRange(from range: CMTimeRange) -> CMTimeRange {
+        guard let origin = analyzerOriginCaptureSeconds, range.isValid else {
+            return range
+        }
+        return CMTimeRange(
+            start: CMTime(seconds: cmTimeSeconds(range.start) + origin, preferredTimescale: 1000),
+            duration: range.duration
+        )
     }
 
     @MainActor
@@ -2403,6 +2518,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         text: sentenceText,
                         promotionSegmentID: committedDraftID,
                         isProvisionalSilence: !result.isFinal,
+                        audioRange: legacyCaptureAudioRange(
+                            startSegment: segments[sentenceStartIndex],
+                            endSegment: segments[commitEndIndex]
+                        ),
                         audioEndTime: segmentEndTime(for: segments[commitEndIndex])
                     )
                 )
@@ -2480,6 +2599,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         recognitionRequest = request
         recognitionTask = task
+        // Segment timestamps in this task's results are relative to the first
+        // appended buffer; nil marks the origin pending until that append.
+        legacyRequestOriginCaptureSeconds = nil
         // Reset the converter — new request may have a different nativeAudioFormat.
         resetAudioProcessingState()
         resetLegacyTranscriptionState()
@@ -2631,7 +2753,8 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         promotionSegmentID: committedDraftID,
                         heardLanguageID: resolved.languageID,
                         dualLaneEvidence: step.evidence,
-                        isProvisionalSilence: false
+                        isProvisionalSilence: false,
+                        audioRange: dualLaneCaptureAudioRange(step)
                     )
                 ],
                 clearDraftAfter: true
@@ -2650,6 +2773,22 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         currentHeardLanguageID = resolved.languageID
         latestModernText = resolved.text
         emitCorrectedDraft(resolved.text)
+    }
+
+    /// Builds a capture-time range for a dual-lane commit from the winning
+    /// lane's hypothesis times (analyzer-relative) plus the pinned origin.
+    @available(iOS 26.0, macOS 26.0, *)
+    private func dualLaneCaptureAudioRange(_ step: DualLaneStep) -> CMTimeRange? {
+        guard let start = step.commitStartSeconds,
+              let end = step.commitEndSeconds,
+              let origin = analyzerOriginCaptureSeconds,
+              end > start else {
+            return nil
+        }
+        return CMTimeRange(
+            start: CMTime(seconds: start + origin, preferredTimescale: 1000),
+            end: CMTime(seconds: end + origin, preferredTimescale: 1000)
+        )
     }
 
     private func resolveHeardCaption(
@@ -2717,14 +2856,17 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func processModernRecognitionText(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
         let now = Date()
         lastRecognitionResultTime = now
-        lastModernAudioStartMs = cmTimeMilliseconds(audioRange.start)
+        // The analyzer's clock starts at its first buffer; shift the range onto
+        // the capture-time axis the diarizer uses.
+        let captureAudioRange = captureTimeRange(from: audioRange)
+        lastModernAudioStartMs = cmTimeMilliseconds(captureAudioRange.start)
         let pendingRawText = pendingModernText(from: fullText)
         currentHeardLanguageID = configuredSourceLanguageID
         let text = pendingRawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
 
         if isFinal {
-            let identity = "\(cmTimeMilliseconds(audioRange.start)):\(cmTimeMilliseconds(audioRange.duration)):\(fullText)"
+            let identity = "\(cmTimeMilliseconds(captureAudioRange.start)):\(cmTimeMilliseconds(captureAudioRange.duration)):\(fullText)"
             guard identity != lastModernCommittedResultIdentity else { return }
             lastModernCommittedResultIdentity = identity
 
@@ -2745,7 +2887,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                             promotionSegmentID: committedDraftID,
                             heardLanguageID: currentHeardLanguageID,
                             isProvisionalSilence: false,
-                            audioRange: audioRange,
+                            audioRange: captureAudioRange,
                             audioStartMs: hypothesisStartMs
                         )
                     ],
@@ -2788,7 +2930,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         text: committedText,
                         promotionSegmentID: committedDraftID,
                         isProvisionalSilence: true,
-                        audioRange: audioRange,
+                        audioRange: captureAudioRange,
                         audioStartMs: lastModernAudioStartMs
                     )
                 ],
@@ -2912,7 +3054,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         let stablePrefixLen = computeStablePrefixLength(text: text, now: now)
         let mutableTail = String(text.dropFirst(min(stablePrefixLen, text.count)))
-        let timeRange = transcriberTimeRange(result.text)
+        let timeRange = transcriberTimeRange(result.text).map { captureTimeRange(from: $0) }
         let startMs = timeRange.map { cmTimeMilliseconds($0.start) } ?? 0
 
         let draft = DraftSegment(
@@ -3153,6 +3295,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let committedDraftID = currentDraftId
 
+        let commitStartIndex = committedSegmentCount
         committedAudioBoundaryTime = segmentEndTime(for: segments[lastIdx])
         committedSegmentCount = segments.count
         resetDraftState()
@@ -3164,6 +3307,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                         promotionSegmentID: committedDraftID,
                         heardLanguageID: currentHeardLanguageID,
                         isProvisionalSilence: true,
+                        audioRange: legacyCaptureAudioRange(
+                            startSegment: segments[commitStartIndex],
+                            endSegment: segments[lastIdx]
+                        ),
                         audioEndTime: committedAudioBoundaryTime
                     )
                 ],
@@ -3226,6 +3373,23 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     private func segmentEndTime(for segment: SFTranscriptionSegment) -> TimeInterval {
         segment.timestamp + segment.duration
+    }
+
+    /// Converts a legacy request-relative segment span into a capture-time
+    /// `CMTimeRange` for diarization. Nil while the request's first appended
+    /// buffer hasn't pinned the origin.
+    private func legacyCaptureAudioRange(
+        startSegment: SFTranscriptionSegment,
+        endSegment: SFTranscriptionSegment
+    ) -> CMTimeRange? {
+        guard let origin = legacyRequestOriginCaptureSeconds else { return nil }
+        let start = origin + startSegment.timestamp
+        let end = origin + segmentEndTime(for: endSegment)
+        guard end > start else { return nil }
+        return CMTimeRange(
+            start: CMTime(seconds: start, preferredTimescale: 1000),
+            end: CMTime(seconds: end, preferredTimescale: 1000)
+        )
     }
 
     // MARK: - Draft helpers (called on captureQueue)

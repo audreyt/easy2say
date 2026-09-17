@@ -35,6 +35,17 @@ jobs:
       - name: Verify Breeze-ASR-26
         run: ./scripts/fetch_breeze_asr_26.sh --verify-only
 
+      - name: Cache Sortformer diarization model
+        id: diarization-cache
+        uses: actions/cache@v6
+        with:
+          path: ios/Resources/Diarization
+          key: sortformer-v2-1-${{ runner.os }}-${{ hashFiles('scripts/fetch-diarization-model.sh') }}
+
+      - name: Fetch Sortformer diarization model
+        if: steps.diarization-cache.outputs.cache-hit != 'true'
+        run: ./scripts/fetch-diarization-model.sh
+
       - name: Build macOS app (Release)
         run: |
           xcodebuild \

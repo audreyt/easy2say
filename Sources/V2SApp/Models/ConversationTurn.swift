@@ -26,6 +26,10 @@ struct ConversationTurn: Identifiable, Equatable, Sendable {
     var translatedText: String
     let sourceLanguageID: String
     let targetLanguageID: String
+    /// Display speaker index (0 = first speaker heard) from live diarization,
+    /// or nil when unattributable. Distinct from `side`: side is the language
+    /// lane, speakerIndex is the voice.
+    let speakerIndex: Int?
 
     init(
         id: UUID = UUID(),
@@ -33,7 +37,8 @@ struct ConversationTurn: Identifiable, Equatable, Sendable {
         sourceText: String,
         translatedText: String = "",
         sourceLanguageID: String,
-        targetLanguageID: String
+        targetLanguageID: String,
+        speakerIndex: Int? = nil
     ) {
         self.id = id
         self.side = side
@@ -41,6 +46,7 @@ struct ConversationTurn: Identifiable, Equatable, Sendable {
         self.translatedText = translatedText
         self.sourceLanguageID = sourceLanguageID
         self.targetLanguageID = targetLanguageID
+        self.speakerIndex = speakerIndex
     }
 }
 

@@ -58,12 +58,14 @@ final class ConversationEngine: ObservableObject {
     var interfaceLanguageID = "en"
     var speechCorrections = SpeechCorrectionTable.empty
     var recognitionContextualStrings: [String] = []
+    /// When true and the bundled Sortformer model exists, committed turns get a
+    /// stable `speakerIndex` (0 = first speaker heard) from live diarization.
+    var speakerDiarizationEnabled = false
     var glossary: [String: String] = [:] {
         didSet {
             cachedInverseGlossary = GlossaryService.buildInverseGlossary(glossary)
         }
     }
-
     private(set) var primaryLanguageID = "zh-Hant"
     private(set) var secondaryLanguageID = "en"
 
@@ -105,7 +107,10 @@ final class ConversationEngine: ObservableObject {
     private var draftID = UUID()
     /// Capture-timeline position through which audio has already become a turn.
     private var committedAudioEndSeconds: Double = 0
-
+    /// Streaming diarizer fed the same tap buffers as the analyzer. Its clock
+    /// starts at the first buffer — the same origin the analyzer uses — so
+    /// hypothesis times are already on the diarizer's axis.
+    private var diarizationEngine: LiveDiarizationEngine?
     private struct LaneHypothesis {
         var volatileText = ""
         var confidence: Double?
@@ -224,6 +229,8 @@ final class ConversationEngine: ObservableObject {
 
         audioTap?.stop()
         audioTap = nil
+        diarizationEngine?.stop()
+        diarizationEngine = nil
         analyzerInputContinuation?.finish()
         analyzerInputContinuation = nil
         analyzerTask?.cancel()
@@ -323,6 +330,14 @@ final class ConversationEngine: ObservableObject {
               generation == runGeneration,
               Task.isCancelled == false else {
             return
+        }
+
+        if speakerDiarizationEnabled, LiveDiarizationEngine.isModelBundled {
+            let engine = LiveDiarizationEngine()
+            diarizationEngine = engine
+            engine.start()
+        } else {
+            diarizationEngine = nil
         }
 
         var transcribers: [ConversationSide: SpeechTranscriber] = [:]
@@ -477,7 +492,11 @@ final class ConversationEngine: ObservableObject {
         }
 
         let tap = ConversationAudioTap(outputFormat: analyzerFormat)
-        tap.onBuffer = { buffer in
+        tap.onBuffer = { [diarizationEngine] buffer in
+            diarizationEngine?.append(
+                audioBuffer: buffer,
+                sourceSampleRate: buffer.format.sampleRate
+            )
             _ = continuation.yield(AnalyzerInput(buffer: buffer))
         }
         // Own the pending tap before `start()` suspends. `stop()` can then serialize
@@ -762,12 +781,22 @@ final class ConversationEngine: ObservableObject {
             return current.sourceText == correctedText ? current.translatedText : ""
         }()
 
+        // Hypothesis times are already on the diarizer's axis: both clocks start
+        // at the first tap buffer.
+        let speakerIndex = hypotheses[side].flatMap { hypothesis in
+            diarizationEngine?.dominantSpeakerIndex(
+                startSeconds: hypothesis.startSeconds,
+                endSeconds: hypothesis.endSeconds
+            )
+        } ?? nil
+
         let turn = ConversationTurn(
             side: side,
             sourceText: correctedText,
             translatedText: carriedTranslation,
             sourceLanguageID: sourceLanguageID,
-            targetLanguageID: targetLanguageID
+            targetLanguageID: targetLanguageID,
+            speakerIndex: speakerIndex
         )
 
         turns.append(turn)

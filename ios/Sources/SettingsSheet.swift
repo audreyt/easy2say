@@ -163,6 +163,20 @@ struct SettingsSheet: View {
                         .foregroundStyle(IOSTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(isOn: $model.speakerDiarizationEnabled) {
+                        Text(model.localized(.speakerLabels))
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.82))
+                    }
+                    .tint(accent)
+
+                    Text(model.localized(.speakerLabelsHint))
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -408,6 +422,7 @@ private struct AcknowledgmentsSheet: View {
         "THIRD_PARTY_NOTICES.txt",
         "Breeze-ASR-26.txt",
         "WhisperKit.txt",
+        "FluidAudio.txt",
         "Silero-VAD.txt",
         "OpenCC.txt",
     ]

@@ -246,6 +246,7 @@ struct HomeView: View {
         Task { @MainActor in
             guard await ensureMicrophoneAccess() else { return }
             conversation.interfaceLanguageID = model.resolvedInterfaceLanguageID
+            conversation.speakerDiarizationEnabled = model.speakerDiarizationEnabled
             conversation.configure(
                 primaryLanguageID: model.conversationPrimaryLanguageID,
                 secondaryLanguageID: model.conversationSecondaryLanguageID

@@ -29,6 +29,14 @@ Taigi decoding uses [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) 
 
 - License: [MIT](LICENSES/WhisperKit.txt)
 
+## FluidAudio / Sortformer diarization
+
+Live speaker labels use [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.15.5 by Fluid Inference, which wraps NVIDIA's streaming Sortformer v2.1 diarizer.
+
+- FluidAudio license: [Apache-2.0](LICENSES/FluidAudio.txt)
+- Bundled model: `ios/Resources/Diarization/Sortformer_v2.1.mlmodelc`, the fp16 combined-pipeline Core ML build from [`FluidInference/diar-streaming-sortformer-coreml`](https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml) (`v3/fp16`, CC-BY-4.0), fetched by [`scripts/fetch-diarization-model.sh`](scripts/fetch-diarization-model.sh). Downloaded weights are excluded from this repository.
+- Upstream model: [`nvidia/diar_streaming_sortformer_4spk-v2.1`](https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1), governed by the [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/).
+
 ## OpenCC Taiwan phrases
 
 [`Sources/V2SApp/Resources/TWPhrases.txt`](Sources/V2SApp/Resources/TWPhrases.txt) is derived from OpenCC's Taiwan phrase dictionary at commit [`7e7f746d5c870a122339e43696a7974c91e567bf`](https://github.com/BYVoid/OpenCC/blob/7e7f746d5c870a122339e43696a7974c91e567bf/data/dictionary/TWPhrases.txt).

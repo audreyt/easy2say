@@ -227,7 +227,8 @@ struct CaptionFlowContentView: View {
             ),
             reservesEmptyLines: true,
             maximumVisibleLines: Self.liveCaptionLineLimit,
-            risesNewLines: animatesLiveCaptionLineEntrance
+            risesNewLines: animatesLiveCaptionLineEntrance,
+            speakerIndex: caption.speakerIndex
         )
         .padding(.bottom, Self.currentCaptionBottomInset)
 
@@ -298,7 +299,8 @@ struct CaptionFlowContentView: View {
             source: CaptionLaneContent(
                 text: entry.sourceText,
                 color: subtitleColor(opacity: sourceOpacity)
-            )
+            ),
+            speakerIndex: entry.speakerIndex
         )
         .background(historyEntryHeightReader(for: entry.id))
     }
@@ -424,53 +426,81 @@ struct CaptionFlowContentView: View {
         source: CaptionLaneContent,
         reservesEmptyLines: Bool = false,
         maximumVisibleLines: Int? = nil,
-        risesNewLines: Bool = false
+        risesNewLines: Bool = false,
+        speakerIndex: Int? = nil
     ) -> some View {
         let suppression = duplicateLaneSuppression(
             translated: translated.text,
             source: source.text
         )
         if usesColumnCaptions {
-            HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
-                inLayoutOrder(
-                    translated: {
-                        captionColumn {
-                            if suppression.translated == false,
-                               translated.text.isEmpty == false || reservesEmptyLines {
-                                translatedText(
-                                    translated,
-                                    maximumVisibleLines: maximumVisibleLines,
-                                    risesNewLines: risesNewLines
-                                )
+            VStack(alignment: usesLeadingCaptionAlignment ? .leading : .center, spacing: 4) {
+                speakerBadge(for: speakerIndex)
+                HStack(alignment: .top, spacing: Self.captionColumnSpacing) {
+                    inLayoutOrder(
+                        translated: {
+                            captionColumn {
+                                if suppression.translated == false,
+                                   translated.text.isEmpty == false || reservesEmptyLines {
+                                    translatedText(
+                                        translated,
+                                        maximumVisibleLines: maximumVisibleLines,
+                                        risesNewLines: risesNewLines
+                                    )
+                                }
                             }
-                        }
-                        .environment(\.layoutDirection, translatedCaptionLayoutDirection)
-                    },
-                    original: {
-                        captionColumn {
-                            if suppression.source == false,
-                               source.text.isEmpty == false || reservesEmptyLines {
-                                sourceText(
-                                    source,
-                                    maximumVisibleLines: maximumVisibleLines,
-                                    risesNewLines: risesNewLines
-                                )
+                            .environment(\.layoutDirection, translatedCaptionLayoutDirection)
+                        },
+                        original: {
+                            captionColumn {
+                                if suppression.source == false,
+                                   source.text.isEmpty == false || reservesEmptyLines {
+                                    sourceText(
+                                        source,
+                                        maximumVisibleLines: maximumVisibleLines,
+                                        risesNewLines: risesNewLines
+                                    )
+                                }
                             }
+                            .environment(\.layoutDirection, originalCaptionLayoutDirection)
                         }
-                        .environment(\.layoutDirection, originalCaptionLayoutDirection)
-                    }
-                )
+                    )
+                }
             }
             .environment(\.layoutDirection, .leftToRight)
         } else {
-            stackedCaptionPair(
-                translated: translated,
-                source: source,
-                reservesEmptyLines: reservesEmptyLines,
-                maximumVisibleLines: maximumVisibleLines,
-                risesNewLines: risesNewLines
-            )
+            VStack(alignment: usesLeadingCaptionAlignment ? .leading : .center, spacing: 4) {
+                speakerBadge(for: speakerIndex)
+                stackedCaptionPair(
+                    translated: translated,
+                    source: source,
+                    reservesEmptyLines: reservesEmptyLines,
+                    maximumVisibleLines: maximumVisibleLines,
+                    risesNewLines: risesNewLines
+                )
+            }
         }
+    }
+
+    @ViewBuilder
+    private func speakerBadge(for speakerIndex: Int?) -> some View {
+        if let speakerIndex {
+            Text(model.speakerLabel(for: speakerIndex))
+                .font(.system(size: max(displayedSourceFontSize * 0.72, 9), weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(speakerBadgeColor(for: speakerIndex))
+                )
+        }
+    }
+
+    /// Deterministic hue per speaker so A/B/C read as distinct people.
+    private func speakerBadgeColor(for index: Int) -> Color {
+        let hues: [Double] = [0.58, 0.08, 0.38, 0.78, 0.18, 0.68, 0.48, 0.88]
+        return Color(hue: hues[index % hues.count], saturation: 0.55, brightness: 0.42)
     }
 
     @ViewBuilder

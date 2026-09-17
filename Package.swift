@@ -13,6 +13,10 @@ let package = Package(
             url: "https://github.com/argmaxinc/argmax-oss-swift",
             exact: "1.1.0"
         ),
+        .package(
+            url: "https://github.com/FluidInference/FluidAudio.git",
+            exact: "0.15.5"
+        ),
     ],
     targets: [
         .executableTarget(
@@ -20,11 +24,13 @@ let package = Package(
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             path: "Sources/V2SApp",
+            exclude: ["Resources/SileroVAD.mlpackage"],
             resources: [
                 .copy("Resources/AppIcon/AppIcon-512.png"),
-                .copy("Resources/SileroVAD.mlpackage"),
+                .copy("Resources/SileroVAD.mlmodelc"),
                 .copy("Resources/TWPhrases.txt"),
                 .copy("Resources/BreezeASR26Tokenizer.json"),
                 .copy("Resources/BreezeASR26TokenizerConfig.json"),

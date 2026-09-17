@@ -16,6 +16,9 @@ packages:
   argmax-oss-swift:
     url: https://github.com/argmaxinc/argmax-oss-swift
     exactVersion: 1.1.0
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    exactVersion: 0.15.5
 targets:
   v2s-ios:
     type: application
@@ -33,13 +36,20 @@ targets:
           - "UI/StatusBar/**"
           - "UI/Overlay/**"
           - "UI/Settings/**"
+          # The pre-compiled SileroVAD.mlmodelc ships as a resource instead;
+          # compiling the .mlpackage would duplicate that output.
+          - "Resources/SileroVAD.mlpackage"
       - path: Sources
       - path: Resources
         excludes:
           - "BreezeASR26/**"
           - "Acknowledgments/**"
+          - "Diarization/**"
         buildPhase: resources
       - path: Resources/BreezeASR26
+        type: folder
+        buildPhase: resources
+      - path: Resources/Diarization
         type: folder
         buildPhase: resources
       - path: Resources/Acknowledgments
@@ -48,6 +58,8 @@ targets:
     dependencies:
       - package: argmax-oss-swift
         product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -55,7 +67,7 @@ targets:
         PRODUCT_MODULE_NAME: v2s_ios
         PRODUCT_NAME: Easy2Say
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "57"
+        CURRENT_PROJECT_VERSION: "58"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_MACCATALYST: NO

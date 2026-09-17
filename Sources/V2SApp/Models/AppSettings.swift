@@ -11,6 +11,9 @@ struct AppSettings: Codable {
     var conversationSecondaryLanguageID: String
     var conversationFaceToFace: Bool
     var conversationModeActive: Bool
+    /// Show "Speaker A/B/…" badges on committed captions and turns. Requires the
+    /// bundled Sortformer model; silently off when it isn't shipped.
+    var speakerDiarizationEnabled: Bool
     var interfaceLanguageID: String?
     var overlayStyle: OverlayStyle
     var subtitleMode: SubtitleMode
@@ -30,6 +33,7 @@ struct AppSettings: Codable {
         conversationSecondaryLanguageID: "en",
         conversationFaceToFace: true,
         conversationModeActive: false,
+        speakerDiarizationEnabled: true,
         interfaceLanguageID: nil,
         overlayStyle: .default,
         subtitleMode: .balanced,
@@ -62,6 +66,8 @@ struct AppSettings: Codable {
             ?? AppSettings.default.conversationFaceToFace
         conversationModeActive = (try? c.decodeIfPresent(Bool.self, forKey: .conversationModeActive))
             ?? AppSettings.default.conversationModeActive
+        speakerDiarizationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .speakerDiarizationEnabled))
+            ?? AppSettings.default.speakerDiarizationEnabled
         interfaceLanguageID = try? c.decodeIfPresent(String.self, forKey: .interfaceLanguageID)
         overlayStyle = (try? c.decodeIfPresent(OverlayStyle.self, forKey: .overlayStyle))
             ?? AppSettings.default.overlayStyle
@@ -92,6 +98,7 @@ struct AppSettings: Codable {
         conversationSecondaryLanguageID: String = "en",
         conversationFaceToFace: Bool = true,
         conversationModeActive: Bool = false,
+        speakerDiarizationEnabled: Bool = true,
         interfaceLanguageID: String?,
         overlayStyle: OverlayStyle,
         subtitleMode: SubtitleMode,
@@ -110,6 +117,7 @@ struct AppSettings: Codable {
         self.conversationSecondaryLanguageID = conversationSecondaryLanguageID
         self.conversationFaceToFace = conversationFaceToFace
         self.conversationModeActive = conversationModeActive
+        self.speakerDiarizationEnabled = speakerDiarizationEnabled
         self.interfaceLanguageID = interfaceLanguageID
         self.overlayStyle     = overlayStyle
         self.subtitleMode     = subtitleMode

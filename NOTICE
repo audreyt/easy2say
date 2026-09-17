@@ -16,6 +16,11 @@ https://huggingface.co/weiren119/Breeze-ASR-26-coreml-4bit-palette
 The model card declares the Apache License 2.0. Downloaded weights are excluded
 from this repository.
 
+Sortformer v2.1 diarization Core ML assets are fetched separately from:
+https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml
+The converted model is CC-BY-4.0; the upstream NVIDIA model is governed by the
+NVIDIA Open Model License. Downloaded weights are excluded from this repository.
+
 The optional Tibetan ASR backend uses a private Monlam checkpoint solely for
 Monlam-authorized internal evaluation. Neither the private source checkpoint nor
 its converted Core ML weights are distributed by this repository or its public

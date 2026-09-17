@@ -332,13 +332,20 @@ private struct ConversationHalf: View {
                 .frame(width: 2)
                 .accessibilityHidden(true)
 
-            Text(engine.text(of: turn, readBy: side))
-                .font(.system(size: baseHistorySize * scale, weight: .regular, design: .rounded))
-                .foregroundStyle(IOSTheme.tertiaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                if let speakerIndex = turn.speakerIndex {
+                    Text(model.speakerLabel(for: speakerIndex))
+                        .font(.system(size: baseHistorySize * scale * 0.78, weight: .semibold, design: .rounded))
+                        .foregroundStyle(IOSTheme.brand.opacity(0.8))
+                }
+                Text(engine.text(of: turn, readBy: side))
+                    .font(.system(size: baseHistorySize * scale, weight: .regular, design: .rounded))
+                    .foregroundStyle(IOSTheme.tertiaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

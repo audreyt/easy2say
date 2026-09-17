@@ -56,6 +56,9 @@
 		A000000000000000000000B9 /* TibetanASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000BA /* TibetanASREngine.swift */; };
 		A000000000000000000000C0 /* FoundationModelsTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C1 /* FoundationModelsTranslationService.swift */; };
 		A000000000000000000000F0 /* OpenAICompatibleTranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000F1 /* OpenAICompatibleTranslationService.swift */; };
+		A000000000000000000000E8 /* LiveDiarizationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E9 /* LiveDiarizationEngine.swift */; };
+		A000000000000000000000EA /* Diarization in Resources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000EB /* Diarization */; };
+		A000000000000000000000EC /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000ED /* FluidAudio */; };
 		A000000000000000000000C4 /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C5 /* ConversationEngine.swift */; };
 		A000000000000000000000C6 /* ConversationFloorArbiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C7 /* ConversationFloorArbiter.swift */; };
 		A000000000000000000000C8 /* ConversationLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000C9 /* ConversationLane.swift */; };
@@ -132,6 +135,8 @@
 		A000000000000000000000E3 /* CaptionLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLanguagePolicy.swift; sourceTree = "<group>"; };
 		A000000000000000000000E5 /* DualLanePairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLanePairing.swift; sourceTree = "<group>"; };
 		A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLaneCaptionRuntime.swift; sourceTree = "<group>"; };
+		A000000000000000000000E9 /* LiveDiarizationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDiarizationEngine.swift; sourceTree = "<group>"; };
+		A000000000000000000000EB /* Diarization */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Diarization; path = ../../../ios/Resources/Diarization; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +146,7 @@
 			files = (
 				A00000000000000000000089 /* Sparkle in Frameworks */,
 				A000000000000000000000A0 /* WhisperKit in Frameworks */,
+				A000000000000000000000EC /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -213,6 +219,7 @@
 				A0000000000000000000009C /* BreezeASR26 */,
 				A000000000000000000000A1 /* BreezeASR26Tokenizer.json */,
 				A000000000000000000000A3 /* BreezeASR26TokenizerConfig.json */,
+				A000000000000000000000EB /* Diarization */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -262,6 +269,7 @@
 				A000000000000000000000C9 /* ConversationLane.swift */,
 				A000000000000000000000CB /* ConversationAudioTap.swift */,
 				A000000000000000000000BA /* TibetanASREngine.swift */,
+				A000000000000000000000E9 /* LiveDiarizationEngine.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -345,6 +353,7 @@
 			packageProductDependencies = (
 				A00000000000000000000088 /* Sparkle */,
 				A0000000000000000000009F /* WhisperKit */,
+				A000000000000000000000ED /* FluidAudio */,
 			);
 			productName = Easy2Say;
 			productReference = A0000000000000000000000A /* Easy2Say.app */;
@@ -377,6 +386,7 @@
 			packageReferences = (
 				A00000000000000000000087 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				A000000000000000000000EE /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			productRefGroup = A00000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -404,6 +414,14 @@
 				version = 1.1.0;
 			};
 		};
+		A000000000000000000000EE /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.15.5;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -416,6 +434,7 @@
 				A0000000000000000000009D /* BreezeASR26 in Resources */,
 				A000000000000000000000A2 /* BreezeASR26Tokenizer.json in Resources */,
 				A000000000000000000000A4 /* BreezeASR26TokenizerConfig.json in Resources */,
+				A000000000000000000000EA /* Diarization in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -480,6 +499,7 @@
 				A000000000000000000000E2 /* CaptionLanguagePolicy.swift in Sources */,
 				A000000000000000000000E4 /* DualLanePairing.swift in Sources */,
 				A000000000000000000000E6 /* DualLaneCaptionRuntime.swift in Sources */,
+				A000000000000000000000E8 /* LiveDiarizationEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -609,6 +629,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A0000000000000000000009E /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
+		};
+		A000000000000000000000ED /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A000000000000000000000EE /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -70,6 +70,10 @@ struct DualLaneStep: Equatable, Sendable {
     var draftText: String?
     var commitSide: ConversationSide?
     var commitText: String?
+    /// Analyzer-relative audio span of the committed utterance, copied from the
+    /// winning lane's hypothesis so the session can attribute a speaker.
+    var commitStartSeconds: Double?
+    var commitEndSeconds: Double?
     var evidence: DualLaneEvidence?
     var isPendingFinalGrace: Bool = false
 }
@@ -150,6 +154,8 @@ struct DualLanePairing: Equatable, Sendable {
             var step = DualLaneStep(floor: floor, floorMoved: didMoveFloor)
             step.commitSide = floor
             step.commitText = commitText
+            step.commitStartSeconds = hypotheses[floor]?.startSeconds
+            step.commitEndSeconds = hypotheses[floor]?.endSeconds
             step.evidence = DualLaneEvidence(
                 arbiterFloor: floor,
                 selectedSide: floor,
@@ -214,6 +220,8 @@ struct DualLanePairing: Equatable, Sendable {
         var step = DualLaneStep(floor: selectedSide, floorMoved: true)
         step.commitSide = selectedSide
         step.commitText = effectiveCommitText
+        step.commitStartSeconds = hypotheses[selectedSide]?.startSeconds
+        step.commitEndSeconds = hypotheses[selectedSide]?.endSeconds
         step.evidence = DualLaneEvidence(
             arbiterFloor: candidateSide,
             selectedSide: selectedSide,
@@ -265,6 +273,8 @@ struct DualLanePairing: Equatable, Sendable {
             step.floor = selectedSide
             step.commitSide = selectedSide
             step.commitText = effectiveCommitText
+            step.commitStartSeconds = hypotheses[selectedSide]?.startSeconds
+            step.commitEndSeconds = hypotheses[selectedSide]?.endSeconds
             step.evidence = DualLaneEvidence(
                 arbiterFloor: floor,
                 selectedSide: selectedSide,

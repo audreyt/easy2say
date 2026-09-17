@@ -207,6 +207,9 @@ enum AppTextKey: String, CaseIterable {
     case conversationEmptyHint
     case conversationFaceToFace
     case conversationFaceToFaceHint
+    case speakerLabels
+    case speakerLabelsHint
+    case speakerNameFormat
     case conversationYourLanguage
     case conversationTheirLanguage
     case conversationClear
@@ -564,6 +567,9 @@ enum AppLocalization {
             "conversationEmptyHint": "Just talk. Each side reads the conversation in their own language.",
             "conversationFaceToFace": "Face to face",
             "conversationFaceToFaceHint": "Turns the other person's half upside down so it reads across a table.",
+            "speakerLabels": "Speaker labels",
+            "speakerLabelsHint": "Marks who is speaking with Speaker A, B, … on captions and in the transcript.",
+            "speakerNameFormat": "Speaker %@",
             "conversationYourLanguage": "Your language",
             "conversationTheirLanguage": "Their language",
             "conversationClear": "Clear conversation",
@@ -784,6 +790,9 @@ enum AppLocalization {
             "swapInputAndSubtitleLanguages": "交换输入与字幕语言",
             "conversationFaceToFace": "面对面",
             "conversationFaceToFaceHint": "将对方那一半屏幕上下翻转，方便隔桌阅读。",
+            "speakerLabels": "说话人标签",
+            "speakerLabelsHint": "在字幕与转写中以「说话人 A、B…」标记当前说话者。",
+            "speakerNameFormat": "说话人 %@",
             "conversationYourLanguage": "你的语言",
             "conversationTheirLanguage": "对方的语言",
             "conversationClear": "清空对话",
@@ -1004,6 +1013,9 @@ enum AppLocalization {
             "swapInputAndSubtitleLanguages": "交換輸入與字幕語言",
             "conversationFaceToFace": "面對面",
             "conversationFaceToFaceHint": "將對方那一半螢幕上下翻轉，方便隔桌閱讀。",
+            "speakerLabels": "說話人標籤",
+            "speakerLabelsHint": "在字幕與逐字稿中以「說話人 A、B…」標記目前的說話者。",
+            "speakerNameFormat": "說話人 %@",
             "conversationYourLanguage": "你的語言",
             "conversationTheirLanguage": "對方的語言",
             "conversationClear": "清除對話",

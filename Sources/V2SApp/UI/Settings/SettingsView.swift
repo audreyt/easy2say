@@ -348,6 +348,16 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Divider()
+                    settingsRow(model.localized(.speakerLabels)) {
+                        Toggle("", isOn: $model.speakerDiarizationEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    Text(model.localized(.speakerLabelsHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 settingsCard {
                     sectionHeader(model.localized(.subtitleColor), icon: "paintpalette")

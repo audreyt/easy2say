@@ -196,6 +196,8 @@ final class AppModel: ObservableObject {
     @Published var conversationSecondaryLanguageID: String { didSet { persistSettings() } }
     @Published var conversationFaceToFace: Bool { didSet { persistSettings() } }
     @Published var isConversationModeActive: Bool { didSet { persistSettings() } }
+    /// Show "Speaker A/B/…" badges on committed captions and turns.
+    @Published var speakerDiarizationEnabled: Bool { didSet { persistSettings() } }
 
     @Published var interfaceLanguageID: String {
         didSet {
@@ -265,6 +267,7 @@ final class AppModel: ObservableObject {
         self.conversationSecondaryLanguageID = settings.conversationSecondaryLanguageID
         self.conversationFaceToFace = settings.conversationFaceToFace
         self.isConversationModeActive = settings.conversationModeActive
+        self.speakerDiarizationEnabled = settings.speakerDiarizationEnabled
         self.usesSystemInterfaceLanguage = settings.interfaceLanguageID == nil
         self.interfaceLanguageID = LanguageCatalog.preferredInterfaceLanguageID(
             storedIdentifier: settings.interfaceLanguageID
@@ -902,6 +905,7 @@ final class AppModel: ObservableObject {
                     sourceLanguageID: translationSourceLanguageID,
                     targetLanguageID: targetLanguageID,
                     speechCorrections: speechCorrections,
+                    speakerDiarizationEnabled: speakerDiarizationEnabled,
                     transcriptHandler: { [weak self] sentence in
                         let heardLanguageID = sentence.heardLanguageID.isEmpty
                             ? translationSourceLanguageID
@@ -1254,6 +1258,7 @@ final class AppModel: ObservableObject {
             conversationSecondaryLanguageID: conversationSecondaryLanguageID,
             conversationFaceToFace: conversationFaceToFace,
             conversationModeActive: isConversationModeActive,
+            speakerDiarizationEnabled: speakerDiarizationEnabled,
             interfaceLanguageID: usesSystemInterfaceLanguage ? nil : interfaceLanguageID,
             overlayStyle: overlayStyle,
             subtitleMode: subtitleMode,
@@ -2267,6 +2272,7 @@ final class AppModel: ObservableObject {
         }
         overlayState?.draftPromotionID = draftPromotionID
         overlayState?.draftAudioStartMs = draft?.audioHypothesisStartMs
+        overlayState?.draftSpeakerIndex = draft?.speakerIndex
         overlayState?.sourceName = source.name
         dismissListeningPlaceholderIfNeeded()
 
@@ -2353,6 +2359,7 @@ final class AppModel: ObservableObject {
         overlayState?.draftSourceStablePrefixLength = 0
         overlayState?.draftPromotionID = nil
         overlayState?.draftAudioStartMs = nil
+        overlayState?.draftSpeakerIndex = nil
         overlayState?.clearDraftTranslation()
         activeDraftSourceLanguageID = nil
         activeDraftTargetLanguageID = nil
@@ -2462,7 +2469,8 @@ final class AppModel: ObservableObject {
             appendOverlayHistoryEntry(
                 captionID: displayedCaption?.id,
                 translatedText: currentCaption.translatedText,
-                sourceText: currentCaption.sourceText
+                sourceText: currentCaption.sourceText,
+                speakerIndex: overlayState?.committedSpeakerIndex
             )
         }
         cancelCommittedCaptionArchive()
@@ -2487,7 +2495,8 @@ final class AppModel: ObservableObject {
         appendOverlayHistoryEntry(
             captionID: displayedCaption?.id,
             translatedText: currentCaption.translatedText,
-            sourceText: currentCaption.sourceText
+            sourceText: currentCaption.sourceText,
+            speakerIndex: overlayState?.committedSpeakerIndex
         )
     }
 
@@ -2499,7 +2508,8 @@ final class AppModel: ObservableObject {
         bumpEpoch: Bool = false,
         lateTranslation: Bool = false,
         audioStartMs: Int? = nil,
-        assignCommittedAudioStart: Bool = false
+        assignCommittedAudioStart: Bool = false,
+        speakerIndex: Int? = nil
     ) {
         if overlayState == nil {
             overlayState = OverlayPreviewState(
@@ -2523,6 +2533,7 @@ final class AppModel: ObservableObject {
         }
         if assignCommittedAudioStart {
             overlayState?.committedAudioStartMs = audioStartMs
+            overlayState?.committedSpeakerIndex = speakerIndex
         }
         displayedCaptionLastVisualUpdateAt = Date()
         displayedCaptionLastVisualUpdateWasLateTranslation = lateTranslation
@@ -2699,7 +2710,8 @@ final class AppModel: ObservableObject {
                 targetLanguageID: targetLanguageID,
                 usesInverseGlossary: usesInverseGlossary,
                 promotedDraftTranslation: promotedDraftTranslation,
-                audioStartMs: sentence.audioStartMs
+                audioStartMs: sentence.audioStartMs,
+                speakerIndex: sentence.speakerIndex
             )
             captionIDByPromotionID[promotionID] = caption.id
             if usesInverseGlossary {
@@ -3059,9 +3071,19 @@ final class AppModel: ObservableObject {
 
     func transcriptText(isTranslation: Bool) -> String {
         transcriptEntries
-            .map { isTranslation ? $0.translatedText : $0.sourceText }
+            .map { entry in
+                let text = isTranslation ? entry.translatedText : entry.sourceText
+                guard let speakerIndex = entry.speakerIndex else { return text }
+                return "\(speakerLabel(for: speakerIndex)): \(text)"
+            }
             .filter { $0.isEmpty == false }
             .joined(separator: "\n")
+    }
+
+    /// "Speaker A" / "Speaker B" … in the interface language.
+    func speakerLabel(for index: Int) -> String {
+        let letter = String(UnicodeScalar(UInt8(ascii: "A") + UInt8(min(index, 25))))
+        return localized(.speakerNameFormat, letter)
     }
 
     func clearTranscript() {
@@ -3195,12 +3217,14 @@ final class AppModel: ObservableObject {
                 captionID: caption.id,
                 bumpEpoch: true,
                 audioStartMs: caption.audioStartMs,
-                assignCommittedAudioStart: true
+                assignCommittedAudioStart: true,
+                speakerIndex: caption.speakerIndex
             )
             upsertTranscriptEntry(
                 id: caption.id,
                 sourceText: caption.sourceText,
-                translatedText: initialTranslation ?? (translationExpected ? "" : caption.sourceText)
+                translatedText: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
+                speakerIndex: caption.speakerIndex
             )
             overlayState?.sourceName = caption.sourceName
             clearDraftOverlay()
@@ -3972,12 +3996,14 @@ final class AppModel: ObservableObject {
     private func upsertTranscriptEntry(
         id: UUID,
         sourceText: String,
-        translatedText: String
+        translatedText: String,
+        speakerIndex: Int? = nil
     ) {
         let entry = TranscriptEntry(
             id: id,
             sourceText: sourceText,
-            translatedText: translatedText
+            translatedText: translatedText,
+            speakerIndex: speakerIndex
         )
 
         if let existingIndex = transcriptEntries.firstIndex(where: { $0.id == id }) {
@@ -4084,7 +4110,8 @@ final class AppModel: ObservableObject {
     private func appendOverlayHistoryEntry(
         captionID: UUID? = nil,
         translatedText: String,
-        sourceText: String
+        sourceText: String,
+        speakerIndex: Int? = nil
     ) {
         guard shouldStoreOverlayHistory(translatedText: translatedText, sourceText: sourceText) else {
             return
@@ -4104,7 +4131,8 @@ final class AppModel: ObservableObject {
             OverlayHistoryEntry(
                 id: captionID ?? UUID(),
                 translatedText: translatedText,
-                sourceText: sourceText
+                sourceText: sourceText,
+                speakerIndex: speakerIndex
             )
         )
 
@@ -4407,6 +4435,8 @@ private struct QueuedCaption: Identifiable, Equatable {
     let promotedDraftTranslation: String?
     let revision: UInt64
     let audioStartMs: Int?
+    /// Display speaker index (0 = first speaker heard), or nil.
+    let speakerIndex: Int?
 
     init(
         id: UUID,
@@ -4418,7 +4448,8 @@ private struct QueuedCaption: Identifiable, Equatable {
         usesInverseGlossary: Bool,
         promotedDraftTranslation: String?,
         revision: UInt64 = 0,
-        audioStartMs: Int? = nil
+        audioStartMs: Int? = nil,
+        speakerIndex: Int? = nil
     ) {
         self.id = id
         self.promotionID = promotionID
@@ -4430,6 +4461,7 @@ private struct QueuedCaption: Identifiable, Equatable {
         self.promotedDraftTranslation = promotedDraftTranslation
         self.revision = revision
         self.audioStartMs = audioStartMs
+        self.speakerIndex = speakerIndex
     }
 }
 
@@ -4437,6 +4469,8 @@ struct TranscriptEntry: Identifiable, Equatable {
     let id: UUID
     var sourceText: String
     var translatedText: String
+    /// Display speaker index (0 = first speaker heard), or nil.
+    var speakerIndex: Int? = nil
 }
 
 private struct SpeechLanguageCatalog {
