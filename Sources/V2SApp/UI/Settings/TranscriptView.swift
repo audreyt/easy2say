@@ -106,27 +106,47 @@ struct TranscriptView: View {
 
     @ViewBuilder
     private func transcriptTab(tab: TranscriptTab) -> some View {
-        let rawText = fullText(for: tab)
-        let displayText: String = {
-            if isSummarizeEnabled, let summary = summarizedText[tab] {
-                return summary
-            }
-            return rawText
-        }()
+        let summary = isSummarizeEnabled ? summarizedText[tab] : nil
+        let entries = model.transcriptEntries.filter { entry in
+            (tab == .translation ? entry.translatedText : entry.sourceText).isEmpty == false
+        }
 
         ScrollView {
-            if displayText.isEmpty {
+            if let summary {
+                Text(summary)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            } else if entries.isEmpty {
                 Text("–")
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(20)
             } else {
-                Text(displayText)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(entries) { entry in
+                        transcriptRow(entry: entry, tab: tab)
+                    }
+                }
+                .padding(20)
             }
+        }
+    }
+
+    /// One committed caption with its speaker chip — mirrors the iOS
+    /// TranscriptSheet row so the log reads as turns, not a flat blob.
+    private func transcriptRow(entry: TranscriptEntry, tab: TranscriptTab) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if model.showsSpeakerBadges, let speakerIndex = entry.speakerIndex {
+                Text(model.speakerLabel(for: speakerIndex))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor.opacity(0.85))
+            }
+            Text(tab == .translation ? entry.translatedText : entry.sourceText)
+                .font(.body)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
