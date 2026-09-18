@@ -382,6 +382,39 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertEqual(revised.phase, .tentative)
     }
 
+    func testShowsDraftCaptionsOffHidesDraftLayer() throws {
+        var state = OverlayPreviewState(
+            translatedText: "Committed",
+            sourceText: "Committed",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        state.draftSourceText = "In-progress hypothesis"
+        state.draftPromotionID = UUID()
+        state.showsDraftCaptions = false
+
+        let presentation = state.liveCaptionPresentation
+
+        XCTAssertNil(presentation.precedingCommittedCaption)
+        let current = try XCTUnwrap(presentation.currentCaption)
+        XCTAssertEqual(current.phase, .committed)
+        XCTAssertEqual(current.sourceText, "Committed")
+    }
+
+    func testShowsDraftCaptionsOffWithoutCommitShowsNothing() {
+        var state = OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: "Test"
+        )
+        state.draftSourceText = "In-progress hypothesis"
+        state.draftPromotionID = UUID()
+        state.showsDraftCaptions = false
+
+        XCTAssertNil(state.liveCaptionPresentation.currentCaption)
+        XCTAssertNil(state.liveCaptionPresentation.precedingCommittedCaption)
+    }
+
     func testDraftTranslationPromotesOnlyThePrefixThatSurvivesRevision() throws {
         let promotionID = UUID()
         var state = OverlayPreviewState(

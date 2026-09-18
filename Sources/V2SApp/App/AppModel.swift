@@ -198,6 +198,14 @@ final class AppModel: ObservableObject {
     @Published var isConversationModeActive: Bool { didSet { persistSettings() } }
     /// Show "Speaker A/B/…" badges on committed captions and turns.
     @Published var speakerDiarizationEnabled: Bool { didSet { persistSettings() } }
+    /// Show the gray in-progress hypothesis while speech is being recognized.
+    /// Off renders committed captions only — no revisable tail.
+    @Published var liveDraftCaptions: Bool {
+        didSet {
+            overlayState?.showsDraftCaptions = liveDraftCaptions
+            persistSettings()
+        }
+    }
 
     @Published var interfaceLanguageID: String {
         didSet {
@@ -268,6 +276,7 @@ final class AppModel: ObservableObject {
         self.conversationFaceToFace = settings.conversationFaceToFace
         self.isConversationModeActive = settings.conversationModeActive
         self.speakerDiarizationEnabled = settings.speakerDiarizationEnabled
+        self.liveDraftCaptions = settings.liveDraftCaptions
         self.usesSystemInterfaceLanguage = settings.interfaceLanguageID == nil
         self.interfaceLanguageID = LanguageCatalog.preferredInterfaceLanguageID(
             storedIdentifier: settings.interfaceLanguageID
@@ -1259,6 +1268,7 @@ final class AppModel: ObservableObject {
             conversationFaceToFace: conversationFaceToFace,
             conversationModeActive: isConversationModeActive,
             speakerDiarizationEnabled: speakerDiarizationEnabled,
+            liveDraftCaptions: liveDraftCaptions,
             interfaceLanguageID: usesSystemInterfaceLanguage ? nil : interfaceLanguageID,
             overlayStyle: overlayStyle,
             subtitleMode: subtitleMode,
@@ -2521,6 +2531,7 @@ final class AppModel: ObservableObject {
             overlayState?.translatedText = translatedText
             overlayState?.sourceText = sourceText
         }
+        overlayState?.showsDraftCaptions = liveDraftCaptions
 
         if bumpEpoch {
             overlayState?.captionEpoch = (overlayState?.captionEpoch ?? 0) + 1
@@ -2617,11 +2628,13 @@ final class AppModel: ObservableObject {
             translatedText = sampleText(for: targetLanguageID)
         }
 
-        return OverlayPreviewState(
+        var state = OverlayPreviewState(
             translatedText: translatedText,
             sourceText: sourceText,
             sourceName: source.name
         )
+        state.showsDraftCaptions = liveDraftCaptions
+        return state
     }
 
     // MARK: - Caption queue

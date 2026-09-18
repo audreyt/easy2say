@@ -31,9 +31,13 @@ struct CaptionFlowContentView: View {
                 GeometryReader { proxy in
                     let captionAreaHeight = proxy.size.height - captionColumnHeaderHeight
                     let availableHistoryHeight = availableHistoryHeight(for: captionAreaHeight, state: state)
-                    let visibleLiveHistoryEntryIDs = liveVisibleHistoryEntryIDs.isEmpty
-                        ? initialVisibleHistoryEntryIDs(for: state)
-                        : liveVisibleHistoryEntryIDs
+                    // Union the synchronous live-caption claim with the
+                    // preference-reported set. The preference arrives one layout
+                    // pass late; when a caption is archived and replaced in the
+                    // same state update, relying on it alone lets the archived
+                    // row render beside its identical live successor for a frame.
+                    let visibleLiveHistoryEntryIDs = liveVisibleHistoryEntryIDs
+                        .union(initialVisibleHistoryEntryIDs(for: state))
                     let visibleHistoryEntries = showsHistory
                         ? historyVisibleEntries(
                             from: state.history,

@@ -209,6 +209,8 @@ enum AppTextKey: String, CaseIterable {
     case conversationFaceToFaceHint
     case speakerLabels
     case speakerLabelsHint
+    case liveDraftCaptions
+    case liveDraftCaptionsHint
     case speakerNameFormat
     case conversationYourLanguage
     case conversationTheirLanguage
@@ -569,6 +571,8 @@ enum AppLocalization {
             "conversationFaceToFaceHint": "Turns the other person's half upside down so it reads across a table.",
             "speakerLabels": "Speaker labels",
             "speakerLabelsHint": "Marks who is speaking with Speaker A, B, … on captions and in the transcript.",
+            "liveDraftCaptions": "Live draft captions",
+            "liveDraftCaptionsHint": "Shows the in-progress hypothesis in gray while speech is recognized. Off shows committed captions only — no flickering text.",
             "speakerNameFormat": "Speaker %@",
             "conversationYourLanguage": "Your language",
             "conversationTheirLanguage": "Their language",
@@ -788,6 +792,8 @@ enum AppLocalization {
             "switchToCaptionsMode": "切换到字幕模式",
             "switchToConversationMode": "切换到对话模式",
             "swapInputAndSubtitleLanguages": "交换输入与字幕语言",
+            "liveDraftCaptions": "实时草稿字幕",
+            "liveDraftCaptionsHint": "识别过程中以灰色显示进行中的识别结果。关闭后仅显示已确认的字幕——不再有闪烁的文字。",
             "conversationFaceToFace": "面对面",
             "conversationFaceToFaceHint": "将对方那一半屏幕上下翻转，方便隔桌阅读。",
             "speakerLabels": "说话人标签",
@@ -1011,6 +1017,8 @@ enum AppLocalization {
             "switchToCaptionsMode": "切換到字幕模式",
             "switchToConversationMode": "切換到對話模式",
             "swapInputAndSubtitleLanguages": "交換輸入與字幕語言",
+            "liveDraftCaptions": "即時草稿字幕",
+            "liveDraftCaptionsHint": "辨識過程中以灰色顯示進行中的辨識結果。關閉後僅顯示已確認的字幕——不再有閃爍的文字。",
             "conversationFaceToFace": "面對面",
             "conversationFaceToFaceHint": "將對方那一半螢幕上下翻轉，方便隔桌閱讀。",
             "speakerLabels": "說話人標籤",

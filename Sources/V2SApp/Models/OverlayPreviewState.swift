@@ -49,6 +49,10 @@ struct OverlayPreviewState: Equatable {
     var committedAudioStartMs: Int? = nil
     /// Display speaker index (0 = first speaker heard) for the committed caption.
     var committedSpeakerIndex: Int? = nil
+    /// When false, the draft layer is suppressed from the live presentation —
+    /// committed captions only. The draft pipeline still runs underneath so
+    /// promoted draft translations keep seeding committed captions.
+    var showsDraftCaptions: Bool = true
 
     // MARK: Derived helpers
 
@@ -573,7 +577,7 @@ extension OverlayPreviewState {
     var liveCaptionPresentation: OverlayLiveCaptionPresentation {
         let committedCaption = committedLiveCaption
 
-        guard hasActiveDraftLayer else {
+        guard hasActiveDraftLayer, showsDraftCaptions else {
             return OverlayLiveCaptionPresentation(
                 precedingCommittedCaption: nil,
                 currentCaption: committedCaption
@@ -651,6 +655,10 @@ extension OverlayPreviewState {
                     sourceStablePrefixLength: source.stablePrefixLength,
                     translatedAgedPrefixLength: 0,
                     sourceAgedPrefixLength: 0,
+                    // The merged line still represents the committed utterance;
+                    // carry its history claim so an archived copy of the same
+                    // text cannot render beside it as a duplicate row.
+                    representedHistoryEntryIDs: committedCaption.representedHistoryEntryIDs,
                     speakerIndex: draftSpeakerIndex ?? committedCaption.speakerIndex
                 )
             )

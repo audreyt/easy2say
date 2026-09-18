@@ -358,6 +358,16 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Divider()
+                    settingsRow(model.localized(.liveDraftCaptions)) {
+                        Toggle("", isOn: $model.liveDraftCaptions)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    Text(model.localized(.liveDraftCaptionsHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 settingsCard {
                     sectionHeader(model.localized(.subtitleColor), icon: "paintpalette")

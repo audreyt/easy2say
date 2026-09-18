@@ -14,6 +14,9 @@ struct AppSettings: Codable {
     /// Show "Speaker A/B/…" badges on committed captions and turns. Requires the
     /// bundled Sortformer model; silently off when it isn't shipped.
     var speakerDiarizationEnabled: Bool
+    /// Show the gray in-progress hypothesis while speech is being recognized.
+    /// Off renders committed captions only — no revisable tail.
+    var liveDraftCaptions: Bool
     var interfaceLanguageID: String?
     var overlayStyle: OverlayStyle
     var subtitleMode: SubtitleMode
@@ -34,6 +37,7 @@ struct AppSettings: Codable {
         conversationFaceToFace: true,
         conversationModeActive: false,
         speakerDiarizationEnabled: true,
+        liveDraftCaptions: true,
         interfaceLanguageID: nil,
         overlayStyle: .default,
         subtitleMode: .balanced,
@@ -68,6 +72,8 @@ struct AppSettings: Codable {
             ?? AppSettings.default.conversationModeActive
         speakerDiarizationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .speakerDiarizationEnabled))
             ?? AppSettings.default.speakerDiarizationEnabled
+        liveDraftCaptions = (try? c.decodeIfPresent(Bool.self, forKey: .liveDraftCaptions))
+            ?? AppSettings.default.liveDraftCaptions
         interfaceLanguageID = try? c.decodeIfPresent(String.self, forKey: .interfaceLanguageID)
         overlayStyle = (try? c.decodeIfPresent(OverlayStyle.self, forKey: .overlayStyle))
             ?? AppSettings.default.overlayStyle
@@ -99,6 +105,7 @@ struct AppSettings: Codable {
         conversationFaceToFace: Bool = true,
         conversationModeActive: Bool = false,
         speakerDiarizationEnabled: Bool = true,
+        liveDraftCaptions: Bool = true,
         interfaceLanguageID: String?,
         overlayStyle: OverlayStyle,
         subtitleMode: SubtitleMode,
@@ -118,6 +125,7 @@ struct AppSettings: Codable {
         self.conversationFaceToFace = conversationFaceToFace
         self.conversationModeActive = conversationModeActive
         self.speakerDiarizationEnabled = speakerDiarizationEnabled
+        self.liveDraftCaptions = liveDraftCaptions
         self.interfaceLanguageID = interfaceLanguageID
         self.overlayStyle     = overlayStyle
         self.subtitleMode     = subtitleMode
