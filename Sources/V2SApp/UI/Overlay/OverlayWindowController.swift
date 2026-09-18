@@ -617,7 +617,7 @@ final class OverlayWindowController {
         var overlayFrame: NSRect
 
         // When attached to a source app, lock width & horizontal position to the source window
-        if style.attachToSource, let sourceFrame = sourceAppWindowFrame() {
+        if isAttachToSourceEngaged, let sourceFrame = sourceAppWindowFrame() {
             let width = sourceFrame.width
             let height = resolvedPanelHeight(in: visibleFrame)
 
@@ -652,7 +652,7 @@ final class OverlayWindowController {
         overlayFrame = clampedOverlayFrame(
             overlayFrame,
             within: visibleFrame,
-            clampHorizontally: style.attachToSource == false,
+            clampHorizontally: isAttachToSourceEngaged == false,
             clampVertically: true
         )
 
@@ -789,7 +789,7 @@ final class OverlayWindowController {
     private func updateControlDrag(with translation: CGSize) {
         guard let dragStartTopLeft else { return }
 
-        if model.overlayStyle.attachToSource {
+        if isAttachToSourceEngaged {
             // Vertical movement only when attached to source
             userDefinedTopLeft = NSPoint(
                 x: dragStartTopLeft.x,
@@ -833,7 +833,7 @@ final class OverlayWindowController {
         )
         let newHeight = min(max(resizeDragStartHeight - translation.height, minimumHeight), maximumHeight)
 
-        if style.attachToSource {
+        if isAttachToSourceEngaged {
             // Height-only resize when attached to source; width is locked to source window
             userDefinedTopLeft = NSPoint(x: resizeDragStartTopLeft.x, y: resizeDragStartTopLeft.y)
             userDefinedHeight = newHeight
@@ -1043,9 +1043,18 @@ final class OverlayWindowController {
         positionPanels(animated: animated && !presentationChanged)
     }
 
+
+    /// Attach-to-source only has meaning while the selected source is an
+    /// application window. For mic/system sources it must stay inert —
+    /// otherwise the overlay can never be "above the source" and sinks
+    /// beneath whatever app is frontmost.
+    private var isAttachToSourceEngaged: Bool {
+        model.overlayStyle.attachToSource && model.selectedSource?.category == .application
+    }
+
     @discardableResult
     private func updateAttachToSourceLevels() -> Bool {
-        let useHighLevel = !model.overlayStyle.attachToSource || isSourceAppFrontmost()
+        let useHighLevel = !isAttachToSourceEngaged || isSourceAppFrontmost()
         let presentationChanged = lastAttachToSourceUsesHighLevel != useHighLevel
         let contentLevel: NSWindow.Level = useHighLevel ? .screenSaver : .normal
         let controlLevel: NSWindow.Level = useHighLevel
@@ -1070,7 +1079,7 @@ final class OverlayWindowController {
 
         lastAttachToSourceUsesHighLevel = useHighLevel
 
-        if model.overlayStyle.attachToSource && panelsShown {
+        if isAttachToSourceEngaged && panelsShown {
             startSourceWindowTracking()
         } else {
             stopSourceWindowTracking()

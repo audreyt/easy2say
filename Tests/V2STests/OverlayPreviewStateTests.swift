@@ -415,6 +415,29 @@ final class OverlayPreviewStateTests: XCTestCase {
         XCTAssertNil(state.liveCaptionPresentation.precedingCommittedCaption)
     }
 
+    func testCommittedAndDraftDifferingOnlyByPunctuationShowOneRow() throws {
+        var state = OverlayPreviewState(
+            translatedText: "Hello world.",
+            sourceText: "你好世界。",
+            sourceName: "Test"
+        )
+        state.committedPromotionID = UUID()
+        state.draftSourceText = "你好世界"
+        state.draftPromotionID = UUID()
+        state.setDraftTranslation(
+            "Hello world",
+            sourceText: "你好世界",
+            promotionID: state.draftPromotionID
+        )
+
+        let presentation = state.liveCaptionPresentation
+        let current = try XCTUnwrap(presentation.currentCaption)
+        XCTAssertFalse(
+            current.translatedText.contains("\n"),
+            "punctuation-only difference must not double the translation lane: \(current.translatedText)"
+        )
+    }
+
     func testDraftTranslationPromotesOnlyThePrefixThatSurvivesRevision() throws {
         let promotionID = UUID()
         var state = OverlayPreviewState(

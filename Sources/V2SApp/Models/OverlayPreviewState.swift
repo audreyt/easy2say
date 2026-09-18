@@ -432,9 +432,14 @@ struct OverlayLiveCaptionPresentation: Equatable {
         }
 
         if deduplicatesEqualText {
-            let normalizedLeading = leadingText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedTrailing = trailingText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if normalizedLeading == normalizedTrailing {
+            // Committed and draft lanes often differ only in trailing
+            // punctuation or case ("Hello world." vs "Hello world") — the
+            // committed sentence boundary lands before the draft clears.
+            // Compare on the same normalized form LiveCaptionReplay uses so
+            // those pairs collapse to one row instead of doubling briefly.
+            let normalizedLeading = LiveCaptionReplay.comparableText(leadingText)
+            let normalizedTrailing = LiveCaptionReplay.comparableText(trailingText)
+            if normalizedLeading.isEmpty == false, normalizedLeading == normalizedTrailing {
                 return (
                     trailingText,
                     min(trailingStablePrefixLength, trailingText.count),
