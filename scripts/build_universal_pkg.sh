@@ -107,6 +107,9 @@ if [[ "$REUSE_SIGNED_APP" == "0" ]]; then
     ONLY_ACTIVE_ARCH=NO \
     MACOSX_DEPLOYMENT_TARGET=26.0 \
     CODE_SIGNING_ALLOWED=NO \
+    SWIFT_VERSION=5.0 \
+    OTHER_SWIFT_FLAGS='-disable-sandbox' \
+    DISABLE_TASK_SANDBOXING=YES \
     clean build
 fi
 
