@@ -179,6 +179,20 @@ struct SettingsSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
+                    Toggle(isOn: $model.showsSpeakerBadges) {
+                        Text(model.localized(.speakerBadges))
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.82))
+                    }
+                    .tint(accent)
+
+                    Text(model.localized(.speakerBadgesHint))
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(IOSTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
                     Toggle(isOn: $model.liveDraftCaptions) {
                         Text(model.localized(.liveDraftCaptions))
                             .font(.system(.subheadline, design: .rounded, weight: .medium))

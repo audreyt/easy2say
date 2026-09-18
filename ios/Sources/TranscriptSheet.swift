@@ -60,7 +60,7 @@ struct TranscriptSheet: View {
                         accent: accent,
                         sourceLabel: model.localized(.origin),
                         translationLabel: model.localized(.translation),
-                        speakerLabel: entry.speakerIndex.map { model.speakerLabel(for: $0) }
+                        speakerLabel: model.showsSpeakerBadges ? entry.speakerIndex.map { model.speakerLabel(for: $0) } : nil
                     )
                 }
             }

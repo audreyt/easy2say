@@ -14,6 +14,10 @@ struct AppSettings: Codable {
     /// Show "Speaker A/B/…" badges on committed captions and turns. Requires the
     /// bundled Sortformer model; silently off when it isn't shipped.
     var speakerDiarizationEnabled: Bool
+    /// Show the "Speaker A/B/…" pill on captions and turns. Independent of
+    /// `speakerDiarizationEnabled` — diarization can keep attributing turns
+    /// while the pill stays hidden.
+    var showsSpeakerBadges: Bool
     /// Show the gray in-progress hypothesis while speech is being recognized.
     /// Off renders committed captions only — no revisable tail.
     var liveDraftCaptions: Bool
@@ -37,6 +41,7 @@ struct AppSettings: Codable {
         conversationFaceToFace: true,
         conversationModeActive: false,
         speakerDiarizationEnabled: true,
+        showsSpeakerBadges: true,
         liveDraftCaptions: true,
         interfaceLanguageID: nil,
         overlayStyle: .default,
@@ -72,6 +77,8 @@ struct AppSettings: Codable {
             ?? AppSettings.default.conversationModeActive
         speakerDiarizationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .speakerDiarizationEnabled))
             ?? AppSettings.default.speakerDiarizationEnabled
+        showsSpeakerBadges = (try? c.decodeIfPresent(Bool.self, forKey: .showsSpeakerBadges))
+            ?? AppSettings.default.showsSpeakerBadges
         liveDraftCaptions = (try? c.decodeIfPresent(Bool.self, forKey: .liveDraftCaptions))
             ?? AppSettings.default.liveDraftCaptions
         interfaceLanguageID = try? c.decodeIfPresent(String.self, forKey: .interfaceLanguageID)
@@ -105,6 +112,7 @@ struct AppSettings: Codable {
         conversationFaceToFace: Bool = true,
         conversationModeActive: Bool = false,
         speakerDiarizationEnabled: Bool = true,
+        showsSpeakerBadges: Bool = true,
         liveDraftCaptions: Bool = true,
         interfaceLanguageID: String?,
         overlayStyle: OverlayStyle,
@@ -125,6 +133,7 @@ struct AppSettings: Codable {
         self.conversationFaceToFace = conversationFaceToFace
         self.conversationModeActive = conversationModeActive
         self.speakerDiarizationEnabled = speakerDiarizationEnabled
+        self.showsSpeakerBadges = showsSpeakerBadges
         self.liveDraftCaptions = liveDraftCaptions
         self.interfaceLanguageID = interfaceLanguageID
         self.overlayStyle     = overlayStyle

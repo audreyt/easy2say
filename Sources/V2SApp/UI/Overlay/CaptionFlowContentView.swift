@@ -488,7 +488,7 @@ struct CaptionFlowContentView: View {
 
     @ViewBuilder
     private func speakerBadge(for speakerIndex: Int?) -> some View {
-        if let speakerIndex {
+        if model.showsSpeakerBadges, let speakerIndex {
             Text(model.speakerLabel(for: speakerIndex))
                 .font(.system(size: max(displayedSourceFontSize * 0.72, 9), weight: .semibold))
                 .foregroundStyle(.white.opacity(0.72))

@@ -209,6 +209,8 @@ enum AppTextKey: String, CaseIterable {
     case conversationFaceToFaceHint
     case speakerLabels
     case speakerLabelsHint
+    case speakerBadges
+    case speakerBadgesHint
     case liveDraftCaptions
     case liveDraftCaptionsHint
     case speakerNameFormat
@@ -571,6 +573,8 @@ enum AppLocalization {
             "conversationFaceToFaceHint": "Turns the other person's half upside down so it reads across a table.",
             "speakerLabels": "Speaker labels",
             "speakerLabelsHint": "Marks who is speaking with Speaker A, B, … on captions and in the transcript.",
+            "speakerBadges": "Speaker badges",
+            "speakerBadgesHint": "Shows the Speaker A, B, … pill on captions and turns. Diarization still runs — this only hides the badge.",
             "liveDraftCaptions": "Live draft captions",
             "liveDraftCaptionsHint": "Shows the in-progress hypothesis in gray while speech is recognized. Off shows committed captions only — no flickering text.",
             "speakerNameFormat": "Speaker %@",
@@ -798,6 +802,8 @@ enum AppLocalization {
             "conversationFaceToFaceHint": "将对方那一半屏幕上下翻转，方便隔桌阅读。",
             "speakerLabels": "说话人标签",
             "speakerLabelsHint": "在字幕与转写中以「说话人 A、B…」标记当前说话者。",
+            "speakerBadges": "说话人徽章",
+            "speakerBadgesHint": "在字幕与对话记录上显示「说话人 A、B…」徽章。说话人辨识仍会继续——此选项只隐藏徽章。",
             "speakerNameFormat": "说话人 %@",
             "conversationYourLanguage": "你的语言",
             "conversationTheirLanguage": "对方的语言",
@@ -1023,6 +1029,8 @@ enum AppLocalization {
             "conversationFaceToFaceHint": "將對方那一半螢幕上下翻轉，方便隔桌閱讀。",
             "speakerLabels": "說話人標籤",
             "speakerLabelsHint": "在字幕與逐字稿中以「說話人 A、B…」標記目前的說話者。",
+            "speakerBadges": "說話人徽章",
+            "speakerBadgesHint": "在字幕與對話記錄上顯示「說話人 A、B…」徽章。說話人辨識仍會繼續——此選項只隱藏徽章。",
             "speakerNameFormat": "說話人 %@",
             "conversationYourLanguage": "你的語言",
             "conversationTheirLanguage": "對方的語言",

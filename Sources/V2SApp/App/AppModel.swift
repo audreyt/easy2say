@@ -196,8 +196,12 @@ final class AppModel: ObservableObject {
     @Published var conversationSecondaryLanguageID: String { didSet { persistSettings() } }
     @Published var conversationFaceToFace: Bool { didSet { persistSettings() } }
     @Published var isConversationModeActive: Bool { didSet { persistSettings() } }
-    /// Show "Speaker A/B/…" badges on committed captions and turns.
+    /// Run live diarization so committed captions and turns get a speaker index.
     @Published var speakerDiarizationEnabled: Bool { didSet { persistSettings() } }
+    /// Show the "Speaker A/B/…" pill on captions and turns. Independent of
+    /// `speakerDiarizationEnabled` — attribution can keep running while the
+    /// pill stays hidden.
+    @Published var showsSpeakerBadges: Bool { didSet { persistSettings() } }
     /// Show the gray in-progress hypothesis while speech is being recognized.
     /// Off renders committed captions only — no revisable tail.
     @Published var liveDraftCaptions: Bool {
@@ -276,6 +280,7 @@ final class AppModel: ObservableObject {
         self.conversationFaceToFace = settings.conversationFaceToFace
         self.isConversationModeActive = settings.conversationModeActive
         self.speakerDiarizationEnabled = settings.speakerDiarizationEnabled
+        self.showsSpeakerBadges = settings.showsSpeakerBadges
         self.liveDraftCaptions = settings.liveDraftCaptions
         self.usesSystemInterfaceLanguage = settings.interfaceLanguageID == nil
         self.interfaceLanguageID = LanguageCatalog.preferredInterfaceLanguageID(
@@ -1268,6 +1273,7 @@ final class AppModel: ObservableObject {
             conversationFaceToFace: conversationFaceToFace,
             conversationModeActive: isConversationModeActive,
             speakerDiarizationEnabled: speakerDiarizationEnabled,
+            showsSpeakerBadges: showsSpeakerBadges,
             liveDraftCaptions: liveDraftCaptions,
             interfaceLanguageID: usesSystemInterfaceLanguage ? nil : interfaceLanguageID,
             overlayStyle: overlayStyle,

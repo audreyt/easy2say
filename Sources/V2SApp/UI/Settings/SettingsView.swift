@@ -359,6 +359,16 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Divider()
+                    settingsRow(model.localized(.speakerBadges)) {
+                        Toggle("", isOn: $model.showsSpeakerBadges)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    Text(model.localized(.speakerBadgesHint))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Divider()
                     settingsRow(model.localized(.liveDraftCaptions)) {
                         Toggle("", isOn: $model.liveDraftCaptions)
                             .toggleStyle(.switch)

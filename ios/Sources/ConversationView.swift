@@ -333,7 +333,7 @@ private struct ConversationHalf: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                if let speakerIndex = turn.speakerIndex {
+                if model.showsSpeakerBadges, let speakerIndex = turn.speakerIndex {
                     Text(model.speakerLabel(for: speakerIndex))
                         .font(.system(size: baseHistorySize * scale * 0.78, weight: .semibold, design: .rounded))
                         .foregroundStyle(IOSTheme.brand.opacity(0.8))
