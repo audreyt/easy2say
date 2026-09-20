@@ -125,6 +125,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var translationLanguageOptions = LanguageCatalog.common
     @Published private(set) var translationHostConfiguration: TranslationSession.Configuration?
     @Published private(set) var reverseTranslationHostConfiguration: TranslationSession.Configuration?
+    /// Brings a window that can host Apple Translation's download approval
+    /// sheet on screen. The sheet is attached to the view that hosts the
+    /// translation session, so preparation must not start while the only
+    /// hosts are the borderless caption panels or the transient popover.
+    /// AppDelegate wires this to the Settings window on macOS.
+    var presentTranslationDownloadHost: (() -> Void)?
     @Published private(set) var transcriptEntries: [TranscriptEntry] = []
     @Published private(set) var transcriptGeneration: Int = 0
     @Published var isOverlayVisible = false
@@ -1620,13 +1626,17 @@ final class AppModel: ObservableObject {
     }
 
     @available(iOS 18.0, macOS 15.0, *)
-    func runTranslationHost(using session: TranslationSession) async {
-        await translationCoordinator.run(using: session)
+    func runTranslationHost(using session: TranslationSession, canPresentUI: Bool = true) async {
+        await translationCoordinator.run(using: session, canPresentUI: canPresentUI)
     }
 
     @available(iOS 18.0, macOS 15.0, *)
-    func runReverseTranslationHost(using session: TranslationSession) async {
-        await reverseTranslationCoordinator.run(using: session)
+    func runReverseTranslationHost(using session: TranslationSession, canPresentUI: Bool = true) async {
+        await reverseTranslationCoordinator.run(using: session, canPresentUI: canPresentUI)
+    }
+
+    func openLanguageResourceSystemSettings(_ destination: LanguageResourceSystemSettingsDestination) {
+        openSystemSettings(for: destination)
     }
 
     func refreshLanguageResources() {
@@ -1635,13 +1645,17 @@ final class AppModel: ObservableObject {
 
     private func scheduleSelectedLanguageResourcePreparation(
         refreshTranslations: Bool = false,
-        openSystemSettingsIfNeeded: Bool = false
+        openSystemSettingsIfNeeded: Bool = false,
+        reason: String = #function
     ) {
         guard isBootstrapping == false else {
             return
         }
 
         let requirements = selectedResourcePreparationRequirements()
+        Logger.session.info(
+            "Language resource preparation scheduled from \(reason, privacy: .public); replaces running task: \(self.languageResourcePreparationTask != nil, privacy: .public)"
+        )
 
         languageResourcePreparationTask?.cancel()
         languageResourceStatuses = []
@@ -1703,17 +1717,23 @@ final class AppModel: ObservableObject {
                 }
             }
 
-            for translationPair in translationPairs {
-                group.addTask { [weak self] in
-                    guard let self else {
+            // Translation pairs go one at a time. Each may put up the system's
+            // download approval sheet, and a second pair queued behind that
+            // sheet would otherwise show a row claiming progress it is not
+            // making. Translation failures never open System Settings by
+            // themselves; the status row offers that as a button instead.
+            group.addTask { [weak self] in
+                for translationPair in translationPairs {
+                    guard let self, Task.isCancelled == false else {
                         return nil
                     }
 
-                    return await self.prepareTranslationResourceIfNeeded(
+                    await self.prepareTranslationResourceIfNeeded(
                         from: translationPair.sourceLanguageID,
                         to: translationPair.targetLanguageID
                     )
                 }
+                return nil
             }
 
             for await destination in group {
@@ -1723,15 +1743,11 @@ final class AppModel: ObservableObject {
             }
         }
 
-        guard openSystemSettingsIfNeeded else {
+        guard openSystemSettingsIfNeeded, let destination = destinationsToOpen.first else {
             return
         }
 
-        if destinationsToOpen.contains(.translationLanguages) {
-            openSystemSettings(for: .translationLanguages)
-        } else if let destination = destinationsToOpen.first {
-            openSystemSettings(for: destination)
-        }
+        openSystemSettings(for: destination)
     }
 
     private func prepareSpeechRecognitionResourceIfNeeded(
@@ -1918,22 +1934,43 @@ final class AppModel: ObservableObject {
         try await request.downloadAndInstall()
     }
 
+    /// Apple Translation completes `prepareTranslation()` only after the user
+    /// approves the system download sheet and the language pack installs. The
+    /// ceiling covers both, so it is long; hitting it means the sheet was never
+    /// answered, not that the download is slow.
+    private static let translationPreparationCeiling: TimeInterval = 10 * 60
+
     private func prepareTranslationResourceIfNeeded(
         from sourceLanguageID: String,
         to targetLanguageID: String
-    ) async -> LanguageResourceSystemSettingsDestination? {
+    ) async {
         let title = localized(
             .translationTitleFormat,
             languageName(for: sourceLanguageID),
             languageName(for: targetLanguageID)
         )
         let statusID = "translation:\(sourceLanguageID)->\(targetLanguageID)"
-        let downloadingDetail = localized(.downloadingTranslationResources)
+        let awaitingApprovalDetail = localized(.translationDownloadAwaitingApproval)
         let waitingDetail = localized(.waitingTranslationResourcesInstalling)
         let manualDownloadDetail = localized(.manualTranslationDownloadDetail)
         let localFallbackDetail = localized(.preparingLocalTranslationFallback)
         let maxAttempts = 3
         var attemptCount = 0
+
+        func markManualDownloadRequired() {
+            upsertLanguageResourceStatus(
+                LanguageResourceStatus(
+                    id: statusID,
+                    kind: .translation,
+                    title: title,
+                    detail: manualDownloadDetail,
+                    progress: nil,
+                    isError: true,
+                    systemSettingsDestination: .translationLanguages,
+                    canRetry: true
+                )
+            )
+        }
 
         while Task.isCancelled == false {
             let availabilityStatus = await translationAvailabilityStatus(
@@ -1973,95 +2010,110 @@ final class AppModel: ObservableObject {
                         )
                     )
                 }
-                return nil
+                return
             case .supported, .installed:
                 attemptCount += 1
                 if attemptCount > maxAttempts {
+                    markManualDownloadRequired()
+                    return
+                }
+
+                if availabilityStatus == .supported {
                     upsertLanguageResourceStatus(
                         LanguageResourceStatus(
                             id: statusID,
                             kind: .translation,
                             title: title,
-                            detail: manualDownloadDetail,
+                            detail: awaitingApprovalDetail,
                             progress: nil,
-                            isError: true
+                            isError: false
                         )
                     )
-                    return .translationLanguages
-                }
-
-                upsertLanguageResourceStatus(
-                    LanguageResourceStatus(
-                        id: statusID,
-                        kind: .translation,
-                        title: title,
-                        detail: availabilityStatus == .supported ? downloadingDetail : waitingDetail,
-                        progress: nil,
-                        isError: false
+#if os(macOS)
+                    // The approval sheet attaches to the window hosting the
+                    // translation session. Bring a presentable host forward
+                    // before asking, or the framework parks on a sheet that is
+                    // attached to an off-screen caption panel.
+                    presentTranslationDownloadHost?()
+#endif
+                } else {
+                    upsertLanguageResourceStatus(
+                        LanguageResourceStatus(
+                            id: statusID,
+                            kind: .translation,
+                            title: title,
+                            detail: waitingDetail,
+                            progress: nil,
+                            isError: false
+                        )
                     )
-                )
+                }
 
                 do {
                     try await prepareTranslationResourceWithTimeout(
                         from: sourceLanguageID,
                         to: targetLanguageID
                     )
+                    Logger.session.info("Translation preparation \(statusID, privacy: .public) returned")
+                    if availabilityStatus == .supported {
+                        // Apple's download sheet can close with the download
+                        // declined, or still running, and prepareTranslation()
+                        // returns normally either way. Only a confirmed install
+                        // clears the row.
+                        let installed = await awaitTranslationInstallation(
+                            from: sourceLanguageID,
+                            to: targetLanguageID,
+                            statusID: statusID,
+                            title: title
+                        )
+                        guard installed else {
+                            markManualDownloadRequired()
+                            return
+                        }
+                    }
                     removeLanguageResourceStatus(id: statusID)
-                    return nil
+                    return
                 } catch is CancellationError {
+                    Logger.session.info("Translation preparation \(statusID, privacy: .public) cancelled")
                     removeLanguageResourceStatus(id: statusID)
-                    return nil
+                    return
                 } catch {
                     if let error = error as? LanguageResourcePreparationError,
                        error == .translationDownloadTimedOut {
-                        upsertLanguageResourceStatus(
-                            LanguageResourceStatus(
-                                id: statusID,
-                                kind: .translation,
-                                title: title,
-                                detail: manualDownloadDetail,
-                                progress: nil,
-                                isError: true
-                            )
+                        Logger.session.warning(
+                            "Translation preparation \(statusID, privacy: .public) hit the approval ceiling"
                         )
-                        return .translationLanguages
+                        markManualDownloadRequired()
+                        return
                     }
 
                     if let serviceError = error as? TranslationCoordinator.ServiceError {
                         upsertLanguageResourceStatus(
                             LanguageResourceStatus(
-                            id: statusID,
-                            kind: .translation,
-                            title: title,
-                            detail: serviceError.localizedDescription(languageID: resolvedInterfaceLanguageID),
-                            progress: nil,
-                            isError: true
-                        )
-                        )
-                        return nil
-                    }
-
-                    let nsError = error as NSError
-                    if nsError.domain == "TranslationErrorDomain", nsError.code == 14 {
-                        upsertLanguageResourceStatus(
-                            LanguageResourceStatus(
                                 id: statusID,
                                 kind: .translation,
                                 title: title,
-                                detail: manualDownloadDetail,
+                                detail: serviceError.localizedDescription(languageID: resolvedInterfaceLanguageID),
                                 progress: nil,
                                 isError: true
                             )
                         )
-                        return .translationLanguages
+                        return
                     }
+
+                    Logger.session.warning(
+                        "Translation preparation \(statusID, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                    )
 
                     let refreshedStatus = await translationAvailabilityStatus(
                         from: sourceLanguageID,
                         to: targetLanguageID
                     )
 
-                    if refreshedStatus == .supported || refreshedStatus == .installed {
+                    switch refreshedStatus {
+                    case .installed:
+                        // The pack landed while the session errored out;
+                        // give the install a moment to settle and re-check.
                         upsertLanguageResourceStatus(
                             LanguageResourceStatus(
                                 id: statusID,
@@ -2077,38 +2129,36 @@ final class AppModel: ObservableObject {
                             try await Task.sleep(nanoseconds: 800_000_000)
                         } catch {
                             removeLanguageResourceStatus(id: statusID)
-                            return nil
+                            return
                         }
 
                         continue
-                    }
-
-                    upsertLanguageResourceStatus(
-                        LanguageResourceStatus(
-                            id: statusID,
-                            kind: .translation,
-                            title: title,
-                            detail: localizedErrorDescription(error),
-                            progress: nil,
-                            isError: true
+                    case .supported:
+                        // Still downloadable, yet the session refused to
+                        // prepare: the user dismissed the approval sheet or
+                        // the framework declined. Re-asking would just raise
+                        // the same sheet again, so hand over to the user.
+                        markManualDownloadRequired()
+                        return
+                    default:
+                        upsertLanguageResourceStatus(
+                            LanguageResourceStatus(
+                                id: statusID,
+                                kind: .translation,
+                                title: title,
+                                detail: localizedErrorDescription(error),
+                                progress: nil,
+                                isError: true
+                            )
                         )
-                    )
-                    return nil
+                        return
+                    }
                 }
             @unknown default:
                 attemptCount += 1
                 if attemptCount > maxAttempts {
-                    upsertLanguageResourceStatus(
-                        LanguageResourceStatus(
-                            id: statusID,
-                            kind: .translation,
-                            title: title,
-                            detail: manualDownloadDetail,
-                            progress: nil,
-                            isError: true
-                        )
-                    )
-                    return .translationLanguages
+                    markManualDownloadRequired()
+                    return
                 }
 
                 upsertLanguageResourceStatus(
@@ -2126,13 +2176,80 @@ final class AppModel: ObservableObject {
                     try await Task.sleep(nanoseconds: 800_000_000)
                 } catch {
                     removeLanguageResourceStatus(id: statusID)
-                    return nil
+                    return
                 }
             }
         }
 
         removeLanguageResourceStatus(id: statusID)
-        return nil
+    }
+
+    /// Polls availability after the download sheet closes. Returns `true` once
+    /// the pair reports installed (or unsupported, which the fallback path
+    /// handles on the next pass), `false` when the ceiling passes first. While
+    /// waiting, the row tells the user the pack is not installed yet and how to
+    /// finish by hand, since the sheet may have been dismissed without a
+    /// download.
+    private func awaitTranslationInstallation(
+        from sourceLanguageID: String,
+        to targetLanguageID: String,
+        statusID: String,
+        title: String
+    ) async -> Bool {
+        let started = Date()
+        let settleGrace: TimeInterval = 3
+        var announcedUnconfirmed = false
+
+        while Task.isCancelled == false {
+            switch await translationAvailabilityStatus(from: sourceLanguageID, to: targetLanguageID) {
+            case .installed, .unsupported:
+                Logger.session.info("Translation preparation \(statusID, privacy: .public) confirmed installed")
+                return true
+            default:
+                break
+            }
+
+            let elapsed = Date().timeIntervalSince(started)
+            if elapsed >= Self.translationPreparationCeiling {
+                Logger.session.warning("Translation preparation \(statusID, privacy: .public) never confirmed installation")
+                return false
+            }
+
+            if announcedUnconfirmed == false, elapsed >= settleGrace {
+                announcedUnconfirmed = true
+                upsertLanguageResourceStatus(
+                    LanguageResourceStatus(
+                        id: statusID,
+                        kind: .translation,
+                        title: title,
+                        detail: localized(.translationDownloadUnconfirmedDetail),
+                        progress: nil,
+                        isError: false,
+                        systemSettingsDestination: .translationLanguages,
+                        canRetry: true
+                    )
+                )
+            } else if announcedUnconfirmed == false {
+                upsertLanguageResourceStatus(
+                    LanguageResourceStatus(
+                        id: statusID,
+                        kind: .translation,
+                        title: title,
+                        detail: localized(.waitingTranslationResourcesInstalling),
+                        progress: nil,
+                        isError: false
+                    )
+                )
+            }
+
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch {
+                return true
+            }
+        }
+
+        return true
     }
 
     private func prepareTranslationResourceWithTimeout(
@@ -2148,10 +2265,15 @@ final class AppModel: ObservableObject {
             }
 
             group.addTask {
-                try await Task.sleep(nanoseconds: 30_000_000_000)
+                try await Task.sleep(
+                    nanoseconds: UInt64(Self.translationPreparationCeiling * 1_000_000_000)
+                )
                 throw LanguageResourcePreparationError.translationDownloadTimedOut
             }
 
+            // The coordinator resumes a cancelled prepare immediately, so the
+            // losing child exits promptly and this returns as soon as either
+            // side finishes.
             let result: Void? = try await group.next()
             group.cancelAll()
             _ = result
@@ -4518,7 +4640,7 @@ private enum LanguageResourcePreparationError: LocalizedError, AppLocalizableErr
     }
 }
 
-private enum LanguageResourceSystemSettingsDestination: Hashable {
+enum LanguageResourceSystemSettingsDestination: Hashable {
     case keyboard
     case translationLanguages
 
@@ -4544,18 +4666,29 @@ struct LanguageResourceStatus: Identifiable, Equatable {
     let detail: String
     let progress: Double?
     let isError: Bool
+    /// System Settings pane where the user can finish this download by hand.
+    var systemSettingsDestination: LanguageResourceSystemSettingsDestination? = nil
+    /// Whether re-running the preparation is a sensible next step.
+    var canRetry: Bool = false
 }
 
 extension View {
+    /// Hosts the app's Apple Translation sessions on this view.
+    ///
+    /// - Parameter canPresentUI: Pass `false` from views whose window cannot
+    ///   show the system's language download sheet (borderless caption
+    ///   panels, the transient status bar popover). Such hosts still serve
+    ///   translations for installed pairs but leave language preparation to a
+    ///   host that can present the sheet.
     @ViewBuilder
-    func v2sTranslationHost(model: AppModel) -> some View {
+    func v2sTranslationHost(model: AppModel, canPresentUI: Bool = true) -> some View {
         if #available(iOS 18.0, macOS 15.0, *) {
             self
                 .translationTask(model.translationHostConfiguration) { session in
-                    await model.runTranslationHost(using: session)
+                    await model.runTranslationHost(using: session, canPresentUI: canPresentUI)
                 }
                 .translationTask(model.reverseTranslationHostConfiguration) { session in
-                    await model.runReverseTranslationHost(using: session)
+                    await model.runReverseTranslationHost(using: session, canPresentUI: canPresentUI)
                 }
         } else {
             self

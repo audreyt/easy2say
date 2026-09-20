@@ -31,7 +31,10 @@ struct StatusBarPopoverView: View {
         .frame(width: 340)
         .background(.regularMaterial)
         .environment(\.locale, model.interfaceLocale)
-        .v2sTranslationHost(model: model)
+        // The transient popover closes as soon as focus moves, which would
+        // tear down a download sheet mid-approval; the Settings window hosts
+        // language preparation instead.
+        .v2sTranslationHost(model: model, canPresentUI: false)
         .onChange(of: model.sessionState) { _, newState in
             if newState == .running {
                 closePopover()

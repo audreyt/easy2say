@@ -1,6 +1,11 @@
 import Combine
 import Foundation
+import OSLog
 import Translation
+
+private extension Logger {
+    static let translation = Logger(subsystem: "com.franklioxygen.v2s", category: "translation")
+}
 
 /// Serializes all translation work through the single view-anchored
 /// `TranslationSession` provided by SwiftUI's `.translationTask` host.
@@ -66,6 +71,25 @@ final class TranslationCoordinator: ObservableObject {
                 return pair
             }
         }
+
+        /// Whether serving this operation may call `prepareTranslation()`.
+        /// On macOS that call asks the framework to present the language
+        /// download approval sheet on the view that hosts the session, so it
+        /// can only complete from a host whose window can show a sheet.
+        var requiresPresentableHost: Bool {
+            switch self {
+            case .prepare:
+                return true
+            case .translate(_, _, _, _, let prepareIfNeeded, _):
+                return prepareIfNeeded
+            }
+        }
+    }
+
+    private enum RunnerStep {
+        case serve(PendingOperation)
+        case yield
+        case declinePresentation
     }
 
     private enum OperationWaitResult {
@@ -120,6 +144,15 @@ final class TranslationCoordinator: ObservableObject {
     private var pendingOperations: [PendingOperation] = []
     private var activeRunnerID: UUID?
     private var activeOperationID: UUID?
+    /// The operation the runner is currently serving, kept so a cancellation
+    /// can resume its continuation immediately instead of waiting for the
+    /// framework call to return.
+    private var activeOperation: PendingOperation?
+    /// Live runners whose host can show the system download sheet. When an
+    /// operation that needs one is enqueued while only non-presentable runners
+    /// are alive, the configuration is invalidated once so the presentable
+    /// host the app brought forward starts a runner.
+    private var presentableRunnerCount = 0
     private var cancelledOperationIDs: Set<UUID> = []
     private var generation: Int = 0
     private var runnerAvailabilityWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -333,104 +366,145 @@ final class TranslationCoordinator: ObservableObject {
     }
 
     @available(macOS 15.0, *)
-    func run(using session: TranslationSession) async {
+    /// - Parameter canPresentUI: Whether the hosting view lives in a window
+    ///   that can show the system's language download approval sheet. Hosts
+    ///   anchored to borderless or non-activating panels (the caption overlay,
+    ///   the audience display) and to the transient status bar popover must
+    ///   pass `false`; they keep serving plain translations but leave every
+    ///   operation that may need `prepareTranslation()` to a presentable host.
+    func run(using session: TranslationSession, canPresentUI: Bool = true) async {
         let runnerID = UUID()
-
-        while Task.isCancelled == false {
-            if activeRunnerID == nil {
-                activeRunnerID = runnerID
-                break
-            }
-
-            if activeRunnerID == runnerID {
-                break
-            }
-
-            await waitForRunnerAvailability(runnerID: runnerID)
+        var runnerGenerationForDefer = generation
+        if canPresentUI {
+            presentableRunnerCount += 1
         }
 
-        let runnerGeneration = generation
-
-        // Installed before the cancellation guard: ownership is claimed above, so
-        // returning without releasing it would leave the coordinator believing a
-        // runner is alive and block every later session activation.
+        // Installed before any claim: a runner that returns while still owning
+        // the pair would leave the coordinator believing a runner is alive and
+        // block every later session activation.
         defer {
+            if canPresentUI {
+                presentableRunnerCount -= 1
+            }
             if activeRunnerID == runnerID {
                 activeRunnerID = nil
                 signalRunnerAvailabilityWaiters()
-                if generation == runnerGeneration, let nextPair = pendingOperations.first?.pair {
+                if generation == runnerGenerationForDefer, let nextPair = pendingOperations.first?.pair {
                     activate(pair: nextPair)
                 }
             }
         }
 
-        guard Task.isCancelled == false else {
-            return
-        }
+        claim: while Task.isCancelled == false {
+            while Task.isCancelled == false {
+                if activeRunnerID == nil {
+                    activeRunnerID = runnerID
+                    break
+                }
 
-        guard runnerGeneration == generation else {
-            return
-        }
+                if activeRunnerID == runnerID {
+                    break
+                }
 
-        guard let anchoredPair = currentPair else {
-            return
-        }
+                await waitForRunnerAvailability(runnerID: runnerID)
+            }
 
-        while Task.isCancelled == false {
+            let runnerGeneration = generation
+            runnerGenerationForDefer = runnerGeneration
+
+            guard Task.isCancelled == false else {
+                return
+            }
+
             guard runnerGeneration == generation else {
                 return
             }
 
-            guard let operation = await nextOperation(
-                for: anchoredPair,
-                generation: runnerGeneration,
-                idleTimeout: Self.runnerIdleTimeout
-            ) else {
+            guard let anchoredPair = currentPair else {
                 return
             }
 
-            activeOperationID = operation.id
-
-            switch operation {
-            case .prepare(let id, _, let pair, let continuation):
-                do {
-                    try await session.prepareTranslation()
-                    installedPairs.insert(pair)
-                    finishOperation(id: id, continuation: continuation)
-                } catch {
-                    finishOperation(id: id, continuation: continuation, error: error)
+            while Task.isCancelled == false {
+                guard runnerGeneration == generation else {
+                    return
                 }
 
-            case .translate(
-                let id,
-                _,
-                let pair,
-                let text,
-                let prepareIfNeeded,
-                let continuation
-            ):
-                do {
-                    if prepareIfNeeded {
+                let operation: PendingOperation
+                switch await nextOperation(
+                    for: anchoredPair,
+                    generation: runnerGeneration,
+                    idleTimeout: Self.runnerIdleTimeout,
+                    canPresentUI: canPresentUI
+                ) {
+                case .serve(let next):
+                    operation = next
+                case .yield:
+                    return
+                case .declinePresentation:
+                    Logger.translation.info("Runner \(runnerID, privacy: .public) stepping aside for a presentable host")
+                    // Hand the pair to a host that can show the system download
+                    // sheet: release ownership so a waiting presentable runner
+                    // claims it, then park until the queue changes. Exiting or
+                    // invalidating the configuration here would re-fire every
+                    // host's translationTask and cancel the presentable host's
+                    // session mid-request.
+                    activeRunnerID = nil
+                    signalRunnerAvailabilityWaiters()
+                    await waitForQueueChange()
+                    continue claim
+                }
+
+                activeOperationID = operation.id
+                activeOperation = operation
+                Logger.translation.info(
+                    "Runner \(runnerID, privacy: .public) (presentable: \(canPresentUI, privacy: .public)) serving \(operation.id, privacy: .public)"
+                )
+
+                switch operation {
+                case .prepare(let id, _, _, let continuation):
+                    do {
+                        // Returning normally does not prove the pack installed:
+                        // on macOS 26 the download sheet can be dismissed with
+                        // the download declined or still running and the call
+                        // still succeeds. `installedPairs` is only updated from
+                        // a confirmed availability status.
                         try await session.prepareTranslation()
-                        installedPairs.insert(pair)
+                        finishOperation(id: id, continuation: continuation)
+                    } catch {
+                        finishOperation(id: id, continuation: continuation, error: error)
                     }
-                    let response = try await session.translate(text)
-                    let translatedText = response.targetText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let resolvedText = translatedText.isEmpty ? text : translatedText
-                    // Only a real translation is worth remembering. Memoizing the
-                    // source-text fallback would pin this sentence to its untranslated
-                    // form for the rest of the session and make the caller's
-                    // recover-and-reissue retry a no-op.
-                    if translatedText.isEmpty == false {
-                        memoizeTranslation(resolvedText, pair: pair, sourceText: text)
+
+                case .translate(
+                    let id,
+                    _,
+                    let pair,
+                    let text,
+                    let prepareIfNeeded,
+                    let continuation
+                ):
+                    do {
+                        if prepareIfNeeded {
+                            try await session.prepareTranslation()
+                            installedPairs.insert(pair)
+                        }
+                        let response = try await session.translate(text)
+                        let translatedText = response.targetText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let resolvedText = translatedText.isEmpty ? text : translatedText
+                        // Only a real translation is worth remembering. Memoizing the
+                        // source-text fallback would pin this sentence to its untranslated
+                        // form for the rest of the session and make the caller's
+                        // recover-and-reissue retry a no-op.
+                        if translatedText.isEmpty == false {
+                            memoizeTranslation(resolvedText, pair: pair, sourceText: text)
+                        }
+                        finishOperation(
+                            id: id,
+                            continuation: continuation,
+                            result: resolvedText
+                        )
+                    } catch {
+                        finishOperation(id: id, continuation: continuation, error: error)
                     }
-                    finishOperation(
-                        id: id,
-                        continuation: continuation,
-                        result: resolvedText
-                    )
-                } catch {
-                    finishOperation(id: id, continuation: continuation, error: error)
                 }
             }
         }
@@ -493,7 +567,38 @@ final class TranslationCoordinator: ObservableObject {
     private func enqueue(_ operation: PendingOperation) {
         activate(pair: operation.pair)
         pendingOperations.append(operation)
+        if operation.requiresPresentableHost,
+           presentableRunnerCount == 0,
+           activeRunnerID != nil,
+           currentPair == operation.pair {
+            // A non-presentable runner owns the pair and no presentable host
+            // has a runner, so nothing could ever serve this. Re-fire the
+            // hosts once; the presentable host the app brought forward then
+            // starts a runner and the owner steps aside for it.
+            Logger.translation.info("Re-firing hosts: no presentable runner for a prepare operation")
+            configuration?.invalidate()
+        }
         signalOperationWaiters()
+    }
+
+    /// Parks a runner that stepped aside for a presentable host until the
+    /// queue changes (another operation arrives or outstanding work is
+    /// cancelled) or the runner's task is cancelled.
+    private func waitForQueueChange() async {
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        let waiterID = UUID()
+        await withTaskCancellationHandler {
+            _ = await withCheckedContinuation { (continuation: CheckedContinuation<OperationWaitResult, Never>) in
+                operationSignalWaiters[waiterID] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.resumeOperationWaiter(id: waiterID, result: .timedOut)
+            }
+        }
     }
 
     private func activate(pair: LanguagePair) {
@@ -525,15 +630,30 @@ final class TranslationCoordinator: ObservableObject {
         }
 
         if activeOperationID == id {
-            cancelledOperationIDs.insert(id)
+            cancelActiveOperation()
         }
+    }
+
+    /// Resume the caller of the in-flight operation with `CancellationError`
+    /// right away. The framework call the runner is blocked in (for example a
+    /// `prepareTranslation()` waiting on the download sheet) cannot be
+    /// interrupted, so `finishOperation` later sees the id in
+    /// `cancelledOperationIDs` and drops the stale result instead of resuming
+    /// the continuation a second time.
+    private func cancelActiveOperation() {
+        guard let operation = activeOperation else {
+            return
+        }
+
+        Logger.translation.info("Cancelling active operation \(operation.id, privacy: .public)")
+        cancelledOperationIDs.insert(operation.id)
+        activeOperation = nil
+        cancel(operation)
     }
 
     private func cancelOutstandingOperations() {
         cancelledOperationIDs.removeAll()
-        if let activeOperationID {
-            cancelledOperationIDs.insert(activeOperationID)
-        }
+        cancelActiveOperation()
 
         for operation in pendingOperations {
             cancel(operation)
@@ -560,19 +680,26 @@ final class TranslationCoordinator: ObservableObject {
     private func nextOperation(
         for pair: LanguagePair,
         generation: Int,
-        idleTimeout: TimeInterval
-    ) async -> PendingOperation? {
+        idleTimeout: TimeInterval,
+        canPresentUI: Bool
+    ) async -> RunnerStep {
         let deadline = Date().addingTimeInterval(idleTimeout)
 
         while Task.isCancelled == false {
             guard generation == self.generation else {
-                return nil
+                return .yield
             }
 
             if let index = pendingOperations.firstIndex(where: {
                 $0.pair == pair && $0.generation == generation
             }) {
-                return pendingOperations.remove(at: index)
+                if canPresentUI == false, pendingOperations[index].requiresPresentableHost {
+                    // Leave the operation queued for a host that can show the
+                    // system download sheet; serving it here would park the
+                    // framework on a sheet nobody can see.
+                    return .declinePresentation
+                }
+                return .serve(pendingOperations.remove(at: index))
             }
 
             // Any remaining generation-matching operation belongs to a different
@@ -580,15 +707,15 @@ final class TranslationCoordinator: ObservableObject {
             // new session is configured, so yield instead of idling out the full
             // timeout.
             if pendingOperations.contains(where: { $0.generation == generation }) {
-                return nil
+                return .yield
             }
 
             if await waitForOperationSignal(for: pair, generation: generation, until: deadline) == .timedOut {
-                return nil
+                return .yield
             }
         }
 
-        return nil
+        return .yield
     }
 
     private func waitForRunnerAvailability(runnerID: UUID) async {
@@ -700,9 +827,10 @@ final class TranslationCoordinator: ObservableObject {
         error: Error? = nil
     ) {
         activeOperationID = nil
+        activeOperation = nil
 
         if cancelledOperationIDs.remove(id) != nil {
-            continuation.resume(throwing: CancellationError())
+            // Already resumed with CancellationError by cancelActiveOperation.
             return
         }
 
@@ -720,9 +848,10 @@ final class TranslationCoordinator: ObservableObject {
         error: Error? = nil
     ) {
         activeOperationID = nil
+        activeOperation = nil
 
         if cancelledOperationIDs.remove(id) != nil {
-            continuation.resume(throwing: CancellationError())
+            // Already resumed with CancellationError by cancelActiveOperation.
             return
         }
 
