@@ -15,13 +15,22 @@ remain unchanged so existing users keep their settings and model caches.
 No Homebrew tap automation is configured in this fork. GitHub Releases is the
 source of truth.
 
-## Gatekeeper
+## Release signing
 
-The app is ad-hoc signed and the installer is unsigned until Developer ID
-Application and Developer ID Installer identities are available. A quarantined
-download is therefore expected to be rejected by Gatekeeper. Users must
-Control-click the package and choose **Open**, or approve it under
-**System Settings → Privacy & Security**.
+`scripts/build_universal_pkg.sh` signs the app and installer with Developer ID,
+submits both to Apple notarization, and staples the tickets when these
+environment variables are set:
 
-Removing `com.apple.quarantine` from `/Applications/Easy2Say.app` is a
-command-line bypass, not proof that the normal **Open Anyway** flow works.
+- `SIGNING_KEYCHAIN` — keychain holding the Developer ID identities.
+- `SIGNING_KEYCHAIN_PASSWORD` — unlocks that keychain before signing.
+- `APPLICATION_IDENTITY` / `INSTALLER_IDENTITY` — the Developer ID Application
+  and Developer ID Installer identity names.
+- `NOTARY_KEYCHAIN_PROFILE` — notarytool credentials profile created via
+  `xcrun notarytool store-credentials`.
+- `RELEASE_NOTES_PATH` — optional markdown release notes copied next to the
+  Sparkle archive for `generate_appcast`.
+
+Without them the script keeps producing an unsigned, un-notarized package.
+
+Never upload a pkg whose `pkgutil --check-signature` output lacks
+"Notarization: trusted by the Apple notary service".
