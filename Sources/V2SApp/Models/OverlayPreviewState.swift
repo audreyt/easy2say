@@ -20,6 +20,11 @@ struct OverlayPreviewState: Equatable {
     var translatedText: String
     var sourceText: String
     var sourceName: String
+    /// A translation of the words the committed caption begins with, shown
+    /// dimmed on the committed live row while that caption's own translation
+    /// is in flight. Presentation only: history, transcript and archive read
+    /// `translatedText`, never this.
+    var pendingTranslation: PendingTranslation? = nil
 
     // MARK: Draft layer — partial ASR for the current caption slot
     var draftSourceText: String? = nil
@@ -54,6 +59,12 @@ struct OverlayPreviewState: Equatable {
     /// promoted draft translations keep seeding committed captions.
     var showsDraftCaptions: Bool = true
 
+    struct PendingTranslation: Equatable {
+        var text: String
+        /// The source `text` is a translation of.
+        var sourceText: String
+    }
+
     // MARK: Derived helpers
 
     var hasActiveDraftLayer: Bool {
@@ -86,6 +97,15 @@ struct OverlayPreviewState: Equatable {
         draftTranslatedStablePrefixLength = 0
         draftTranslationSourceText = nil
         draftTranslationPromotionID = nil
+    }
+
+    mutating func clearDraftLayer() {
+        draftSourceText = nil
+        draftSourceStablePrefixLength = 0
+        draftPromotionID = nil
+        draftAudioStartMs = nil
+        draftSpeakerIndex = nil
+        clearDraftTranslation()
     }
 
     mutating func clearDraftTranslationIfMismatched(sourceText: String, promotionID: UUID?) {
@@ -220,7 +240,11 @@ struct OverlayLiveCaptionPresentation: Equatable {
 
     enum Identity: Hashable {
         case promotion(UUID)
+        /// A committed-lane text with no caption behind it (status placeholders).
         case captionEpoch(Int)
+        /// A draft with no producer identity. Its own case, so it can never
+        /// alias a committed row.
+        case draftEpoch(Int)
     }
 
     struct Caption: Identifiable, Equatable {
@@ -602,7 +626,7 @@ extension OverlayPreviewState {
 
         let identity = draftPromotionID
             .map(OverlayLiveCaptionPresentation.Identity.promotion)
-            ?? .captionEpoch(captionEpoch &+ 1)
+            ?? .draftEpoch(captionEpoch)
 
         // Promotion publishes the committed caption before the draft is cleared.
         // Collapse that overlap so SwiftUI sees one stable slot and committed text wins.
@@ -743,20 +767,40 @@ extension OverlayPreviewState {
         )
     }
 
+    /// Identity of the committed live row: its producer, else its caption, and
+    /// only for caption-less status text the epoch.
+    var committedLiveIdentity: OverlayLiveCaptionPresentation.Identity {
+        (committedPromotionID ?? committedCaptionID)
+            .map(OverlayLiveCaptionPresentation.Identity.promotion)
+            ?? .captionEpoch(captionEpoch)
+    }
+
+    /// `pendingTranslation`, when it translates the words the committed source
+    /// begins with and the committed caption has no translation of its own.
+    /// Provisional text, so hidden with the draft layer.
+    var visiblePendingTranslation: PendingTranslation? {
+        guard showsDraftCaptions, translatedText.isEmpty, let pendingTranslation else { return nil }
+        let madeFor = CaptionLexicalKey(pendingTranslation.sourceText)
+        guard madeFor.isEmpty == false,
+              CaptionLexicalKey(sourceText).hasPrefix(madeFor) else {
+            return nil
+        }
+        return pendingTranslation
+    }
+
     private var committedLiveCaption: OverlayLiveCaptionPresentation.Caption? {
         guard translatedText.isEmpty == false || sourceText.isEmpty == false else {
             return nil
         }
 
-        let identity = committedPromotionID
-            .map(OverlayLiveCaptionPresentation.Identity.promotion)
-            ?? .captionEpoch(captionEpoch)
-
+        let pending = visiblePendingTranslation
         return OverlayLiveCaptionPresentation.Caption(
-            id: identity,
+            id: committedLiveIdentity,
             phase: .committed,
-            translatedText: translatedText,
+            translatedText: pending?.text ?? translatedText,
             sourceText: sourceText,
+            // A translation made for fewer words renders fully provisional.
+            translatedStablePrefixLength: pending == nil ? nil : 0,
             translatedAgedPrefixLength: 0,
             sourceAgedPrefixLength: 0,
             representedHistoryEntryIDs: committedCaptionID.map { [$0] } ?? [],

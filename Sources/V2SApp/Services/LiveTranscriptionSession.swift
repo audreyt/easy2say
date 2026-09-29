@@ -322,6 +322,20 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         await appendPresentationWork({}).value
     }
     private var modernCommittedPrefixText = ""
+    /// Capture-time end (ms) of the audio the committed prefix covers. A
+    /// hypothesis that starts at or after this end belongs to a new analyzer
+    /// window and must never be trimmed against the prefix.
+    private var modernCommittedPrefixAudioEndMs: Int?
+    /// When the committed prefix was recorded. Paths without usable window
+    /// timing (dual-lane drafts carry no hypothesis timing; timer-fired
+    /// silence commits have no range) fall back to recency.
+    private var modernCommittedPrefixCommitTime: Date?
+    /// Last raw draft hypothesis text that reached the live draft row. Drafts
+    /// for one utterance arrive as a continuous chain (each extending or
+    /// restating the previous draft); a hypothesis unrelated to it opens a
+    /// new window. Recorded only for drafts actually shown, so a withdrawn
+    /// (nil) draft does not break the chain.
+    private var modernLastDraftRawText = ""
 #if canImport(WhisperKit)
     private var taigiEngine: TaigiASREngine?
 #if os(macOS)
@@ -491,11 +505,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 #else
         let usesLocalTibetan = false
 #endif
-        try await requestRequiredPermissions(
-            for: source,
-            requiresSpeechAuthorization:
-                usesLocalTaigi == false && usesLocalTibetan == false
-        )
+#if DEBUG
+        let usesInjectedAudio = injectsAudioForTesting
+#else
+        let usesInjectedAudio = false
+#endif
+        if usesInjectedAudio == false {
+            try await requestRequiredPermissions(
+                for: source,
+                requiresSpeechAuthorization:
+                    usesLocalTaigi == false && usesLocalTibetan == false
+            )
+        }
         try await ensureStartupIsCurrent(startGeneration)
 #if canImport(WhisperKit)
         if usesLocalTaigi {
@@ -536,6 +557,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             }
         }
 #endif
+
+        guard usesInjectedAudio == false else {
+            try await ensureStartupIsCurrent(startGeneration)
+            return
+        }
 
         switch source.category {
         case .microphone:
@@ -1100,6 +1126,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func resetModernTranscriptionState() {
         latestModernText = ""
         modernCommittedPrefixText = ""
+        modernCommittedPrefixAudioEndMs = nil
+        modernCommittedPrefixCommitTime = nil
+        modernLastDraftRawText = ""
         lastModernAudioStartMs = nil
     }
 
@@ -2325,8 +2354,69 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         guard modernCommittedPrefixText.isEmpty == false else {
             return fullText
         }
-        if fullText.hasPrefix(modernCommittedPrefixText) {
-            return String(fullText.dropFirst(modernCommittedPrefixText.count))
+        // A re-covering hypothesis starts at (not after) the audio it
+        // re-covers. A hypothesis starting past the committed end belongs to
+        // a new analyzer window and must never be trimmed: e.g. "Okay."
+        // committed, then a new window "Okay, let's start." keeps its words.
+        // 250 ms covers stamp rounding between the two clocks. Without usable
+        // window timing on either side (dual-lane drafts carry none;
+        // range-less timer commits store none), use recency inside the same
+        // continuation window the commit history uses, plus draft continuity:
+        // hypotheses for one utterance arrive as a chain where each extends
+        // or restates the previous shown draft, so a hypothesis related to
+        // the last draft is the same window even long after the last commit,
+        // while an unrelated one opens a new window.
+        let fullKey = CaptionLexicalKey(fullText)
+        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
+
+        // A re-covering hypothesis restarts at the window start, so its audio
+        // start can sit past the recorded committed end (the commit covered
+        // only a leading clause) and fail the timing gate below. An anchored
+        // prefix match in either direction is proof of re-coverage on its own:
+        // the hypothesis begins with the committed text, or is itself a prefix
+        // of it. Gated on the committed key's length so a short commit cannot
+        // hide an independent utterance that merely shares its opening words.
+        let minimumReCover = modernCommittedPrefixText.containsCJKCharacters
+            ? Self.minimumCJKLeadingOverlapCharacters
+            : Self.minimumLatinLeadingOverlapCharacters
+        let reCoversCommitted = committedKey.count >= minimumReCover
+            && (fullKey.hasPrefix(committedKey) || committedKey.hasPrefix(fullKey))
+
+        let hasTiming = modernCommittedPrefixAudioEndMs != nil && lastModernAudioStartMs != nil
+        let sameWindow: Bool
+        if hasTiming {
+            sameWindow = isSameCommittedWindow(hypothesisStartMs: lastModernAudioStartMs)
+        } else if let commitTime = modernCommittedPrefixCommitTime {
+            let recent = Date().timeIntervalSince(commitTime) <= Self.committedPrefixContinuationWindow
+            let previousKey = CaptionLexicalKey(modernLastDraftRawText)
+            let continuous = previousKey.isEmpty == false
+                && (fullKey.hasPrefix(previousKey) || previousKey.hasPrefix(fullKey))
+            sameWindow = recent || continuous
+        } else {
+            sameWindow = false
+        }
+        guard sameWindow || reCoversCommitted else {
+            return fullText
+        }
+
+
+        // The analyzer keeps emitting volatile hypotheses for a window after
+        // part (or all) of it committed. Those hypotheses restart at the
+        // window start and re-cover committed text, often with different
+        // spacing or punctuation ("大家早安謝謝各位" vs committed
+        // "大家早安 ，謝謝各位。"). Compare on the shared lexical key and map
+        // the match back with remainder(afterKeyPrefix:), which stays correct
+        // for multi-scalar characters.
+        if committedKey.isEmpty == false, fullKey.hasPrefix(committedKey) {
+            // Re-cover plus new text: drop the committed span, keep the tail.
+            return String(fullKey.remainder(afterKeyPrefix: committedKey.count))
+        }
+        if committedKey.isEmpty == false, committedKey.hasPrefix(fullKey) {
+            // The hypothesis covers only committed audio so far, or carries no
+            // words at all (a bare "。" between windows): nothing new to show.
+            // Gated above so an independent utterance that merely shares an
+            // opening word is never hidden.
+            return ""
         }
 
         let committedSentences = splitRecognizedSentences(in: modernCommittedPrefixText)
@@ -2341,24 +2431,142 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return fullText
         }
 
-        let committedComparable = committedSentences.map(comparableCommittedSentenceText)
-        let fullComparable = fullSentences.map(comparableCommittedSentenceText)
+        let committedComparable = committedSentences.map { CaptionLexicalKey($0) }
+        let fullComparable = fullSentences.map { CaptionLexicalKey($0) }
         let maxOverlap = min(committedComparable.count, fullComparable.count)
 
         for overlap in stride(from: maxOverlap, through: 1, by: -1) {
             if Array(committedComparable.suffix(overlap)) == Array(fullComparable.prefix(overlap)) {
-                let matchedRange = fullSentenceRanges[overlap - 1]
-                let nextLocation = matchedRange.location + matchedRange.length
-                guard nextLocation < nsFullText.length else {
-                    return ""
-                }
-
-                return nsFullText.substring(from: nextLocation)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // Cut by key scalars, not the sentence range: the remainder
+                // starts at the next letter or digit, so a terminator that
+                // ended the matched sentence ("。", ".") never leaks onto the
+                // head of the pending tail.
+                let consumedScalars = fullComparable.prefix(overlap)
+                    .reduce(0) { $0 + $1.count }
+                return String(fullKey.remainder(afterKeyPrefix: consumedScalars))
             }
         }
 
+
         return fullText
+    }
+
+    /// Whether a hypothesis or commit starting at `startMs` (capture-time
+    /// milliseconds, nil when the path carries no timing) belongs to the
+    /// committed window. A re-cover starts at — not after — the audio it
+    /// re-covers, so a start past the committed end means a new window. Paths
+    /// without timing fall back to recency inside the commit history's own
+    /// continuation window.
+    private func isSameCommittedWindow(hypothesisStartMs: Int?) -> Bool {
+        if let committedEnd = modernCommittedPrefixAudioEndMs,
+           let hypothesisStart = hypothesisStartMs {
+            return hypothesisStart < committedEnd + Self.modernCommittedPrefixWindowEndSlackMs
+        }
+        if let commitTime = modernCommittedPrefixCommitTime {
+            return Date().timeIntervalSince(commitTime) <= Self.committedPrefixContinuationWindow
+        }
+        return false
+    }
+
+    /// Same-window verdict for a commit: timing when the path carries it,
+    /// plus an anchored re-cover check. A commit whose text re-covers the
+    /// committed window — any emission unit the committed key has as a
+    /// prefix — belongs to it even when the commit's audio start lands past
+    /// the recorded committed end (a window-final restarts at the window
+    /// start, which can sit past the end of a leading-clause commit). The
+    /// check is anchored: a unit is covered only as a prefix of the committed
+    /// key, never by substring containment.
+    private func isSameCommittedWindowOrReCover(hypothesisStartMs: Int?, text: String) -> Bool {
+        if isSameCommittedWindow(hypothesisStartMs: hypothesisStartMs) {
+            return true
+        }
+        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
+        guard committedKey.isEmpty == false else {
+            return false
+        }
+        return splitCommittedEmissionUnits(in: text).contains { unit in
+            let unitKey = CaptionLexicalKey(unit)
+            return unitKey.isEmpty == false && committedKey.hasPrefix(unitKey)
+        }
+    }
+
+    /// Whether committing `committedText` consumes the live draft. Both are
+    /// compared on their words past what the window already committed (a
+    /// cumulative commit or a re-covering draft restates that span first):
+    /// the commit finalizes the draft when those new words begin the same way,
+    /// even if recognition revised a later word. A commit that brings no new
+    /// words consumes only a draft that brought none either. Containment is not
+    /// consumption: a short draft ("我們") recurs inside older sentences, and
+    /// clearing it or reusing its ID for their restatement drops live words.
+    /// An empty draft is always consumed.
+    private func commitConsumesLiveDraft(committedText: String) -> Bool {
+        let draftKey = keyPastCommittedWindow(lastDraftText)
+        guard draftKey.isEmpty == false else {
+            return true
+        }
+        let commitKey = keyPastCommittedWindow(committedText)
+        guard commitKey.isEmpty == false else {
+            return false
+        }
+        let sharedOpening = zip(commitKey.scalars, draftKey.scalars).prefix { $0 == $1 }.count
+        return sharedOpening >= min(Self.draftConsumptionSharedOpening, commitKey.count, draftKey.count)
+    }
+
+    /// `text`'s lexical key with the committed window's words removed from its
+    /// head when it restates them.
+    private func keyPastCommittedWindow(_ text: String) -> CaptionLexicalKey {
+        let key = CaptionLexicalKey(text)
+        let windowKey = CaptionLexicalKey(modernCommittedPrefixText)
+        guard windowKey.isEmpty == false, key.hasPrefix(windowKey) else {
+            return key
+        }
+        return CaptionLexicalKey(String(key.remainder(afterKeyPrefix: windowKey.count)))
+    }
+
+    /// Capture-time end of a hypothesis range, or nil when the range is
+    /// unusable for window gating.
+    private func committedWindowEndMs(from range: CMTimeRange) -> Int? {
+        guard range.isValid, range.duration.isNumeric, range.end.isNumeric else {
+            return nil
+        }
+        return cmTimeMilliseconds(range.end)
+    }
+
+    /// Text to actually emit for a modern commit: `text` minus units the
+    /// committed window already covers, or nil when nothing fresh remains (a
+    /// pure replay finalizes nothing new). Outside the window, or with no
+    /// window yet, everything is fresh. A unit that extends the committed
+    /// text is kept whole so the provisional-to-final revision can merge it.
+    private func freshCommitText(_ text: String, sameWindow: Bool) -> String? {
+        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
+        guard committedKey.isEmpty == false, sameWindow else {
+            return text
+        }
+        let freshUnits = splitCommittedEmissionUnits(in: text)
+            .filter { !committedKey.hasPrefix(CaptionLexicalKey($0)) }
+        return freshUnits.isEmpty ? nil : freshUnits.joined(separator: " ")
+    }
+
+    /// Records `emitted` (post-suppression) in the window prefix, tracking
+    /// only words the window actually newly committed. `incoming` is the raw
+    /// commit text, used to tell a cumulative re-render (supersedes) from an
+    /// incremental commit (appends); a repeat keeps what is there. Outside
+    /// the window the commit re-anchors the prefix on its own words.
+    private func recordCommittedPrefix(emitted: String, incoming: String, sameWindow: Bool) {
+        guard sameWindow else {
+            modernCommittedPrefixText = emitted
+            return
+        }
+        let currentKey = CaptionLexicalKey(modernCommittedPrefixText)
+        let incomingKey = CaptionLexicalKey(incoming)
+        if currentKey.hasPrefix(incomingKey) {
+            return
+        }
+        if incomingKey.hasPrefix(currentKey) {
+            modernCommittedPrefixText = incoming
+        } else {
+            modernCommittedPrefixText += emitted
+        }
     }
 
     private func committableModernText(in rawText: String) -> (committedRawText: String, remainingRawText: String)? {
@@ -2737,27 +2945,69 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             )
             currentHeardLanguageID = resolved.languageID
             let text = resolved.text
-            cancelSilenceTimer()
-            cancelVADSilenceTimer()
-            resetModernTranscriptionState()
-            let committedDraftID = currentDraftId
-            resetDraftState()
             guard text.isEmpty == false else {
                 enqueuePartialDraft(nil)
                 return
             }
+            let commitRange = dualLaneCaptureAudioRange(step)
+            let commitStartMs: Int? = commitRange.flatMap { range in
+                range.isValid && range.start.isNumeric ? cmTimeMilliseconds(range.start) : nil
+            }
+            // The pairing hands over the lane's cumulative finalized text, so
+            // a commit can repeat spans the prefix already covers. Emit only
+            // uncovered units: a covered unit would re-commit an old sentence
+            // under the live draft's ID. The commit's own range gates this and
+            // stamps the window end, so same-window commits keep working no
+            // matter how many seconds apart they land; without timing, recency
+            // decides, and a commit outside the window re-anchors instead.
+            let sameDualWindow = isSameCommittedWindowOrReCover(
+                hypothesisStartMs: commitStartMs,
+                text: text
+            )
+            // One condition gates the draft's fate: whether this commit
+            // covers the live draft's words. A restatement of older sentences
+            // gets no draft ID and leaves the draft alone.
+            let consumesDraft = commitConsumesLiveDraft(committedText: text)
+            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
+            guard let textToEmit = freshCommitText(text, sameWindow: sameDualWindow) else {
+                if consumesDraft {
+                    cancelSilenceTimer()
+                    cancelVADSilenceTimer()
+                    resetDraftState()
+                    enqueuePartialDraft(nil)
+                }
+                return
+            }
+            let keptLatestText = latestModernText
+            let keptLastDraftRaw = modernLastDraftRawText
+            resetModernTranscriptionState()
+            if consumesDraft {
+                cancelSilenceTimer()
+                cancelVADSilenceTimer()
+                resetDraftState()
+            } else {
+                latestModernText = keptLatestText
+                modernLastDraftRawText = keptLastDraftRaw
+            }
+            recordCommittedPrefix(emitted: textToEmit, incoming: text, sameWindow: sameDualWindow)
+            // Never wipe a valid window end with a range-less commit; the
+            // recency fallback covers those.
+            if let endMs = commitRange.flatMap(committedWindowEndMs) {
+                modernCommittedPrefixAudioEndMs = endMs
+            }
+            modernCommittedPrefixCommitTime = Date()
             enqueueCommittedSequence(
                 [
                     CommittedEmission(
-                        text: text,
-                        promotionSegmentID: committedDraftID,
+                        text: textToEmit,
+                        promotionSegmentID: promotionID,
                         heardLanguageID: resolved.languageID,
                         dualLaneEvidence: step.evidence,
                         isProvisionalSilence: false,
-                        audioRange: dualLaneCaptureAudioRange(step)
+                        audioRange: commitRange
                     )
                 ],
-                clearDraftAfter: true
+                clearDraftAfter: consumesDraft
             )
             return
         }
@@ -2765,8 +3015,25 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         guard let draftText = step.draftText, draftText.isEmpty == false else {
             return
         }
+        // Dual-lane drafts are volatile hypotheses for the same analyzer
+        // window; trim any span that re-covers the committed prefix before it
+        // reaches the live draft row.
+        let pendingText = pendingModernText(from: draftText)
+        guard pendingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            latestModernText = ""
+            // The hypothesis covered only committed text; clear the draft
+            // only when its own words are what was committed.
+            if commitConsumesLiveDraft(committedText: modernCommittedPrefixText) {
+                resetDraftState()
+                enqueuePartialDraft(nil)
+            }
+            return
+        }
+        // Anchor the continuity chain on hypotheses actually shown, so a
+        // withdrawn draft does not break it.
+        modernLastDraftRawText = draftText
         let resolved = resolveHeardCaption(
-            text: draftText,
+            text: pendingText,
             heardLanguageID: heardLanguageID,
             evidence: nil
         )
@@ -2870,40 +3137,96 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             guard identity != lastModernCommittedResultIdentity else { return }
             lastModernCommittedResultIdentity = identity
 
-            cancelSilenceTimer()
-            cancelVADSilenceTimer()
             let fullUtteranceText = fullText
             let hypothesisStartMs = lastModernAudioStartMs
-            resetModernTranscriptionState()
-            let committedDraftID = currentDraftId
-            resetDraftState()
-
-            let textToEmit = fullUtteranceText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if textToEmit.isEmpty == false {
-                enqueueCommittedSequence(
-                    [
-                        CommittedEmission(
-                            text: textToEmit,
-                            promotionSegmentID: committedDraftID,
-                            heardLanguageID: currentHeardLanguageID,
-                            isProvisionalSilence: false,
-                            audioRange: captureAudioRange,
-                            audioStartMs: hypothesisStartMs
-                        )
-                    ],
-                    clearDraftAfter: true
-                )
-            } else {
-                enqueuePartialDraft(nil)
+            // A window-final re-covers the whole window, including sentences
+            // committed long ago (the commit history only retains 8 s).
+            // freshCommitText drops covered units so a replay never duplicates
+            // a live row under a fresh, hence untranslated, promotion; a final
+            // that opens a new window emits everything and re-anchors.
+            let finalStartMs: Int? = captureAudioRange.isValid && captureAudioRange.start.isNumeric
+                ? cmTimeMilliseconds(captureAudioRange.start) : nil
+            let sameFinalWindow = isSameCommittedWindowOrReCover(
+                hypothesisStartMs: finalStartMs,
+                text: fullUtteranceText
+            )
+            // One condition gates the draft's fate: whether this commit
+            // covers the live draft's words. Only a consuming commit takes
+            // the draft's ID, clears the row, and resets draft state; a
+            // restatement of older sentences leaves the draft alone.
+            let consumesDraft = commitConsumesLiveDraft(committedText: fullUtteranceText)
+            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
+            guard let textToEmit = freshCommitText(fullUtteranceText, sameWindow: sameFinalWindow) else {
+                // Pure replay: the window-final re-covered only committed
+                // text. Keep the committed prefix so later volatile
+                // hypotheses for this window still trim against it.
+                if consumesDraft {
+                    cancelSilenceTimer()
+                    cancelVADSilenceTimer()
+                    resetDraftState()
+                    enqueuePartialDraft(nil)
+                }
+                return
             }
+            let trimmedEmit = textToEmit.trimmingCharacters(in: .whitespacesAndNewlines)
+            let keptLatestText = latestModernText
+            let keptLastDraftRaw = modernLastDraftRawText
+            resetModernTranscriptionState()
+            guard trimmedEmit.isEmpty == false else {
+                if consumesDraft {
+                    cancelSilenceTimer()
+                    cancelVADSilenceTimer()
+                    resetDraftState()
+                    enqueuePartialDraft(nil)
+                }
+                return
+            }
+            if consumesDraft {
+                cancelSilenceTimer()
+                cancelVADSilenceTimer()
+                resetDraftState()
+            } else {
+                // The live draft survives: restore its pending text and the
+                // continuity anchor so it can still commit on silence.
+                latestModernText = keptLatestText
+                modernLastDraftRawText = keptLastDraftRaw
+            }
+            // Keep the committed window's text as the pending prefix: the
+            // analyzer keeps emitting volatile hypotheses for this window
+            // after isFinal, and they re-cover this text from its start.
+            recordCommittedPrefix(emitted: trimmedEmit, incoming: fullUtteranceText, sameWindow: sameFinalWindow)
+            if let endMs = committedWindowEndMs(from: captureAudioRange) {
+                modernCommittedPrefixAudioEndMs = endMs
+            }
+            modernCommittedPrefixCommitTime = now
+            enqueueCommittedSequence(
+                [
+                    CommittedEmission(
+                        text: trimmedEmit,
+                        promotionSegmentID: promotionID,
+                        heardLanguageID: currentHeardLanguageID,
+                        isProvisionalSilence: false,
+                        audioRange: captureAudioRange,
+                        audioStartMs: hypothesisStartMs
+                    )
+                ],
+                clearDraftAfter: consumesDraft
+            )
             return
         }
 
         guard text.isEmpty == false else {
             latestModernText = ""
-            cancelSilenceTimer()
-            cancelVADSilenceTimer()
-            enqueuePartialDraft(nil)
+            // An empty hypothesis carries no new text but says nothing about
+            // the draft's newer utterance — clearing it would vanish a live
+            // row for a frame. Clear only when the draft's own text is what
+            // was committed; otherwise leave the draft and its timers alone.
+            if commitConsumesLiveDraft(committedText: modernCommittedPrefixText) {
+                cancelSilenceTimer()
+                cancelVADSilenceTimer()
+                resetDraftState()
+                enqueuePartialDraft(nil)
+            }
             return
         }
 
@@ -2919,26 +3242,45 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 enqueuePartialDraft(nil)
                 return
             }
-            cancelSilenceTimer()
-            modernCommittedPrefixText += split.committedRawText
+            let fastStartMs: Int? = captureAudioRange.isValid && captureAudioRange.start.isNumeric
+                ? cmTimeMilliseconds(captureAudioRange.start) : nil
+            let sameFastWindow = isSameCommittedWindowOrReCover(
+                hypothesisStartMs: fastStartMs,
+                text: committedText
+            )
+            let consumesDraft = commitConsumesLiveDraft(committedText: committedText)
+            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
+            guard let freshText = freshCommitText(committedText, sameWindow: sameFastWindow) else {
+                latestModernText = split.remainingRawText
+                return
+            }
+            recordCommittedPrefix(emitted: freshText, incoming: split.committedRawText, sameWindow: sameFastWindow)
+            if let endMs = committedWindowEndMs(from: captureAudioRange) {
+                modernCommittedPrefixAudioEndMs = endMs
+            }
+            modernCommittedPrefixCommitTime = now
             latestModernText = split.remainingRawText
-            let committedDraftID = currentDraftId
-            resetDraftState()
+            if consumesDraft {
+                cancelSilenceTimer()
+                resetDraftState()
+            }
             enqueueCommittedSequence(
                 [
                     CommittedEmission(
-                        text: committedText,
-                        promotionSegmentID: committedDraftID,
+                        text: freshText,
+                        promotionSegmentID: promotionID,
                         isProvisionalSilence: true,
                         audioRange: captureAudioRange,
                         audioStartMs: lastModernAudioStartMs
                     )
                 ],
-                clearDraftAfter: true
+                clearDraftAfter: consumesDraft
             )
             return
         }
-
+        // Anchor the continuity chain (see pendingModernText) on hypotheses
+        // actually shown.
+        modernLastDraftRawText = fullText
         emitCorrectedDraft(text)
     }
 
@@ -3257,22 +3599,39 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 return
             }
 
-            modernCommittedPrefixText += committedRawText
+            // Same replay guard as finals: the timer can fire on a hypothesis
+            // that re-covers already-committed audio. No range fires this
+            // timer, so the last hypothesis start (plus recency) gates it; a
+            // commit outside the window re-anchors instead of appending.
+            let sameTimerWindow = isSameCommittedWindowOrReCover(
+                hypothesisStartMs: lastModernAudioStartMs,
+                text: text
+            )
+            let consumesDraft = commitConsumesLiveDraft(committedText: committedRawText)
+            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
+            guard let freshText = freshCommitText(text, sameWindow: sameTimerWindow) else {
+                latestModernText = remainingRawText
+                return
+            }
+            recordCommittedPrefix(emitted: freshText, incoming: committedRawText, sameWindow: sameTimerWindow)
             latestModernText = remainingRawText
-            let committedDraftID = currentDraftId
             let hypothesisStartMs = lastModernAudioStartMs
-            resetDraftState()
+            modernCommittedPrefixCommitTime = Date()
+            if consumesDraft {
+                resetDraftState()
+            }
             enqueueCommittedSequence(
                 [
                     CommittedEmission(
-                        text: text,
-                        promotionSegmentID: committedDraftID,
+                        text: freshText,
+                        promotionSegmentID: promotionID,
                         heardLanguageID: currentHeardLanguageID,
                         isProvisionalSilence: true,
                         audioStartMs: hypothesisStartMs
                     )
                 ],
-                clearDraftAfter: remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                clearDraftAfter: consumesDraft
+                    && remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
             return
         }
@@ -3529,6 +3888,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 #endif
 #if DEBUG
+    /// Opens the session without permission prompts or hardware capture. Audio then
+    /// arrives only through `appendInjectedAudioForTesting`, which enters the same
+    /// capture-queue path a microphone or application buffer takes: format
+    /// conversion, gain, VAD, diarization and the recognizer. Nothing is played.
+    var injectsAudioForTesting = false
+
+    func appendInjectedAudioForTesting(_ buffer: AVAudioPCMBuffer) {
+        captureQueue.async { [self] in
+            append(audioBuffer: buffer)
+        }
+    }
+
     @MainActor
     func prepareCommittedSentenceForEmissionForTesting(
         _ text: String,
@@ -3600,6 +3971,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     func backdateLastDraftTextChangeForTesting(secondsAgo: TimeInterval) {
         lastDraftTextChangeTime = Date().addingTimeInterval(-secondsAgo)
+    }
+
+    /// Drops the recent-commit history, modelling the passage of more than
+    /// the 8 s retention: a window-final that re-covers sentences committed
+    /// long ago must still not re-emit them.
+    @MainActor
+    func expireCommittedSentenceHistoryForTesting() {
+        recentCommittedSentenceHistory.removeAll()
     }
 #endif
 }
@@ -3937,6 +4316,14 @@ private extension LiveTranscriptionSession {
     static let minimumCJKLeadingOverlapCharacters = 4
     static let recentCommittedSentenceLimit = 6
     static let committedPrefixContinuationWindow: TimeInterval = 3.0
+    /// Stamp rounding between the committed window's end and a re-covering
+    /// hypothesis's start. A hypothesis starting past end + slack belongs to
+    /// a new window; overlapping windows plus a verbatim full-prefix repeat
+    /// remain indistinguishable locally and are documented at the call site.
+    static let modernCommittedPrefixWindowEndSlackMs = 250
+    /// Lexical scalars a commit's new words must share with the draft's opening
+    /// (or all of the shorter one) to finalize that draft.
+    static let draftConsumptionSharedOpening = 2
     static let dialogueClauseSeparators: Set<Character> = ["、", ",", "，"]
     static let japaneseDialogueClauseEndingSuffixes = [
         "ね", "よ", "の", "な", "さ", "わ", "ぞ", "ぜ", "かな", "かも", "だよ", "だね"

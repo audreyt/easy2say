@@ -72,6 +72,11 @@ final class AppModel: ObservableObject {
     private var readyCaptionTranslations: [UUID: String] = [:]
     private var captionTranslationWaiters: [UUID: [UUID: CheckedContinuation<String?, Never>]] = [:]
     private var displayedCaption: QueuedCaption?
+    /// Queued captions already painted, with the translation each paint showed
+    /// ("" for none). The draft handler paints ahead of the queue so a successor
+    /// draft never appears before its committed predecessor; the queue paints
+    /// only the rest, and for painted ones just waits and holds.
+    private var paintedCaptions: [UUID: String] = [:]
     private var isBootstrapping = true
     private var usesSystemInterfaceLanguage = true
     private var draftTranslationTask: Task<Void, Never>?
@@ -894,7 +899,11 @@ final class AppModel: ObservableObject {
             ) : []
             liveCaptionConfiguredSourceLanguageID = translationSourceLanguageID
             liveCaptionConfiguredTargetLanguageID = targetLanguageID
+#if DEBUG
+            let session = makeTranscriptionSessionForTesting?() ?? LiveTranscriptionSession()
+#else
             let session = LiveTranscriptionSession()
+#endif
             // Identity only. Capturing the session in the handler it is about to own
             // would retain it for the session's own lifetime.
             let sessionID = ObjectIdentifier(session)
@@ -2190,6 +2199,11 @@ final class AppModel: ObservableObject {
         let targetLanguage = Locale.Language(
             identifier: translationLocaleIdentifier(for: targetLanguageID)
         )
+#if DEBUG
+        if let translationAvailabilityForTesting {
+            return translationAvailabilityForTesting
+        }
+#endif
         let availability = LanguageAvailability()
         return await availability.status(from: sourceLanguage, to: targetLanguage)
     }
@@ -2251,6 +2265,12 @@ final class AppModel: ObservableObject {
             return
         }
 
+        // A draft may only appear once every caption committed before it is on
+        // screen. The queue paints asynchronously; without this the successor
+        // draft would take the draft slot while its committed predecessor is
+        // still unpainted, and that sentence would vanish for a frame.
+        paintPendingCaptionsBeforeDraft()
+
         cancelCommittedCaptionArchive()
         cancelPendingDraftClear()
         activeDraftSourceLanguageID = sourceLanguageID
@@ -2273,46 +2293,50 @@ final class AppModel: ObservableObject {
             draftStablePrefixLength = incomingStablePrefixLength
         }
         activeDraftUsesInverseGlossary = isReversed
-        if isReversed {
-            overlayState?.draftTranslatedText = draftText
-            overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
-            overlayState?.draftSourceText = nil
-            overlayState?.draftSourceStablePrefixLength = 0
-        } else {
-            overlayState?.draftSourceText = draftText
-            overlayState?.draftSourceStablePrefixLength = draftStablePrefixLength
-            overlayState?.clearDraftTranslationIfMismatched(
-                sourceText: draftText,
-                promotionID: draftPromotionID
-            )
-        }
-        overlayState?.draftPromotionID = draftPromotionID
-        overlayState?.draftAudioStartMs = draft?.audioHypothesisStartMs
-        overlayState?.draftSpeakerIndex = draft?.speakerIndex
-        overlayState?.sourceName = source.name
-        dismissListeningPlaceholderIfNeeded()
-
-        lastDraftStablePrefix = String(draftText.prefix(draftStablePrefixLength))
-
-        if shouldReserveDraftTranslationSlot(
+        let translatesDraft = shouldReserveDraftTranslationSlot(
             sourceLanguageID: sourceLanguageID,
             targetLanguageID: targetLanguageID
-        ) == false {
-            overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
+        )
+        let draftChanged = draftText != lastDraftTranslationSource
+            || draftPromotionID != lastDraftTranslationPromotionID
+            || source.id != lastDraftSourceID
+
+        updateOverlay { state in
+            if isReversed {
+                state.draftTranslatedText = draftText
+                state.draftTranslatedStablePrefixLength = draftStablePrefixLength
+                state.draftSourceText = nil
+                state.draftSourceStablePrefixLength = 0
+            } else {
+                state.draftSourceText = draftText
+                state.draftSourceStablePrefixLength = draftStablePrefixLength
+                keepDraftTranslation(continuing: draftText, promotionID: draftPromotionID, in: &state)
+            }
+            state.draftPromotionID = draftPromotionID
+            state.draftAudioStartMs = draft?.audioHypothesisStartMs
+            state.draftSpeakerIndex = draft?.speakerIndex
+            state.sourceName = source.name
+            dismissListeningPlaceholder(in: &state)
+
+            guard translatesDraft == false else { return }
+            state.draftTranslatedStablePrefixLength = draftStablePrefixLength
+            guard draftChanged else { return }
+            if isReversed {
+                state.draftSourceText = draftText
+                state.draftSourceStablePrefixLength = draftStablePrefixLength
+            } else {
+                state.setDraftTranslation(draftText, sourceText: draftText, promotionID: draftPromotionID)
+                state.draftTranslatedStablePrefixLength = draftStablePrefixLength
+            }
         }
-        guard draftText != lastDraftTranslationSource
-                || draftPromotionID != lastDraftTranslationPromotionID
-                || source.id != lastDraftSourceID else {
-            return
-        }
+
+        lastDraftStablePrefix = String(draftText.prefix(draftStablePrefixLength))
+        guard draftChanged else { return }
         lastDraftSourceID = source.id
         lastDraftTranslationSource = draftText
         lastDraftTranslationPromotionID = draftPromotionID
 
-        if shouldReserveDraftTranslationSlot(
-            sourceLanguageID: sourceLanguageID,
-            targetLanguageID: targetLanguageID
-        ) {
+        if translatesDraft {
             scheduleDraftTranslation(
                 for: draftText,
                 promotionID: draftPromotionID,
@@ -2324,21 +2348,30 @@ final class AppModel: ObservableObject {
             draftTranslationTask?.cancel()
             draftTranslationTask = nil
             draftTranslationGeneration &+= 1
-            if isReversed {
-                overlayState?.draftTranslatedText = draftText
-                overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
-                overlayState?.draftSourceText = draftText
-                overlayState?.draftSourceStablePrefixLength = draftStablePrefixLength
-            } else {
-                overlayState?.setDraftTranslation(
-                    draftText,
-                    sourceText: draftText,
-                    promotionID: draftPromotionID
-                )
-                overlayState?.draftTranslatedStablePrefixLength = draftStablePrefixLength
-            }
         }
     }
+
+    /// Keeps the draft translation while the draft still says the words it was
+    /// made for, possibly followed by more: a new producer ID for the same
+    /// utterance adopts it. It stays bound to the text it translates and, once
+    /// those are no longer exactly the draft's words, renders fully provisional.
+    private func keepDraftTranslation(
+        continuing draftText: String,
+        promotionID: UUID?,
+        in state: inout OverlayPreviewState
+    ) {
+        guard state.draftTranslatedText != nil else { return }
+        let madeForKey = CaptionLexicalKey(state.draftTranslationSourceText ?? "")
+        let draftKey = CaptionLexicalKey(draftText)
+        if madeForKey.isEmpty == false, draftKey.hasPrefix(madeForKey) {
+            state.draftTranslationPromotionID = promotionID
+        }
+        state.clearDraftTranslationIfMismatched(sourceText: draftText, promotionID: promotionID)
+        if state.draftTranslatedText != nil, draftKey != madeForKey {
+            state.draftTranslatedStablePrefixLength = 0
+        }
+    }
+
     private func scheduleDraftClear() {
         draftClearTask?.cancel()
         draftClearGeneration &+= 1
@@ -2369,14 +2402,14 @@ final class AppModel: ObservableObject {
     }
 
     private func clearDraftOverlay() {
+        updateOverlay { $0.clearDraftLayer() }
+        resetDraftPipeline()
+    }
+
+    /// Draft bookkeeping outside the overlay state; pairs with `clearDraftLayer()`.
+    private func resetDraftPipeline() {
         draftClearTask?.cancel()
         draftClearTask = nil
-        overlayState?.draftSourceText = nil
-        overlayState?.draftSourceStablePrefixLength = 0
-        overlayState?.draftPromotionID = nil
-        overlayState?.draftAudioStartMs = nil
-        overlayState?.draftSpeakerIndex = nil
-        overlayState?.clearDraftTranslation()
         activeDraftSourceLanguageID = nil
         activeDraftTargetLanguageID = nil
         activeDraftUsesInverseGlossary = false
@@ -2388,6 +2421,7 @@ final class AppModel: ObservableObject {
         draftTranslationTask = nil
         draftTranslationGeneration &+= 1
     }
+
     private func scheduleDraftTranslation(
         for text: String,
         promotionID: UUID?,
@@ -2413,18 +2447,16 @@ final class AppModel: ObservableObject {
                     return
                 }
                 let stablePrefixLength = min(lastDraftStablePrefix.count, text.count)
-                if usesInverseGlossary {
-                    overlayState?.draftTranslatedText = text
-                    overlayState?.draftTranslatedStablePrefixLength = stablePrefixLength
-                    overlayState?.draftSourceText = text
-                    overlayState?.draftSourceStablePrefixLength = stablePrefixLength
-                } else {
-                    overlayState?.setDraftTranslation(
-                        text,
-                        sourceText: text,
-                        promotionID: promotionID
-                    )
-                    overlayState?.draftTranslatedStablePrefixLength = stablePrefixLength
+                updateOverlay { state in
+                    if usesInverseGlossary {
+                        state.draftTranslatedText = text
+                        state.draftTranslatedStablePrefixLength = stablePrefixLength
+                        state.draftSourceText = text
+                        state.draftSourceStablePrefixLength = stablePrefixLength
+                    } else {
+                        state.setDraftTranslation(text, sourceText: text, promotionID: promotionID)
+                        state.draftTranslatedStablePrefixLength = stablePrefixLength
+                    }
                 }
                 return
             }
@@ -2463,11 +2495,13 @@ final class AppModel: ObservableObject {
                     sourceLanguageID: sourceLanguageID,
                     targetLanguageID: targetLanguageID
                 ) == false {
-                    overlayState?.setDraftTranslation(
-                        resolvedTranslation,
-                        sourceText: translation.sourceText,
-                        promotionID: promotionID
-                    )
+                    updateOverlay {
+                        $0.setDraftTranslation(
+                            resolvedTranslation,
+                            sourceText: translation.sourceText,
+                            promotionID: promotionID
+                        )
+                    }
                 }
             }
         }
@@ -2477,83 +2511,89 @@ final class AppModel: ObservableObject {
 
     /// Archives the current committed caption, then clears the live overlay text.
     private func clearOverlayText() {
-        if let currentCaption = currentCommittedCaptionHistoryPayload() {
-            rememberArchivedCaption(
-                sourceText: currentCaption.sourceText,
-                promotionID: displayedCaption?.promotionID
-            )
-            appendOverlayHistoryEntry(
-                captionID: displayedCaption?.id,
-                translatedText: currentCaption.translatedText,
-                sourceText: currentCaption.sourceText,
-                speakerIndex: overlayState?.committedSpeakerIndex
-            )
-        }
         cancelCommittedCaptionArchive()
-        clearDraftOverlay()
-        overlayState?.translatedText = ""
-        overlayState?.sourceText = ""
-        overlayState?.committedPromotionID = nil
-        overlayState?.committedCaptionID = nil
+        updateOverlay { state in
+            archiveCommittedCaption(displayedCaption, in: &state)
+            state.clearDraftLayer()
+            state.translatedText = ""
+            state.sourceText = ""
+            state.pendingTranslation = nil
+            state.committedPromotionID = nil
+            state.committedCaptionID = nil
+        }
+        resetDraftPipeline()
         displayedCaption = nil
         displayedCaptionLastVisualUpdateAt = Date.distantPast
         displayedCaptionLastVisualUpdateWasLateTranslation = false
     }
 
-    /// Archives the currently committed caption into the scrollback history before
-    /// the next sentence replaces it.
-    private func capturePreviousCaption() {
-        guard let currentCaption = currentCommittedCaptionHistoryPayload() else { return }
-        rememberArchivedCaption(
-            sourceText: currentCaption.sourceText,
-            promotionID: displayedCaption?.promotionID
-        )
+    /// Moves `displayed`, the caption in the committed lane of `state`, into the
+    /// scrollback history before something replaces it.
+    private func archiveCommittedCaption(_ displayed: QueuedCaption?, in state: inout OverlayPreviewState) {
+        guard let archived = committedCaptionHistoryPayload(of: displayed, in: state) else { return }
+        rememberArchivedCaption(sourceText: archived.sourceText, promotionID: displayed?.promotionID)
         appendOverlayHistoryEntry(
-            captionID: displayedCaption?.id,
-            translatedText: currentCaption.translatedText,
-            sourceText: currentCaption.sourceText,
-            speakerIndex: overlayState?.committedSpeakerIndex
+            captionID: displayed?.id,
+            translatedText: archived.translatedText,
+            sourceText: archived.sourceText,
+            speakerIndex: state.committedSpeakerIndex,
+            to: &state
         )
     }
 
+    /// Writes the committed lane and publishes once. `update` runs on the same
+    /// state first, before the lane changes, so a paint can archive the caption
+    /// it replaces. `pendingTranslation` replaces any in-flight placeholder.
     private func updateCommittedOverlay(
         translatedText: String,
         sourceText: String,
+        pendingTranslation: OverlayPreviewState.PendingTranslation? = nil,
         promotionID: UUID? = nil,
         captionID: UUID? = nil,
         bumpEpoch: Bool = false,
         lateTranslation: Bool = false,
         audioStartMs: Int? = nil,
         assignCommittedAudioStart: Bool = false,
-        speakerIndex: Int? = nil
+        speakerIndex: Int? = nil,
+        alongside update: (inout OverlayPreviewState) -> Void = { _ in }
     ) {
-        if overlayState == nil {
-            overlayState = OverlayPreviewState(
-                translatedText: translatedText,
-                sourceText: sourceText,
-                sourceName: displayedCaption?.sourceName ?? ""
-            )
-        } else {
-            overlayState?.translatedText = translatedText
-            overlayState?.sourceText = sourceText
-        }
-        overlayState?.showsDraftCaptions = liveDraftCaptions
-
+        var state = overlayState ?? OverlayPreviewState(
+            translatedText: "",
+            sourceText: "",
+            sourceName: displayedCaption?.sourceName ?? ""
+        )
+        update(&state)
+        state.translatedText = translatedText
+        state.sourceText = sourceText
+        state.pendingTranslation = pendingTranslation
+        state.showsDraftCaptions = liveDraftCaptions
         if bumpEpoch {
-            overlayState?.captionEpoch = (overlayState?.captionEpoch ?? 0) + 1
+            state.captionEpoch += 1
         }
         if let promotionID {
-            overlayState?.committedPromotionID = promotionID
+            state.committedPromotionID = promotionID
         }
         if let captionID {
-            overlayState?.committedCaptionID = captionID
+            state.committedCaptionID = captionID
         }
         if assignCommittedAudioStart {
-            overlayState?.committedAudioStartMs = audioStartMs
-            overlayState?.committedSpeakerIndex = speakerIndex
+            state.committedAudioStartMs = audioStartMs
+            state.committedSpeakerIndex = speakerIndex
         }
+        overlayState = state
         displayedCaptionLastVisualUpdateAt = Date()
         displayedCaptionLastVisualUpdateWasLateTranslation = lateTranslation
+    }
+
+    /// Applies one logical caption update and publishes it once. The audience
+    /// display folds every published `overlayState` into the rows it retains, so
+    /// field-by-field writes would hand it states no viewer should see.
+    private func updateOverlay(_ update: (inout OverlayPreviewState) -> Void) {
+        guard var state = overlayState else { return }
+        update(&state)
+        if state != overlayState {
+            overlayState = state
+        }
     }
 
     // MARK: - Settings sync
@@ -2601,16 +2641,11 @@ final class AppModel: ObservableObject {
                 draftTranslationTask?.cancel()
                 draftTranslationTask = nil
                 draftTranslationGeneration &+= 1
-                let mirroredStablePrefixLength = min(
-                    overlayState?.draftSourceStablePrefixLength ?? 0,
-                    draftText.count
-                )
-                overlayState?.setDraftTranslation(
-                    draftText,
-                    sourceText: draftText,
-                    promotionID: overlayState?.draftPromotionID
-                )
-                overlayState?.draftTranslatedStablePrefixLength = mirroredStablePrefixLength
+                updateOverlay { state in
+                    let mirroredStablePrefixLength = min(state.draftSourceStablePrefixLength, draftText.count)
+                    state.setDraftTranslation(draftText, sourceText: draftText, promotionID: state.draftPromotionID)
+                    state.draftTranslatedStablePrefixLength = mirroredStablePrefixLength
+                }
             }
         } else {
             draftTranslationTask?.cancel()
@@ -2703,7 +2738,6 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            let promotedDraftTranslation = promotedDraftTranslationSnapshot(for: sentence.promotionSegmentID)
             markDraftPromotionFinalized(promotionID)
             cancelCommittedCaptionArchive()
 
@@ -2728,7 +2762,6 @@ final class AppModel: ObservableObject {
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
                 usesInverseGlossary: usesInverseGlossary,
-                promotedDraftTranslation: promotedDraftTranslation,
                 audioStartMs: sentence.audioStartMs,
                 speakerIndex: sentence.speakerIndex
             )
@@ -2773,8 +2806,7 @@ final class AppModel: ObservableObject {
                 sourceName: source.name,
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
-                usesInverseGlossary: usesInverseGlossary,
-                promotedDraftTranslation: nil
+                usesInverseGlossary: usesInverseGlossary
             )
             captionIDByPromotionID[promotionID] = caption.id
             if usesInverseGlossary {
@@ -2796,11 +2828,14 @@ final class AppModel: ObservableObject {
             )
         }
 
-        // Keep the currently displayed caption plus up to two fresh arrivals.
-        // This avoids losing the first sentence when a single ASR result is split
-        // into two back-to-back captions.
-        while pendingCaptions.count > 3 {
-            let dropped = pendingCaptions.remove(at: 1)
+        // Keep the queue head plus up to two unpainted arrivals. This avoids
+        // losing the first sentence when a single ASR result is split into two
+        // back-to-back captions. A painted caption is already on screen or in
+        // history; only the queue retires it.
+        while case let unpainted = pendingCaptions.indices.dropFirst().filter({
+            paintedCaptions[pendingCaptions[$0].id] == nil
+        }), unpainted.count > 2 {
+            let dropped = pendingCaptions.remove(at: unpainted[0])
             captionTranslationTasks[dropped.id]?.cancel()
             captionTranslationTasks.removeValue(forKey: dropped.id)
             updateReadyCaptionTranslation(nil, for: dropped.id)
@@ -2849,7 +2884,6 @@ final class AppModel: ObservableObject {
             let captionID = current.id
             captionIDByPromotionID[newPromotionID] = captionID
             let newRevision = (current.revision &+ 1)
-            let promotedDraft = promotedDraftTranslationSnapshot(for: newPromotionID)
             let updatedCaption = QueuedCaption(
                 id: captionID,
                 promotionID: newPromotionID,
@@ -2858,7 +2892,6 @@ final class AppModel: ObservableObject {
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
                 usesInverseGlossary: usesInverseGlossary,
-                promotedDraftTranslation: promotedDraft,
                 revision: newRevision
             )
             displayedCaption = updatedCaption
@@ -2870,28 +2903,26 @@ final class AppModel: ObservableObject {
             }
 
             let translationExpected = sourceLanguageID != targetLanguageID
-            let initialTranslation = promotedDraft
+            let reused = reusableLiveTranslation(for: updatedCaption, revising: current)
+            let translation = reused.settled ?? (translationExpected ? "" : sourceText)
             let panes = languagePanes(
                 heard: sourceText,
-                translated: initialTranslation ?? (translationExpected ? "" : sourceText),
+                translated: translation,
                 usesInverseGlossary: usesInverseGlossary
             )
             updateCommittedOverlay(
                 translatedText: panes.translatedText,
                 sourceText: panes.sourceText,
+                pendingTranslation: reused.pending,
                 promotionID: newPromotionID,
                 captionID: captionID
-            )
-            upsertTranscriptEntry(
-                id: captionID,
-                sourceText: sourceText,
-                translatedText: initialTranslation ?? (translationExpected ? "" : sourceText)
-            )
-
-            if let hIndex = overlayState?.history.lastIndex(where: { $0.id == captionID }) {
-                overlayState?.history[hIndex].sourceText = panes.sourceText
-                overlayState?.history[hIndex].translatedText = panes.translatedText
+            ) { state in
+                if let hIndex = state.history.lastIndex(where: { $0.id == captionID }) {
+                    state.history[hIndex].sourceText = panes.sourceText
+                    state.history[hIndex].translatedText = panes.translatedText
+                }
             }
+            upsertTranscriptEntry(id: captionID, sourceText: sourceText, translatedText: translation)
 
             cancelCommittedCaptionArchive()
             translateCaption(updatedCaption)
@@ -2908,14 +2939,15 @@ final class AppModel: ObservableObject {
             return true
         }
 
-        // Case 2: Caption waiting in pendingCaptions is being revised
+        // Case 2: Caption waiting unpainted in pendingCaptions is being revised.
+        // A painted one is on screen (Case 1) or already archived (Case 3).
         if let index = pendingCaptions.firstIndex(where: {
-            $0.promotionID == replacesID || $0.id == replacesID || $0.id == targetCaptionID
+            paintedCaptions[$0.id] == nil
+                && ($0.promotionID == replacesID || $0.id == replacesID || $0.id == targetCaptionID)
         }) {
             let old = pendingCaptions[index]
             captionIDByPromotionID[newPromotionID] = old.id
             let newRevision = (old.revision &+ 1)
-            let promotedDraft = promotedDraftTranslationSnapshot(for: newPromotionID)
             let updated = QueuedCaption(
                 id: old.id,
                 promotionID: newPromotionID,
@@ -2924,7 +2956,6 @@ final class AppModel: ObservableObject {
                 sourceLanguageID: sourceLanguageID,
                 targetLanguageID: targetLanguageID,
                 usesInverseGlossary: usesInverseGlossary,
-                promotedDraftTranslation: promotedDraft,
                 revision: newRevision
             )
             pendingCaptions[index] = updated
@@ -2950,21 +2981,38 @@ final class AppModel: ObservableObject {
         }
 
         // Case 3: Caption was already archived in history
-        if let hIndex = overlayState?.history.lastIndex(where: { $0.id == targetCaptionID || $0.id == replacesID }) {
-            let captionID = overlayState!.history[hIndex].id
+        if let entry = overlayState?.history.last(where: { $0.id == targetCaptionID || $0.id == replacesID }) {
+            let captionID = entry.id
             captionIDByPromotionID[newPromotionID] = captionID
             let translationExpected = sourceLanguageID != targetLanguageID
+            // A revision that only changed spacing, punctuation or case keeps
+            // the archived translation; any other revision blanks it.
+            func keptTranslation(_ translatedText: String, madeFor sourceTextBefore: String) -> String {
+                guard translationExpected else { return sourceText }
+                guard usesInverseGlossary == false else { return "" }
+                return reusableTranslation(
+                    for: sourceText,
+                    persistable: [.init(text: translatedText, sourceText: sourceTextBefore)]
+                ).settled ?? ""
+            }
             let panes = languagePanes(
                 heard: sourceText,
-                translated: translationExpected ? "" : sourceText,
+                translated: keptTranslation(entry.translatedText, madeFor: entry.sourceText),
                 usesInverseGlossary: usesInverseGlossary
             )
-            overlayState?.history[hIndex].sourceText = panes.sourceText
-            overlayState?.history[hIndex].translatedText = panes.translatedText
+            updateOverlay { state in
+                guard let hIndex = state.history.lastIndex(where: { $0.id == captionID }) else { return }
+                state.history[hIndex].sourceText = panes.sourceText
+                state.history[hIndex].translatedText = panes.translatedText
+            }
 
             if let tIndex = transcriptEntries.firstIndex(where: { $0.id == captionID }) {
+                let before = transcriptEntries[tIndex]
                 transcriptEntries[tIndex].sourceText = sourceText
-                transcriptEntries[tIndex].translatedText = translationExpected ? "" : sourceText
+                transcriptEntries[tIndex].translatedText = keptTranslation(
+                    before.translatedText,
+                    madeFor: before.sourceText
+                )
             }
             if translationExpected {
                 translateHistoryRevision(
@@ -3143,6 +3191,7 @@ final class AppModel: ObservableObject {
         cancelCaptionTranslations()
         resumeAllCaptionTranslationWaiters()
         pendingCaptions.removeAll()
+        paintedCaptions.removeAll()
         readyCaptionTranslations.removeAll()
         translationRevisions.removeAll()
         inverseGlossaryCaptionIDs.removeAll()
@@ -3200,6 +3249,7 @@ final class AppModel: ObservableObject {
                 if let index = pendingCaptions.firstIndex(where: { $0.id == captionID }) {
                     if pendingCaptions[index].revision <= startRevision {
                         pendingCaptions.remove(at: index)
+                        paintedCaptions.removeValue(forKey: captionID)
                     }
                 }
                 if displayedCaption?.id != captionID || displayedCaption?.revision == startRevision {
@@ -3207,59 +3257,29 @@ final class AppModel: ObservableObject {
                 }
             }
 
-            // Archive the current caption before the next sentence replaces it.
-            capturePreviousCaption()
-
-            // Use the best available translation for the initial committed display:
-            // 1. Pre-computed caption translation (if ready)
-            // 2. Draft translation captured at the promotion moment
-            // 3. Leave the translated slot empty until the final translation arrives
-            let earlyTranslation = readyCaptionTranslations[caption.id]
-            let initialTranslation = earlyTranslation
-                ?? (caption.promotedDraftTranslation?.isEmpty == false ? caption.promotedDraftTranslation : nil)
+            if paintedCaptions[captionID] == nil {
+                paintCommittedCaption(caption)
+            } else if displayedCaption?.id != captionID {
+                // Painted ahead of its turn and already replaced by a later
+                // caption: it is in history, where a late translation still
+                // backfills it.
+                continue
+            }
+            let initialTranslation = paintedCaptions[captionID].flatMap { $0.isEmpty ? nil : $0 }
             let translationExpected = caption.sourceLanguageID != caption.targetLanguageID
 
-            cancelCommittedCaptionArchive()
-            displayedCaption = caption
-
-            // The presentation keeps the draft and committed phases in one stable
-            // caption slot; promotion only changes its content and color.
-            let panes = languagePanes(
-                heard: caption.sourceText,
-                translated: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
-                usesInverseGlossary: caption.usesInverseGlossary
-            )
-            updateCommittedOverlay(
-                translatedText: panes.translatedText,
-                sourceText: panes.sourceText,
-                promotionID: caption.promotionID,
-                captionID: caption.id,
-                bumpEpoch: true,
-                audioStartMs: caption.audioStartMs,
-                assignCommittedAudioStart: true,
-                speakerIndex: caption.speakerIndex
-            )
-            upsertTranscriptEntry(
-                id: caption.id,
-                sourceText: caption.sourceText,
-                translatedText: initialTranslation ?? (translationExpected ? "" : caption.sourceText),
-                speakerIndex: caption.speakerIndex
-            )
-            overlayState?.sourceName = caption.sourceName
-            clearDraftOverlay()
-
             let finalTranslation: String?
-            if let earlyTranslation {
+            if let earlyTranslation = readyCaptionTranslations[captionID] {
                 finalTranslation = earlyTranslation
             } else {
                 // Dynamic wait: base 3s + 1s per 30 chars, capped at 15s
                 let captionCharCount = caption.sourceText.count
                 let waitTimeout = min(max(3.0, 3.0 + Double(captionCharCount / 30) * 1.0), 15.0)
-                let waited = await waitForTranslatedCaption(id: caption.id, timeout: waitTimeout)
+                let waited = await waitForTranslatedCaption(id: captionID, timeout: waitTimeout)
                 // Race fallback: the timeout may have resumed our waiter with nil at the
                 // same moment the translation finished and ran applyLateCaptionTranslation.
                 // Re-read the ready map so we don't clobber a just-applied backfill below.
-                finalTranslation = waited ?? readyCaptionTranslations[caption.id]
+                finalTranslation = waited ?? readyCaptionTranslations[captionID]
             }
 
             guard isCaptionPipelineActive else { break }
@@ -3334,9 +3354,146 @@ final class AppModel: ObservableObject {
                 initialHoldDuration: holdDuration
             )
             if completedHold == false {
-                break
+                // Replaced by a later caption (or stopping, which the loop
+                // guards catch): the queue keeps draining.
+                continue
             }
         }
+    }
+
+    /// Paints `caption` into the live slot in one overlay update: archives the
+    /// caption it replaces, shows the best translation already known for its
+    /// words, and clears the draft only when that draft is the one it promoted.
+    private func paintCommittedCaption(_ caption: QueuedCaption) {
+        let translationExpected = caption.sourceLanguageID != caption.targetLanguageID
+        let readyTranslation = readyCaptionTranslations[caption.id]
+        let reused = readyTranslation == nil
+            ? reusableLiveTranslation(for: caption)
+            : (settled: nil, pending: nil)
+        let initialTranslation = readyTranslation ?? reused.settled
+        let translation = initialTranslation ?? (translationExpected ? "" : caption.sourceText)
+
+        let previous = displayedCaption
+        if let previous, previous.id != caption.id {
+            // The queue may be waiting on the replaced caption's translation;
+            // it is no longer shown, so stop waiting.
+            resumeCaptionTranslationWaiters(for: previous.id, translatedText: nil)
+        }
+        cancelCommittedCaptionArchive()
+        displayedCaption = caption
+        paintedCaptions[caption.id] = initialTranslation ?? ""
+
+        let promotesDraft = overlayState?.draftPromotionID == caption.promotionID
+        let panes = languagePanes(
+            heard: caption.sourceText,
+            translated: translation,
+            usesInverseGlossary: caption.usesInverseGlossary
+        )
+        updateCommittedOverlay(
+            translatedText: panes.translatedText,
+            sourceText: panes.sourceText,
+            pendingTranslation: reused.pending,
+            promotionID: caption.promotionID,
+            captionID: caption.id,
+            bumpEpoch: true,
+            audioStartMs: caption.audioStartMs,
+            assignCommittedAudioStart: true,
+            speakerIndex: caption.speakerIndex
+        ) { state in
+            archiveCommittedCaption(previous, in: &state)
+            state.sourceName = caption.sourceName
+            if promotesDraft {
+                state.clearDraftLayer()
+            }
+        }
+        if promotesDraft {
+            resetDraftPipeline()
+        }
+        upsertTranscriptEntry(
+            id: caption.id,
+            sourceText: caption.sourceText,
+            translatedText: translation,
+            speakerIndex: caption.speakerIndex
+        )
+    }
+
+    /// Paints every caption still waiting in the queue, in order, so a
+    /// successor draft never shows while its committed predecessor is absent.
+    /// The queue still waits for the translation of, and holds, whichever
+    /// ends up displayed.
+    private func paintPendingCaptionsBeforeDraft() {
+        for caption in pendingCaptions where paintedCaptions[caption.id] == nil {
+            paintCommittedCaption(caption)
+        }
+    }
+
+    /// A translation already on screen that can stand in for `caption`'s own
+    /// while that is in flight: the translation of the draft it promotes and,
+    /// when it revises the displayed caption, that caption's translation or
+    /// both joined, if the revision absorbed the draft's words.
+    private func reusableLiveTranslation(
+        for caption: QueuedCaption,
+        revising displayed: QueuedCaption? = nil
+    ) -> (settled: String?, pending: OverlayPreviewState.PendingTranslation?) {
+        guard caption.sourceLanguageID != caption.targetLanguageID,
+              caption.usesInverseGlossary == false,
+              displayed?.usesInverseGlossary != true,
+              let state = overlayState else {
+            return (nil, nil)
+        }
+        typealias Candidate = OverlayPreviewState.PendingTranslation
+        var persistable: [Candidate] = []
+        var displayOnly: [Candidate] = []
+        let draft: Candidate? = state.draftSourceText != nil
+            && state.draftTranslationPromotionID == caption.promotionID
+            ? state.draftTranslatedText.flatMap { text in
+                state.draftTranslationSourceText.map { Candidate(text: text, sourceText: $0) }
+            }
+            : nil
+        if let draft {
+            persistable.append(draft)
+        }
+        let committed = state.translatedText.isEmpty
+            ? state.visiblePendingTranslation
+            : Candidate(text: state.translatedText, sourceText: state.sourceText)
+        if displayed != nil, let committed {
+            if state.translatedText.isEmpty {
+                displayOnly.append(committed)
+            } else {
+                persistable.append(committed)
+            }
+            if let draft {
+                let joined = { (leading: String, trailing: String) in
+                    leading + LiveCaptionTextStability.separator(between: leading, and: trailing) + trailing
+                }
+                displayOnly.append(Candidate(
+                    text: joined(committed.text, draft.text),
+                    sourceText: joined(committed.sourceText, draft.sourceText)
+                ))
+            }
+        }
+        return reusableTranslation(for: caption.sourceText, persistable: persistable, displayOnly: displayOnly)
+    }
+
+    /// Chooses, among translations made for other text, one that can stand in
+    /// for `sourceText`'s own: `settled` when a persistable one was made for the
+    /// same words (spacing, punctuation and case aside), else `pending`, the one
+    /// made for the most of the words `sourceText` begins with, to show dimmed
+    /// and never persist. A translation of different words is neither.
+    private func reusableTranslation(
+        for sourceText: String,
+        persistable: [OverlayPreviewState.PendingTranslation],
+        displayOnly: [OverlayPreviewState.PendingTranslation] = []
+    ) -> (settled: String?, pending: OverlayPreviewState.PendingTranslation?) {
+        let key = CaptionLexicalKey(sourceText)
+        let candidates = (persistable.map { ($0, true) } + displayOnly.map { ($0, false) })
+            .filter { sanitizedDisplayText($0.0.text).isEmpty == false }
+            .map { (candidate: $0.0, persists: $0.1, madeFor: CaptionLexicalKey($0.0.sourceText)) }
+            .filter { $0.madeFor.isEmpty == false && key.hasPrefix($0.madeFor) }
+        if let same = candidates.first(where: { $0.persists && $0.madeFor == key }) {
+            return (sanitizedDisplayText(same.candidate.text), nil)
+        }
+        return (nil, candidates.max { $0.madeFor.count < $1.madeFor.count }?.candidate)
     }
 
     private func normalizedCaptionText(_ text: String) -> String {
@@ -3474,22 +3631,6 @@ final class AppModel: ObservableObject {
             time: Date(),
             promotionID: promotionID
         )
-    }
-
-    private func promotedDraftTranslationSnapshot(for promotionID: UUID?) -> String? {
-        guard let promotionID,
-              let state = overlayState,
-              let draftText = state.draftSourceText,
-              state.draftPromotionID == promotionID,
-              let currentDraftTranslation = state.visibleDraftTranslatedText(
-                  for: draftText,
-                  promotionID: promotionID
-              ) else {
-            return nil
-        }
-
-        let draftTranslation = sanitizedDisplayText(currentDraftTranslation)
-        return draftTranslation.isEmpty ? nil : draftTranslation
     }
 
     private func markDraftPromotionFinalized(_ id: UUID) {
@@ -3719,6 +3860,22 @@ final class AppModel: ObservableObject {
         var didApplyTranslation = false
         var didApplyDisplayedTranslation = false
 
+        let historyPanes = transcriptEntries.first(where: { $0.id == captionID }).map {
+            languagePanes(
+                heard: $0.sourceText,
+                translated: translatedText,
+                usesInverseGlossary: inverseGlossaryCaptionIDs.contains(captionID)
+            )
+        }
+        let backfillsHistory = overlayState?.history.contains(where: { $0.id == captionID }) == true
+        let backfillHistory = { (state: inout OverlayPreviewState) in
+            guard let index = state.history.lastIndex(where: { $0.id == captionID }) else { return }
+            state.history[index].translatedText = historyPanes?.translatedText ?? translatedText
+            if let historyPanes {
+                state.history[index].sourceText = historyPanes.sourceText
+            }
+        }
+
         if displayedCaption?.id == captionID,
            let caption = displayedCaption {
             let panes = languagePanes(
@@ -3729,24 +3886,15 @@ final class AppModel: ObservableObject {
             updateCommittedOverlay(
                 translatedText: panes.translatedText,
                 sourceText: panes.sourceText,
-                lateTranslation: true
+                lateTranslation: true,
+                alongside: backfillHistory
             )
             didApplyTranslation = true
             didApplyDisplayedTranslation = true
+        } else if backfillsHistory {
+            updateOverlay(backfillHistory)
         }
-
-        if let index = overlayState?.history.lastIndex(where: { $0.id == captionID }) {
-            if let transcriptEntry = transcriptEntries.first(where: { $0.id == captionID }) {
-                let panes = languagePanes(
-                    heard: transcriptEntry.sourceText,
-                    translated: translatedText,
-                    usesInverseGlossary: inverseGlossaryCaptionIDs.contains(captionID)
-                )
-                overlayState?.history[index].translatedText = panes.translatedText
-                overlayState?.history[index].sourceText = panes.sourceText
-            } else {
-                overlayState?.history[index].translatedText = translatedText
-            }
+        if backfillsHistory {
             didApplyTranslation = true
         }
         if let index = transcriptEntries.firstIndex(where: { $0.id == captionID }),
@@ -4064,7 +4212,7 @@ final class AppModel: ObservableObject {
               isCaptionPipelineActive,
               pendingCaptions.isEmpty,
               hasActiveDraftOverlay == false,
-              currentCommittedCaptionHistoryPayload() != nil else {
+              committedCaptionHistoryPayload(of: displayedCaption, in: overlayState) != nil else {
             return
         }
 
@@ -4086,7 +4234,7 @@ final class AppModel: ObservableObject {
                   isCaptionPipelineActive,
                   pendingCaptions.isEmpty,
                   hasActiveDraftOverlay == false,
-                  currentCommittedCaptionHistoryPayload() != nil else {
+                  committedCaptionHistoryPayload(of: displayedCaption, in: overlayState) != nil else {
                 return
             }
 
@@ -4098,9 +4246,12 @@ final class AppModel: ObservableObject {
         sanitizedDisplayText(overlayState?.draftSourceText ?? "").isEmpty == false
     }
 
-    private func currentCommittedCaptionHistoryPayload() -> (translatedText: String, sourceText: String)? {
-        guard let current = overlayState,
-              let displayed = displayedCaption,
+    private func committedCaptionHistoryPayload(
+        of displayed: QueuedCaption?,
+        in current: OverlayPreviewState?
+    ) -> (translatedText: String, sourceText: String)? {
+        guard let current,
+              let displayed,
               current.translatedText.isEmpty == false || current.sourceText.isEmpty == false,
               current.translatedText != listeningPlaceholderText,
               current.translatedText != captureStoppedText,
@@ -4130,13 +4281,14 @@ final class AppModel: ObservableObject {
         captionID: UUID? = nil,
         translatedText: String,
         sourceText: String,
-        speakerIndex: Int? = nil
+        speakerIndex: Int? = nil,
+        to state: inout OverlayPreviewState
     ) {
         guard shouldStoreOverlayHistory(translatedText: translatedText, sourceText: sourceText) else {
             return
         }
 
-        if let lastEntry = overlayState?.history.last,
+        if let lastEntry = state.history.last,
            lastEntry.translatedText == translatedText,
            lastEntry.sourceText == sourceText {
             return
@@ -4146,7 +4298,7 @@ final class AppModel: ObservableObject {
             overlayHistoryScrollOffset += 1
         }
 
-        overlayState?.history.append(
+        state.history.append(
             OverlayHistoryEntry(
                 id: captionID ?? UUID(),
                 translatedText: translatedText,
@@ -4155,15 +4307,16 @@ final class AppModel: ObservableObject {
             )
         )
 
-        let overflow = max(0, (overlayState?.history.count ?? 0) - Self.overlayHistoryLimit)
+        let overflow = max(0, state.history.count - Self.overlayHistoryLimit)
         if overflow > 0 {
-            overlayState?.history.removeFirst(overflow)
+            state.history.removeFirst(overflow)
             if overlayHistoryScrollOffset > 0 {
                 overlayHistoryScrollOffset = max(0, overlayHistoryScrollOffset - overflow)
             }
         }
 
-        clampOverlayHistoryScrollOffset()
+        let maxScrollOffset = max(0, state.history.count - max(0, overlayHistoryVisibleCount))
+        overlayHistoryScrollOffset = min(max(overlayHistoryScrollOffset, 0), maxScrollOffset)
     }
 
     private func shouldStoreOverlayHistory(translatedText: String, sourceText: String) -> Bool {
@@ -4181,13 +4334,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func dismissListeningPlaceholderIfNeeded() {
-        guard overlayState?.translatedText == listeningPlaceholderText else {
+    private func dismissListeningPlaceholder(in state: inout OverlayPreviewState) {
+        guard state.translatedText == listeningPlaceholderText else {
             return
         }
 
-        overlayState?.translatedText = ""
-        overlayState?.sourceText = ""
+        state.translatedText = ""
+        state.sourceText = ""
     }
 
     // MARK: - Display duration (strategy §10)
@@ -4292,6 +4445,27 @@ final class AppModel: ObservableObject {
     /// tests need whenever they assert the committed caption across turns that
     /// take longer than the production delay on a slow machine.
     var committedCaptionIdleArchiveDelayForTesting: TimeInterval?
+
+    /// Supplies the session `startSession()` opens for each selected source, so an
+    /// end-to-end test can drive the production recognizer with injected audio.
+    var makeTranscriptionSessionForTesting: (() -> LiveTranscriptionSession)?
+
+    /// Answers translation availability and Apple-tier translation for both
+    /// directions without a view-anchored `TranslationSession`, so caption timing
+    /// under a known translation latency is reproducible.
+    private var translationAvailabilityForTesting: LanguageAvailability.Status?
+
+    func installTranslationForTesting(
+        _ translate: @escaping @MainActor (String, String, String) async throws -> String
+    ) {
+        translationAvailabilityForTesting = .installed
+        for coordinator in [translationCoordinator, reverseTranslationCoordinator] {
+            coordinator.appleAvailability = { _, _ in .installed }
+            coordinator.appleTranslate = { text, source, target, _ in
+                try await translate(text, source, target)
+            }
+        }
+    }
 
     func setOverlayStateForTesting(_ state: OverlayPreviewState) {
         overlayState = state
@@ -4451,7 +4625,6 @@ private struct QueuedCaption: Identifiable, Equatable {
     let sourceLanguageID: String
     let targetLanguageID: String
     let usesInverseGlossary: Bool
-    let promotedDraftTranslation: String?
     let revision: UInt64
     let audioStartMs: Int?
     /// Display speaker index (0 = first speaker heard), or nil.
@@ -4465,7 +4638,6 @@ private struct QueuedCaption: Identifiable, Equatable {
         sourceLanguageID: String,
         targetLanguageID: String,
         usesInverseGlossary: Bool,
-        promotedDraftTranslation: String?,
         revision: UInt64 = 0,
         audioStartMs: Int? = nil,
         speakerIndex: Int? = nil
@@ -4477,7 +4649,6 @@ private struct QueuedCaption: Identifiable, Equatable {
         self.sourceLanguageID = sourceLanguageID
         self.targetLanguageID = targetLanguageID
         self.usesInverseGlossary = usesInverseGlossary
-        self.promotedDraftTranslation = promotedDraftTranslation
         self.revision = revision
         self.audioStartMs = audioStartMs
         self.speakerIndex = speakerIndex

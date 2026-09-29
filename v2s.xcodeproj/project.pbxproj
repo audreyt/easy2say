@@ -19,6 +19,7 @@
 		A00000000000000000000055 /* LanguageOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000035 /* LanguageOption.swift */; };
 		A00000000000000000000056 /* OverlayPreviewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000036 /* OverlayPreviewState.swift */; };
 		A00000000000000000000057 /* OverlayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000037 /* OverlayStyle.swift */; };
+		A000000000000000000000F2 /* CaptionLexicalKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000F3 /* CaptionLexicalKey.swift */; };
 		A00000000000000000000083 /* SubtitleDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000084 /* SubtitleDisplayMode.swift */; };
 		A00000000000000000000058 /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000038 /* SessionState.swift */; };
 		A00000000000000000000059 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000039 /* SettingsStore.swift */; };
@@ -88,6 +89,7 @@
 		A00000000000000000000035 /* LanguageOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageOption.swift; sourceTree = "<group>"; };
 		A00000000000000000000036 /* OverlayPreviewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPreviewState.swift; sourceTree = "<group>"; };
 		A00000000000000000000037 /* OverlayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayStyle.swift; sourceTree = "<group>"; };
+		A000000000000000000000F3 /* CaptionLexicalKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLexicalKey.swift; sourceTree = "<group>"; };
 		A00000000000000000000084 /* SubtitleDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleDisplayMode.swift; sourceTree = "<group>"; };
 		A00000000000000000000038 /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
 		A00000000000000000000039 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 				A00000000000000000000035 /* LanguageOption.swift */,
 				A00000000000000000000042 /* ModeConfig.swift */,
 				A00000000000000000000036 /* OverlayPreviewState.swift */,
+				A000000000000000000000F3 /* CaptionLexicalKey.swift */,
 				A00000000000000000000037 /* OverlayStyle.swift */,
 				A00000000000000000000043 /* SegmentStateMachine.swift */,
 				A00000000000000000000038 /* SessionState.swift */,
@@ -456,6 +459,7 @@
 				A00000000000000000000055 /* LanguageOption.swift in Sources */,
 				A00000000000000000000063 /* ModeConfig.swift in Sources */,
 				A00000000000000000000056 /* OverlayPreviewState.swift in Sources */,
+				A000000000000000000000F2 /* CaptionLexicalKey.swift in Sources */,
 				A00000000000000000000057 /* OverlayStyle.swift in Sources */,
 				A00000000000000000000064 /* SegmentStateMachine.swift in Sources */,
 				A00000000000000000000058 /* SessionState.swift in Sources */,

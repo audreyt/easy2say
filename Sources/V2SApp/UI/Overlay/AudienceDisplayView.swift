@@ -169,10 +169,7 @@ final class AudienceDisplayPresentationState: ObservableObject {
                committedSourceText: overlayState.sourceText,
                draftSourceText: draftSourceText
            ) {
-            let committedIdentity = overlayState.committedPromotionID
-                .map(Identity.promotion)
-                ?? .captionEpoch(overlayState.captionEpoch)
-            identityAliases.insert(committedIdentity)
+            identityAliases.insert(overlayState.committedLiveIdentity)
             if let committedCaptionID = overlayState.committedCaptionID {
                 identityAliases.insert(.promotion(committedCaptionID))
                 historyEntryIDs.insert(committedCaptionID)
