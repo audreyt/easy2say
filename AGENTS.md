@@ -28,3 +28,19 @@ upward-only scrolling) → `CaptionScreen` drawn verbatim by `CaptionSurface`
   then copy into `Tests/V2STests/Fixtures/AnalyzerTraces/`.
 - `Tests/V2STests/Support/CaptionScreenOracle.swift` is the flicker oracle; change
   it only deliberately, with a self-test in `CaptionScreenOracleTests`.
+
+## Release
+- Versions: macOS `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in both
+  configurations of `v2s.xcodeproj/project.pbxproj`; iOS `CURRENT_PROJECT_VERSION`
+  in `ios/project.yml` (build numbers are single-use in App Store Connect).
+- macOS: `scripts/build_universal_pkg.sh` with the signing and notary variables
+  from `packaging/homebrew/README.md` signs, notarizes and staples the app and
+  pkg and writes the Sparkle zip and `appcast.xml`. Upload all of its outputs to
+  the `v<version>` GitHub release and mark it latest: easy2say.ai and the Sparkle
+  feed both resolve through `releases/latest/download/`.
+- iOS: archive with automatic signing (`DEVELOPMENT_TEAM=P8PJ468WJ2`,
+  `-allowProvisioningUpdates` plus an App Store Connect API key), export for
+  `app-store-connect` with `uploadSymbols` off (this desk's openrsync lacks `-E`).
+- `ios/Resources/PrivacyInfo.xcprivacy` must declare every required-reason API the
+  shipped binary references (today `systemUptime`, SystemBootTime `35F9.1`);
+  Apple does not accept App Store submissions with undeclared ones.
