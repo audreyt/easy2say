@@ -42,7 +42,7 @@ struct CaptionHalves: View {
     }
 
     private var sourceCaption: some View {
-        CaptionPane(
+        CaptionHalfPane(
             model: model,
             role: .source,
             accent: accent
@@ -51,7 +51,7 @@ struct CaptionHalves: View {
     }
 
     private var translatedCaption: some View {
-        CaptionPane(
+        CaptionHalfPane(
             model: model,
             role: .translation,
             accent: accent
@@ -65,7 +65,7 @@ private enum CaptionRole {
     case translation
 }
 
-private struct CaptionPane: View {
+private struct CaptionHalfPane: View {
     @ObservedObject var model: AppModel
     let role: CaptionRole
     let accent: Color

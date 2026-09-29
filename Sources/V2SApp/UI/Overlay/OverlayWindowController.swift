@@ -114,7 +114,7 @@ final class OverlayWindowController {
         )
         self.controlsChromeHostingView = NSHostingView(rootView: OverlayControlsChromeView())
         self.scrollbarHostingView = NSHostingView(
-            rootView: OverlayHistoryScrollbarView(model: model, interactionState: interactionState)
+            rootView: OverlayHistoryScrollbarView(model: model, controller: model.overlayCaptionSurface, interactionState: interactionState)
         )
         self.moveButtonHostingView = NSHostingView(
             rootView: OverlayMoveButtonView(
@@ -156,6 +156,7 @@ final class OverlayWindowController {
         )
         scrollbarHostingView.rootView = OverlayHistoryScrollbarView(
             model: model,
+            controller: model.overlayCaptionSurface,
             interactionState: interactionState,
             showTranscript: showTranscript
         )

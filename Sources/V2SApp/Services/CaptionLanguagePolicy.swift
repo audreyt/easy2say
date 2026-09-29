@@ -69,6 +69,37 @@ enum LanguageIdentity: Sendable {
     }
 }
 
+struct DualLaneEvidence: Equatable, Sendable {
+    let arbiterFloor: ConversationSide
+    let selectedSide: ConversationSide
+    let resolution: CaptionLaneResolution
+    let winnerConfidence: Double?
+    let competingConfidence: Double?
+    let primaryScript: CaptionLanguagePolicy.HeardScript
+    let secondaryScript: CaptionLanguagePolicy.HeardScript
+    let isMixedSpeechSuspected: Bool
+
+    init(
+        arbiterFloor: ConversationSide = .primary,
+        selectedSide: ConversationSide = .primary,
+        resolution: CaptionLaneResolution = .normalMandarinOrMixed,
+        winnerConfidence: Double? = nil,
+        competingConfidence: Double? = nil,
+        primaryScript: CaptionLanguagePolicy.HeardScript = .empty,
+        secondaryScript: CaptionLanguagePolicy.HeardScript = .empty,
+        isMixedSpeechSuspected: Bool = false
+    ) {
+        self.arbiterFloor = arbiterFloor
+        self.selectedSide = selectedSide
+        self.resolution = resolution
+        self.winnerConfidence = winnerConfidence
+        self.competingConfidence = competingConfidence
+        self.primaryScript = primaryScript
+        self.secondaryScript = secondaryScript
+        self.isMixedSpeechSuspected = isMixedSpeechSuspected
+    }
+}
+
 enum CaptionLaneResolution: Equatable, Sendable {
     case normalMandarinOrMixed
     case pureEnglish

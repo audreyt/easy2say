@@ -12,36 +12,6 @@ import Speech
 import WhisperKit
 #endif
 
-struct RecognizedSentence: Equatable, Sendable {
-    let text: String
-    let promotionSegmentID: UUID?
-    let replacesPromotionSegmentID: UUID?
-    let heardLanguageID: String
-    let dualLaneEvidence: DualLaneEvidence?
-    let audioStartMs: Int?
-    /// Stable display index (0 = first speaker heard) from live diarization,
-    /// or nil when diarization is off, the model is absent, or no speaker
-    /// segment overlaps this sentence's audio range.
-    let speakerIndex: Int?
-
-    init(
-        text: String,
-        promotionSegmentID: UUID? = nil,
-        replacesPromotionSegmentID: UUID? = nil,
-        heardLanguageID: String = "",
-        dualLaneEvidence: DualLaneEvidence? = nil,
-        audioStartMs: Int? = nil,
-        speakerIndex: Int? = nil
-    ) {
-        self.text = text
-        self.promotionSegmentID = promotionSegmentID
-        self.replacesPromotionSegmentID = replacesPromotionSegmentID
-        self.heardLanguageID = heardLanguageID
-        self.dualLaneEvidence = dualLaneEvidence
-        self.audioStartMs = audioStartMs
-        self.speakerIndex = speakerIndex
-    }
-}
 
 final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     enum LegacyRecognitionErrorDisposition: Equatable {
@@ -80,36 +50,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private struct CommittedEmission {
-        let text: String
-        let promotionSegmentID: UUID?
-        let heardLanguageID: String
-        let dualLaneEvidence: DualLaneEvidence?
-        let isProvisionalSilence: Bool
-        let audioRange: CMTimeRange?
-        let audioEndTime: TimeInterval?
-        let audioStartMs: Int?
-
-        init(
-            text: String,
-            promotionSegmentID: UUID? = nil,
-            heardLanguageID: String = "",
-            dualLaneEvidence: DualLaneEvidence? = nil,
-            isProvisionalSilence: Bool = false,
-            audioRange: CMTimeRange? = nil,
-            audioEndTime: TimeInterval? = nil,
-            audioStartMs: Int? = nil
-        ) {
-            self.text = text
-            self.promotionSegmentID = promotionSegmentID
-            self.heardLanguageID = heardLanguageID
-            self.dualLaneEvidence = dualLaneEvidence
-            self.isProvisionalSilence = isProvisionalSilence
-            self.audioRange = audioRange
-            self.audioEndTime = audioEndTime
-            self.audioStartMs = audioStartMs
-        }
-    }
 
 #if os(macOS)
     private struct ApplicationCaptureDescriptor: Sendable {
@@ -119,55 +59,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     }
 #endif
 
-    @MainActor
-    private struct RecentCommittedSentence {
-        let rawText: String
-        let comparableText: String
-        let time: Date
-        let isProvisionalSilence: Bool
-        let allowsPrefixContinuation: Bool
-        let promotionSegmentID: UUID?
-        let rootPromotionSegmentID: UUID?
-        var acceptedPromotionIDs: Set<UUID>
-        let audioRange: CMTimeRange?
-        let audioEndTime: TimeInterval?
-
-        init(
-            rawText: String,
-            comparableText: String,
-            time: Date,
-            isProvisionalSilence: Bool = false,
-            allowsPrefixContinuation: Bool,
-            promotionSegmentID: UUID?,
-            rootPromotionSegmentID: UUID? = nil,
-            acceptedPromotionIDs: Set<UUID> = [],
-            audioRange: CMTimeRange? = nil,
-            audioEndTime: TimeInterval? = nil
-        ) {
-            self.rawText = rawText
-            self.comparableText = comparableText
-            self.time = time
-            self.isProvisionalSilence = isProvisionalSilence
-            self.allowsPrefixContinuation = allowsPrefixContinuation
-            self.promotionSegmentID = promotionSegmentID
-            self.rootPromotionSegmentID = rootPromotionSegmentID ?? promotionSegmentID
-            var ids = acceptedPromotionIDs
-            if let promotionSegmentID {
-                ids.insert(promotionSegmentID)
-            }
-            self.acceptedPromotionIDs = ids
-            self.audioRange = audioRange
-            self.audioEndTime = audioEndTime
-        }
-    }
-    struct PreparedSentenceEmission: Equatable, Sendable {
-        let text: String
-        let promotionSegmentID: UUID?
-        let replacesPromotionSegmentID: UUID?
-        /// Display speaker index resolved from the emission's capture-time
-        /// audio range; nil when unattributable.
-        let speakerIndex: Int?
-    }
 
     private struct AudioLevelStats {
         let peak: Float
@@ -260,9 +151,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var audioConverterInputSignature: AudioFormatSignature?
     private var modernAudioConverter: AVAudioConverter?
     private var modernAudioConverterInputSignature: AudioFormatSignature?
-    private var committedSegmentCount = 0
-    private let committedBoundaryToleranceSec: TimeInterval = 0.08
-    private var committedAudioBoundaryTime: TimeInterval?
     private var primaryRecognitionContextualStrings: [String] = []
     private var secondaryRecognitionContextualStrings: [String] = []
     private var recognitionContextualStrings: [String] = []
@@ -270,19 +158,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var activeLocaleIdentifier: String?
     private var configuredSourceLanguageID = ""
     private var configuredTargetLanguageID = ""
-    private var currentHeardLanguageID = ""
-    private var speechCorrections = SpeechCorrectionTable.empty
-    private var dualLaneRuntime: AnyObject?
     private var interfaceLanguageID = "en"
     private var modernAnalyzerTask: Task<Void, Never>?
-    private var modernResultsTask: Task<Void, Never>?
-    private var lastModernCommittedResultIdentity: String?
+    private var analyzerFinalizeTask: Task<Void, Never>?
+    private var analyzerResultTasks: [Task<Void, Never>] = []
     private var speechAnalyzerState: AnyObject?
     private var speechTranscriberState: AnyObject?
     private var analyzerInputContinuationState: Any?
     private var analyzerInputFormat: AVAudioFormat?
-    private var latestModernText = ""
-    private var lastModernAudioStartMs: Int?
+    private var secondarySpeechTranscriberState: AnyObject?
+    /// Analyzer's first-buffer position on the session audio clock, ms.
+    private var analyzerOriginAudioMs: Int?
+    /// Session audio clock position of the last buffer yielded to the analyzer.
+    private var lastAnalyzerFedAudioMs = 0
+    /// Legacy request start on the session audio clock, ms.
+    private var legacyRequestOriginAudioMs: Int?
     private let presentationWorkLock = NSLock()
     private var presentationWorkTail: Task<Void, Never>?
 
@@ -303,39 +193,22 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         _ = appendPresentationWork(work)
     }
 
-    private func enqueueCommittedSequence(
-        _ emissions: [CommittedEmission],
-        clearDraftAfter: Bool
-    ) {
-        enqueuePresentationWork {
-            self.emitCommittedSequence(emissions, clearDraftAfter: clearDraftAfter)
+    /// Ordered delivery: every event crosses the main actor through this
+    /// chain, so the handler sees results and VAD edges in capture order.
+    private func emitEvent(_ event: CaptionSessionEvent) {
+        enqueuePresentationWork { [weak self] in
+#if DEBUG
+            self?.emittedEventsForTesting.append(event)
+#endif
+            self?.eventHandler?(event)
         }
     }
 
-    private func enqueuePartialDraft(_ draft: DraftSegment?) {
-        enqueuePresentationWork {
-            self.emitPartialDraft(draft)
-        }
-    }
+
 
     func awaitPendingEmissionsForTesting() async {
         await appendPresentationWork({}).value
     }
-    private var modernCommittedPrefixText = ""
-    /// Capture-time end (ms) of the audio the committed prefix covers. A
-    /// hypothesis that starts at or after this end belongs to a new analyzer
-    /// window and must never be trimmed against the prefix.
-    private var modernCommittedPrefixAudioEndMs: Int?
-    /// When the committed prefix was recorded. Paths without usable window
-    /// timing (dual-lane drafts carry no hypothesis timing; timer-fired
-    /// silence commits have no range) fall back to recency.
-    private var modernCommittedPrefixCommitTime: Date?
-    /// Last raw draft hypothesis text that reached the live draft row. Drafts
-    /// for one utterance arrive as a continuous chain (each extending or
-    /// restating the previous draft); a hypothesis unrelated to it opens a
-    /// new window. Recorded only for drafts actually shown, so a withdrawn
-    /// (nil) draft does not break the chain.
-    private var modernLastDraftRawText = ""
 #if canImport(WhisperKit)
     private var taigiEngine: TaigiASREngine?
 #if os(macOS)
@@ -357,10 +230,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var localASRPreRoll: [Float] = []
     private var localASRSegment: [Float] = []
     private var localASRSpeechActive = false
-    /// Capture-time (seconds) of the first sample in `localASRSegment`, so each
-    /// finished segment can be attributed to a speaker.
-    private var localASRSegmentStartCaptureSeconds: Double?
-    private var localASRPendingSegments: [(audio: [Float], startSeconds: Double)] = []
+    /// Session-clock ms of the first sample in `localASRSegment`.
+    private var localASRSegmentStartAudioMs: Double?
+    private var localASRPendingSegments: [(audio: [Float], startAudioMs: Double)] = []
     private var localASRTranscriptionTask: Task<Void, Never>?
     private let localASRPreRollSampleCount = 4_800  // 300 ms at 16 kHz
     private let localASRMinimumSegmentSampleCount = 4_000
@@ -374,6 +246,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     /// and the bundled model exists; never nilled on stop (stale reads are
     /// benign — lookups just return nil).
     private var diarizationEngine: LiveDiarizationEngine?
+    /// Session audio clock: ms of processed 16 kHz audio since the session's
+    /// first buffer. All event timestamps use this clock.
+    private var audioProcessedMs = 0.0
     /// Capture-time seconds of the last buffer handed to the diarizer.
     private var lastBufferStartCaptureSeconds: Double?
     /// Capture-time seconds of the first buffer the SpeechAnalyzer saw. The
@@ -389,13 +264,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private var applicationAudioCapture: ApplicationAudioCapture?
 #endif
 
-    private var transcriptHandler: (@MainActor (RecognizedSentence) -> Void)?
-    private var partialHandler: (@MainActor (DraftSegment?) -> Void)?
+    private var eventHandler: (@MainActor (CaptionSessionEvent) -> Void)?
+#if DEBUG
+    /// Every event this session emitted, in order — for e2e diagnosis.
+    private(set) var emittedEventsForTesting: [CaptionSessionEvent] = []
+#endif
+    private var captionSessionID = 0
     private var errorHandler: (@MainActor (String) -> Void)?
     /// Reports an unrecoverable recognition failure after this session has stopped.
     /// The owner uses this separate callback to stop sibling sessions as well.
     private var fatalErrorHandler: (@MainActor (String) -> Void)?
-    @MainActor private var recentCommittedSentenceHistory: [RecentCommittedSentence] = []
 
     private func localized(_ key: AppTextKey, _ arguments: CVarArg...) -> String {
         AppLocalization.formattedString(key, languageID: interfaceLanguageID, arguments: arguments)
@@ -405,29 +283,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         AppLocalization.localizedErrorDescription(error, languageID: interfaceLanguageID)
     }
 
-    // MARK: Draft state (accessed only on captureQueue)
-    private var modeConfig: ModeConfig = .balanced
-    private var currentDraftId = UUID()
-    private var lastDraftText = ""
-    private var lastDraftTextChangeTime = Date.distantPast
-    private var lastRecognitionResultTime = Date.distantPast
-    private var draftChangeHistory: [(text: String, time: Date)] = []
-    private var draftPrefixCandidate = ""
-    private var draftPrefixCandidateTime = Date.distantPast
-    private var confirmedStablePrefixLength = 0
 
-    // MARK: Silence-commit timer (captureQueue)
-    // Fires when the ASR stops delivering new results — i.e. the user has paused.
-    // This is more reliable than measuring inter-word gaps because the last word in
-    // a sentence has no "next segment" and therefore never triggers a pause boundary.
-    private var silenceCommitTimer: DispatchSourceTimer?
-    private var latestSegments: [SFTranscriptionSegment] = []
-    private var latestFormattedText: NSString = ""
 
     // MARK: Silero VAD (captureQueue)
     private var vadEngine: SileroVADEngine?
-    private var lastVADProbability: Float = 0.0
-    private var vadSilenceCommitTimer: DispatchSourceTimer?
+    private var legacyVADEndAudioTimer: DispatchSourceTimer?
     private var noiseFloorRMS: Float = 0.0012
     private var highPassPreviousInput: Float = 0.0
     private var highPassPreviousOutput: Float = 0.0
@@ -444,38 +304,29 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private enum SilenceCommitTrigger {
-        case asrInactivity
-        case vadOffset
-    }
 
     func start(
         source: InputSource,
         localeIdentifier: String,
         interfaceLanguageID: String,
-        modeConfig: ModeConfig = .balanced,
         contextualStrings: [String] = [],
         secondaryContextualStrings: [String] = [],
         sourceLanguageID: String = "",
         targetLanguageID: String = "",
-        speechCorrections: SpeechCorrectionTable = .empty,
         speakerDiarizationEnabled: Bool = false,
-        transcriptHandler: @escaping @MainActor (RecognizedSentence) -> Void,
-        partialHandler: @escaping @MainActor (DraftSegment?) -> Void,
+        captionSessionID: Int = 0,
+        eventHandler: @escaping @MainActor (CaptionSessionEvent) -> Void,
         errorHandler: @escaping @MainActor (String) -> Void,
         fatalErrorHandler: @escaping @MainActor (String) -> Void
     ) async throws {
-        self.transcriptHandler = transcriptHandler
-        self.partialHandler = partialHandler
-        self.modeConfig = modeConfig
+        self.eventHandler = eventHandler
+        self.captionSessionID = captionSessionID
         self.primaryRecognitionContextualStrings = sanitizeContextualStrings(contextualStrings)
         self.secondaryRecognitionContextualStrings = sanitizeContextualStrings(secondaryContextualStrings)
         self.recognitionContextualStrings = self.primaryRecognitionContextualStrings
         self.activeLocaleIdentifier = localeIdentifier
         self.configuredSourceLanguageID = sourceLanguageID
         self.configuredTargetLanguageID = targetLanguageID
-        self.currentHeardLanguageID = sourceLanguageID
-        self.speechCorrections = speechCorrections
         self.interfaceLanguageID = interfaceLanguageID
         self.errorHandler = errorHandler
         self.fatalErrorHandler = fatalErrorHandler
@@ -489,13 +340,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         lastBufferStartCaptureSeconds = nil
         analyzerOriginCaptureSeconds = nil
         legacyRequestOriginCaptureSeconds = nil
+        audioProcessedMs = 0
+        analyzerOriginAudioMs = nil
+        lastAnalyzerFedAudioMs = 0
+        legacyRequestOriginAudioMs = nil
         let startGeneration: Int = try await runOnCaptureQueue {
             self.lifecycleGeneration &+= 1
             self.startupCancelled = false
             return self.lifecycleGeneration
-        }
-        await MainActor.run {
-            recentCommittedSentenceHistory.removeAll()
         }
         try await ensureStartupIsCurrent(startGeneration)
 
@@ -601,22 +453,41 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Stops the session and returns only after its capture queue has released all
-    /// microphone/Core Audio resources. Used before starting replacement sessions.
+    /// Stops the session, waits (at most 2 s) for analyzer result streams to
+    /// drain, and returns only after the ordered presentation queue has
+    /// delivered every remaining event.
     func stopAndWait() async {
-        await withCheckedContinuation { continuation in
-            captureQueue.async { [self] in
-                stopOnCaptureQueue()
-                continuation.resume()
+        let resultTasks: [Task<Void, Never>] = (try? await runOnCaptureQueue {
+            self.stopOnCaptureQueue()
+            return self.analyzerResultTasks
+        }) ?? []
+
+        if resultTasks.isEmpty == false {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for task in resultTasks { await task.value }
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+                _ = await group.next()
+                group.cancelAll()
             }
         }
+
+        // Every result event the streams produced was enqueued on the capture
+        // queue; one final hop then finishes the modern teardown.
+        try? await runOnCaptureQueue {
+            self.finishModernTeardown()
+        }
+        // The ordered presentation queue now holds every remaining event.
+        await appendPresentationWork({}).value
     }
 
     private func stopOnCaptureQueue() {
         startupCancelled = true
         lifecycleGeneration &+= 1
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
+        cancelLegacyVADEndAudioTimer()
 
 #if os(iOS)
         let hadMicrophoneCaptureSession = microphoneCaptureSession != nil
@@ -644,7 +515,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         applicationAudioCapture = nil
 #endif
 
-        stopModernSpeechRecognizer()
+        finishModernInputAndFinalize()
         diarizationEngine?.stop()
         lastBufferStartCaptureSeconds = nil
         analyzerOriginCaptureSeconds = nil
@@ -670,17 +541,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         speechRecognizer = nil
         activeLocaleIdentifier = nil
         resetAudioProcessingState()
-        resetLegacyTranscriptionState()
 
         vadEngine = nil
-        lastVADProbability = 0
-
-        resetModernTranscriptionState()
-        partialHandler = nil
-        resetDraftState()
-        Task { @MainActor [weak self] in
-            self?.recentCommittedSentenceHistory.removeAll()
-        }
+        audioProcessedMs = 0
+        analyzerOriginAudioMs = nil
+        lastAnalyzerFedAudioMs = 0
+        legacyRequestOriginAudioMs = nil
     }
 
     private func requestRequiredPermissions(
@@ -744,11 +610,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         localASRSpeechActive = false
         resetRecognitionFailureState()
         resetAudioProcessingState()
-        resetLegacyTranscriptionState()
-        resetModernTranscriptionState()
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
-        resetDraftState()
         vadEngine = try SileroVADEngine()
     }
 #endif
@@ -769,11 +630,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         localASRSpeechActive = false
         resetRecognitionFailureState()
         resetAudioProcessingState()
-        resetLegacyTranscriptionState()
-        resetModernTranscriptionState()
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
-        resetDraftState()
         vadEngine = try SileroVADEngine()
     }
 #endif
@@ -804,10 +660,6 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         legacyRequestOriginCaptureSeconds = nil
         resetRecognitionFailureState()
         resetAudioProcessingState()
-        resetLegacyTranscriptionState()
-        resetModernTranscriptionState()
-        cancelSilenceTimer()
-        resetDraftState()
 
         // Initialize Silero VAD engine.
         do {
@@ -910,11 +762,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let analyzer = SpeechAnalyzer(modules: transcribers, options: options)
         let context = AnalysisContext()
         if secondaryTranscriber != nil {
-            let sharedNeutral = SpeechCorrectionService.neutralRecognitionPhrases(
-                corrections: speechCorrections,
-                languageIDs: [configuredSourceLanguageID, "en"],
-                glossaryKeys: primaryRecognitionContextualStrings + secondaryRecognitionContextualStrings
-            )
+            // Shared context in dual-lane mode is restricted to Latin-only
+            // phrases so neither transcriber is biased toward one script.
+            let sharedNeutral = sanitizeContextualStrings(
+                primaryRecognitionContextualStrings + secondaryRecognitionContextualStrings
+            ).filter { CaptionLanguagePolicy.classifyHeardScript($0) == .entirelyLatin }
             if sharedNeutral.isEmpty == false {
                 context.contextualStrings[.general] = sharedNeutral
             }
@@ -933,33 +785,30 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             self.analyzerInputContinuationState = continuation
         }
 
-        modernResultsTask?.cancel()
-        if let secondaryTranscriber {
-            let runtime = DualLaneCaptionRuntime(
-                primaryLanguageID: configuredSourceLanguageID,
-                secondaryLanguageID: "en"
-            )
-            runtime.onStep = { [weak self] step, heardLanguageID in
-                self?.captureQueue.async { [weak self] in
-                    self?.processDualLaneStep(
-                        step,
-                        heardLanguageID: heardLanguageID
-                    )
+        analyzerResultTasks.forEach { $0.cancel() }
+        var resultTasks: [Task<Void, Never>] = []
+        resultTasks.append(Task { [weak self] in
+            do {
+                for try await result in primaryTranscriber.results {
+                    self?.captureQueue.async { [weak self] in
+                        self?.processAnalyzerResult(
+                            result,
+                            languageID: self?.configuredSourceLanguageID ?? "en"
+                        )
+                    }
                 }
-            }
-            runtime.onFailure = { [weak self] error in
+            } catch is CancellationError {
+                return
+            } catch {
                 self?.fallbackFromSpeechAnalyzer(error)
             }
-            runtime.start(primary: primaryTranscriber, secondary: secondaryTranscriber)
-            dualLaneRuntime = runtime
-            modernResultsTask = nil
-        } else {
-            dualLaneRuntime = nil
-            modernResultsTask = Task { [weak self] in
+        })
+        if let secondaryTranscriber {
+            resultTasks.append(Task { [weak self] in
                 do {
-                    for try await result in primaryTranscriber.results {
+                    for try await result in secondaryTranscriber.results {
                         self?.captureQueue.async { [weak self] in
-                            self?.processModernRecognitionResult(result)
+                            self?.processAnalyzerResult(result, languageID: "en")
                         }
                     }
                 } catch is CancellationError {
@@ -967,8 +816,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 } catch {
                     self?.fallbackFromSpeechAnalyzer(error)
                 }
-            }
+            })
         }
+        analyzerResultTasks = resultTasks
 
         modernAnalyzerTask?.cancel()
         modernAnalyzerTask = Task { [weak self] in
@@ -983,19 +833,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         speechAnalyzerState = analyzer
         speechTranscriberState = primaryTranscriber
+        secondarySpeechTranscriberState = secondaryTranscriber
         analyzerInputFormat = preferredFormat
+        analyzerOriginAudioMs = nil
         recognitionBackend = .speechAnalyzer
         recognitionRequest = nil
         recognitionTask = nil
         speechRecognizer = nil
         audioConverter = nil
         audioConverterInputSignature = nil
-        resetLegacyTranscriptionState()
-        resetModernTranscriptionState()
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
-        resetDraftState()
-        lastModernCommittedResultIdentity = nil
+        cancelLegacyVADEndAudioTimer()
 
         do {
             vadEngine = try SileroVADEngine()
@@ -1024,17 +871,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
     private func stopModernSpeechRecognizer() {
         modernAnalyzerTask?.cancel()
         modernAnalyzerTask = nil
-        modernResultsTask?.cancel()
-        modernResultsTask = nil
-        lastModernCommittedResultIdentity = nil
+        analyzerFinalizeTask?.cancel()
+        analyzerFinalizeTask = nil
+        analyzerResultTasks.forEach { $0.cancel() }
+        analyzerResultTasks.removeAll()
         recognitionBackend = .legacy
         modernAudioConverter = nil
         modernAudioConverterInputSignature = nil
-        resetModernTranscriptionState()
-        if #available(iOS 26.0, macOS 26.0, *) {
-            (dualLaneRuntime as? DualLaneCaptionRuntime)?.finish()
-        }
-        dualLaneRuntime = nil
 
         if #available(iOS 26.0, macOS 26.0, *) {
             (analyzerInputContinuationState as? AsyncStream<AnalyzerInput>.Continuation)?.finish()
@@ -1042,6 +885,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             let analyzer = speechAnalyzerState as? SpeechAnalyzer
             speechAnalyzerState = nil
             speechTranscriberState = nil
+            secondarySpeechTranscriberState = nil
             analyzerInputFormat = nil
 
             if let analyzer {
@@ -1050,6 +894,41 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Graceful stop path (spec §1): finish the input stream so the analyzer
+    /// finalizes through end of input; result streams then end on their own
+    /// and `stopAndWait()` collects what they emit.
+    private func finishModernInputAndFinalize() {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            (analyzerInputContinuationState as? AsyncStream<AnalyzerInput>.Continuation)?.finish()
+            analyzerInputContinuationState = nil
+            if let analyzer = speechAnalyzerState as? SpeechAnalyzer {
+                analyzerFinalizeTask = Task {
+                    try? await analyzer.finalizeAndFinishThroughEndOfInput()
+                }
+            } else {
+                speechAnalyzerState = nil
+            }
+        }
+        recognitionBackend = .legacy
+    }
+
+    /// Drops the modern backend's state after its result streams drained (or
+    /// the wait timed out). Called on captureQueue from `stopAndWait`.
+    private func finishModernTeardown() {
+        modernAnalyzerTask?.cancel()
+        modernAnalyzerTask = nil
+        analyzerFinalizeTask?.cancel()
+        analyzerFinalizeTask = nil
+        analyzerResultTasks.forEach { $0.cancel() }
+        analyzerResultTasks.removeAll()
+        modernAudioConverter = nil
+        modernAudioConverterInputSignature = nil
+        speechAnalyzerState = nil
+        speechTranscriberState = nil
+        secondarySpeechTranscriberState = nil
+        analyzerInputFormat = nil
     }
 
     private func fallbackFromSpeechAnalyzer(_ error: Error) {
@@ -1123,21 +1002,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         highPassPreviousOutput = 0
     }
 
-    private func resetModernTranscriptionState() {
-        latestModernText = ""
-        modernCommittedPrefixText = ""
-        modernCommittedPrefixAudioEndMs = nil
-        modernCommittedPrefixCommitTime = nil
-        modernLastDraftRawText = ""
-        lastModernAudioStartMs = nil
-    }
 
-    private func resetLegacyTranscriptionState() {
-        committedSegmentCount = 0
-        committedAudioBoundaryTime = nil
-        latestSegments = []
-        latestFormattedText = ""
-    }
 
     private func startMicrophoneCapture(deviceUniqueID: String) throws {
         guard let device = AVCaptureDevice(uniqueID: deviceUniqueID) else {
@@ -1337,6 +1202,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         let audioLevels = cleanUpSpeechBuffer(processingBuffer)
         boostIfQuiet(buffer: processingBuffer, levels: audioLevels)
 
+        // Advance the session audio clock: ms of processed 16 kHz audio since
+        // the session's first buffer. VAD edges below use this buffer's end.
+        audioProcessedMs += Double(processingBuffer.frameLength) / 16_000 * 1_000
+        let bufferEndAudioMs = Int(audioProcessedMs.rounded())
+
         // Feed the diarizer the same 16 kHz mono stream the recognizer hears and
         // remember where this buffer sits on the capture-time axis.
         lastBufferStartCaptureSeconds = diarizationEngine?.append(audioBuffer: processingBuffer)
@@ -1345,20 +1215,17 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         if let vadEngine {
             let vadResult = vadEngine.process(buffer: processingBuffer)
             currentVADResult = vadResult
-            lastVADProbability = vadResult.speechProbability
-
-#if canImport(WhisperKit)
-            let usesASRSilenceTimers = usesLocalWhisperRecognizer == false
-#else
-            let usesASRSilenceTimers = true
-#endif
-            if usesASRSilenceTimers {
-                if vadResult.containsSpeechOffset {
-                    scheduleVADSilenceCommit()
+            // One buffer can carry offset-then-onset (end of one utterance and
+            // the start of the next); forward them in that order.
+            if vadResult.containsSpeechOffset {
+                emitEvent(.vad(.offset, audioMs: bufferEndAudioMs))
+                if recognitionBackend == .legacy {
+                    scheduleLegacyVADEndAudio()
                 }
-                if vadResult.containsSpeechOnset {
-                    cancelVADSilenceTimer()
-                }
+            }
+            if vadResult.containsSpeechOnset {
+                emitEvent(.vad(.onset, audioMs: bufferEndAudioMs))
+                cancelLegacyVADEndAudioTimer()
             }
         }
 
@@ -1382,10 +1249,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             return
         }
 
-        // Always forward audio to the recognizer — VAD is used only
-        // for silence-commit timing, not to gate the audio stream.
+        // Always forward audio to the recognizer — VAD only schedules
+        // endAudio() after sustained silence, it never gates the stream.
         if legacyRequestOriginCaptureSeconds == nil {
             legacyRequestOriginCaptureSeconds = lastBufferStartCaptureSeconds
+        }
+        if legacyRequestOriginAudioMs == nil {
+            legacyRequestOriginAudioMs = Int((audioProcessedMs - Double(processingBuffer.frameLength) / 16_000 * 1_000).rounded())
         }
         recognitionRequest.append(recognizerBuffer)
     }
@@ -1406,8 +1276,14 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         if analyzerOriginCaptureSeconds == nil {
             analyzerOriginCaptureSeconds = lastBufferStartCaptureSeconds
         }
+        // Same origin on the session audio clock (normally 0 — the analyzer
+        // sees every buffer from the session's first one).
+        if analyzerOriginAudioMs == nil {
+            analyzerOriginAudioMs = Int((audioProcessedMs - Double(processingBuffer.frameLength) / 16_000 * 1_000).rounded())
+        }
 
         continuation.yield(AnalyzerInput(buffer: analyzerBuffer))
+        lastAnalyzerFedAudioMs = Int(audioProcessedMs.rounded())
     }
 
 #if canImport(WhisperKit)
@@ -1428,10 +1304,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             && (vadResult?.containsSpeechOnset == true || vadResult?.isSpeech == true)
         if startsSpeech {
             localASRSpeechActive = true
-            // The segment opens with the pre-roll, so its capture-time start is
-            // this buffer's start minus the pre-roll's duration.
-            let preRollSeconds = Double(localASRPreRoll.count) / 16_000
-            localASRSegmentStartCaptureSeconds = (lastBufferStartCaptureSeconds ?? 0) - preRollSeconds
+            // The segment opens with the pre-roll, so its session-clock start
+            // is this buffer's end minus the buffered audio's duration.
+            let bufferedSeconds = (Double(localASRPreRoll.count) + Double(samples.count)) / 16_000
+            localASRSegmentStartAudioMs = audioProcessedMs - bufferedSeconds * 1_000
             localASRSegment = localASRPreRoll
             localASRPreRoll.removeAll(keepingCapacity: true)
         }
@@ -1453,17 +1329,17 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
         enqueueLocalASRSegment(
             localASRSegment,
-            startSeconds: localASRSegmentStartCaptureSeconds
+            startAudioMs: localASRSegmentStartAudioMs
         )
         localASRSegment.removeAll(keepingCapacity: true)
-        localASRSegmentStartCaptureSeconds = nil
+        localASRSegmentStartAudioMs = nil
         if endsSpeech, vadResult?.isSpeech == true {
             // One capture buffer can contain offset then a new onset. Preserve the
             // ambiguous buffer as pre-roll for the new segment rather than dropping
             // the newly-started utterance.
             localASRSpeechActive = true
             localASRSegment = samples
-            localASRSegmentStartCaptureSeconds = lastBufferStartCaptureSeconds
+            localASRSegmentStartAudioMs = audioProcessedMs - Double(samples.count) / 16_000 * 1_000
         } else {
             localASRSpeechActive = endsSpeech == false
         }
@@ -1472,9 +1348,12 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private func enqueueLocalASRSegment(_ audio: [Float], startSeconds: Double?) {
+    private func enqueueLocalASRSegment(_ audio: [Float], startAudioMs: Double?) {
         guard audio.count >= localASRMinimumSegmentSampleCount else { return }
-        localASRPendingSegments.append((audio: audio, startSeconds: startSeconds ?? 0))
+        localASRPendingSegments.append((
+            audio: audio,
+            startAudioMs: startAudioMs ?? audioProcessedMs
+        ))
         startNextLocalASRTranscriptionIfNeeded()
     }
 
@@ -1520,24 +1399,27 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             do {
                 let text = try await transcribe(pending.audio)
                 guard Task.isCancelled == false else { return }
+                let segmentAudioMs = Double(pending.audio.count) / 16_000 * 1_000
                 let segmentRange = CMTimeRange(
-                    start: CMTime(seconds: pending.startSeconds, preferredTimescale: 1000),
-                    duration: CMTime(seconds: Double(pending.audio.count) / 16_000, preferredTimescale: 1000)
+                    start: CMTime(seconds: pending.startAudioMs / 1_000, preferredTimescale: 1000),
+                    duration: CMTime(seconds: segmentAudioMs / 1_000, preferredTimescale: 1000)
                 )
-                if let prepared = await self.prepareCommittedSentenceForEmission(
-                    text,
-                    pendingPromotionID: nil,
-                    audioRange: segmentRange
-                ) {
-                    await self.emitRecognizedSentence(
-                        RecognizedSentence(
-                            text: prepared.text,
-                            promotionSegmentID: prepared.promotionSegmentID,
-                            replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
-                            heardLanguageID: currentHeardLanguageID,
-                            speakerIndex: prepared.speakerIndex
-                        )
-                    )
+                self.captureQueue.async { [weak self] in
+                    guard let self, self.recognitionGeneration == generation else { return }
+                    self.emitEvent(.result(AnalyzerResultEvent(
+                        lane: CaptionLaneID(
+                            sessionID: self.captionSessionID,
+                            languageID: self.configuredSourceLanguageID
+                        ),
+                        isFinal: true,
+                        rangeStartMs: Int(pending.startAudioMs.rounded()),
+                        rangeDurationMs: Int(segmentAudioMs.rounded()),
+                        finalizationMs: nil,
+                        text: text.replacingOccurrences(of: "\n", with: " "),
+                        runs: [],
+                        audioFedMs: Int(self.audioProcessedMs.rounded()),
+                        speakerIndex: self.speakerIndex(for: segmentRange)
+                    )))
                 }
             } catch is CancellationError {
                 return
@@ -1807,165 +1689,13 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    @MainActor
-    private func emitRecognizedSentence(_ sentence: RecognizedSentence) {
-        transcriptHandler?(sentence)
-    }
 
-    @MainActor
-    private func emitRecognizedText(_ text: String, promotionSegmentID: UUID? = nil) {
-        let sentenceTexts = splitCommittedEmissionUnits(in: text)
-        var pendingPromotionID = promotionSegmentID
 
-        for sentenceText in sentenceTexts {
-            guard let prepared = prepareCommittedSentenceForEmission(sentenceText, pendingPromotionID: pendingPromotionID) else {
-                continue
-            }
-            emitRecognizedSentence(
-                RecognizedSentence(
-                    text: prepared.text,
-                    promotionSegmentID: prepared.promotionSegmentID,
-                    replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
-                    heardLanguageID: currentHeardLanguageID,
-                    speakerIndex: prepared.speakerIndex
-                )
-            )
-            pendingPromotionID = nil
-        }
-    }
 
-    @MainActor
-    private func emitCommittedSequence(
-        _ emissions: [CommittedEmission],
-        clearDraftAfter: Bool = false
-    ) {
-        pruneRecentCommittedSentenceHistory()
 
-        for emission in emissions {
-            let sentenceTexts = splitCommittedEmissionUnits(in: emission.text)
-            var pendingPromotionID = emission.promotionSegmentID
-            let emissionLang = emission.heardLanguageID.isEmpty
-                ? currentHeardLanguageID
-                : emission.heardLanguageID
-            let parentStartMs = emission.audioStartMs
 
-            for (unitIndex, sentenceText) in sentenceTexts.enumerated() {
-                let corrected = speechCorrections.apply(sentenceText, languageID: emissionLang)
-                guard let prepared = prepareCommittedSentenceForEmission(
-                    corrected,
-                    pendingPromotionID: pendingPromotionID,
-                    isProvisionalSilence: emission.isProvisionalSilence,
-                    audioRange: emission.audioRange,
-                    audioEndTime: emission.audioEndTime
-                ) else {
-                    continue
-                }
-                let isTrailingUnit = unitIndex == sentenceTexts.count - 1
-                emitRecognizedSentence(
-                    RecognizedSentence(
-                        text: prepared.text,
-                        promotionSegmentID: prepared.promotionSegmentID,
-                        replacesPromotionSegmentID: prepared.replacesPromotionSegmentID,
-                        heardLanguageID: emissionLang,
-                        dualLaneEvidence: emission.dualLaneEvidence,
-                        audioStartMs: isTrailingUnit ? parentStartMs : nil,
-                        speakerIndex: prepared.speakerIndex
-                    )
-                )
-                pendingPromotionID = nil
-            }
-        }
-        if clearDraftAfter {
-            emitPartialDraft(nil)
-        }
-    }
 
-    private func splitCommittedEmissionUnits(in text: String) -> [String] {
-        splitRecognizedSentences(in: text).flatMap(splitDialogueClausesIfNeeded)
-    }
 
-    private func splitDialogueClausesIfNeeded(_ text: String) -> [String] {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else {
-            return []
-        }
-
-        guard let separatorRange = singleDialogueClauseSeparatorRange(in: trimmed) else {
-            return [trimmed]
-        }
-
-        let left = String(trimmed[..<separatorRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let right = String(trimmed[separatorRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard shouldSplitDialogueClauses(left: left, right: right) else {
-            return [trimmed]
-        }
-
-        return [left, right]
-    }
-
-    private func singleDialogueClauseSeparatorRange(in text: String) -> Range<String.Index>? {
-        var separatorRange: Range<String.Index>?
-
-        for index in text.indices where Self.dialogueClauseSeparators.contains(text[index]) {
-            if separatorRange != nil {
-                return nil
-            }
-
-            separatorRange = index..<text.index(after: index)
-        }
-
-        return separatorRange
-    }
-
-    private func shouldSplitDialogueClauses(left: String, right: String) -> Bool {
-        guard activeHeuristicLanguage == .japanese,
-              left.isEmpty == false,
-              right.isEmpty == false,
-              left.containsCJKCharacters || right.containsCJKCharacters else {
-            return false
-        }
-
-        let maxClauseLength = 18
-        guard left.count <= maxClauseLength,
-              right.count <= maxClauseLength else {
-            return false
-        }
-
-        let leftLooksComplete = Self.japaneseDialogueClauseEndingSuffixes.contains(where: { left.hasSuffix($0) })
-            || left.containsSentenceTerminator
-        let rightLooksLikeNewTurn = Self.japaneseDialogueClauseLeadingPhrases.contains(where: { right.hasPrefix($0) })
-
-        return leftLooksComplete || rightLooksLikeNewTurn
-    }
-
-    @MainActor
-    private func emitPartialDraft(_ draft: DraftSegment?) {
-        guard var draft else {
-            partialHandler?(nil)
-            return
-        }
-        let languageID = currentHeardLanguageID.isEmpty
-            ? configuredSourceLanguageID
-            : currentHeardLanguageID
-        let corrected = speechCorrections.apply(
-            draft.sourceText,
-            stablePrefixLength: draft.stablePrefixLength,
-            languageID: languageID
-        )
-        draft.sourceText = corrected.text
-        draft.stablePrefixLength = corrected.stablePrefixLength
-        draft.mutableTailText = String(corrected.text.dropFirst(min(corrected.stablePrefixLength, corrected.text.count)))
-        // Attribute the draft to whoever owns its audio span. The range runs to
-        // "now" on the capture clock so tentative segments still count.
-        if let startMs = draft.audioHypothesisStartMs {
-            draft.speakerIndex = diarizationEngine?.dominantSpeakerIndex(
-                startSeconds: Double(startMs) / 1000,
-                endSeconds: diarizationEngine?.captureSecondsNow ?? Double(startMs) / 1000
-            )
-        }
-        partialHandler?(draft)
-    }
 
     @MainActor
     private func emitError(_ message: String) {
@@ -1977,92 +1707,56 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         fatalErrorHandler?(message)
     }
 
-    @MainActor
-    private func prepareCommittedSentenceForEmission(
-        _ text: String,
-        pendingPromotionID: UUID? = nil,
-        isProvisionalSilence: Bool = false,
-        audioRange: CMTimeRange? = nil,
-        audioEndTime: TimeInterval? = nil
-    ) -> PreparedSentenceEmission? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else {
-            return nil
+
+    /// Raw forwarding: every transcriber result becomes a `CaptionSessionEvent`
+    /// unchanged except newline flattening — segmentation, scoring and commit
+    /// policy all live in CaptionCore now.
+    @available(iOS 26.0, macOS 26.0, *)
+    private func processAnalyzerResult(
+        _ result: SpeechTranscriber.Result,
+        languageID: String
+    ) {
+        var runs: [AnalyzerRun] = []
+        for run in result.text.runs {
+            var runEntry = AnalyzerRun(
+                text: String(result.text[run.range].characters),
+                startMs: nil,
+                durationMs: nil,
+                confidence: nil
+            )
+            if let range = run.audioTimeRange, range.isValid {
+                runEntry.startMs = (analyzerOriginAudioMs ?? 0) + cmTimeMilliseconds(range.start)
+                runEntry.durationMs = cmTimeMilliseconds(range.duration)
+            }
+            if let confidence = run.transcriptionConfidence {
+                runEntry.confidence = Double(confidence)
+            }
+            runs.append(runEntry)
         }
 
-        let comparable = comparableCommittedSentenceText(trimmed)
-        guard comparable.isEmpty == false else {
-            return nil
-        }
-
-        // Replay suppression: if this exact promotion ID was already accepted in recent history, drop duplicate callback.
-        if let pendingPromotionID,
-           recentCommittedSentenceHistory.contains(where: { $0.acceptedPromotionIDs.contains(pendingPromotionID) }) {
-            return nil
-        }
-
-        // Continuation, replay, or in-place revision check against recent history:
-        if let continuation = committedContinuationOrRevision(
-            from: trimmed,
-            comparableText: comparable,
-            pendingPromotionID: pendingPromotionID,
-            isProvisionalSilence: isProvisionalSilence,
-            audioRange: audioRange,
-            audioEndTime: audioEndTime
-        ) {
-            return continuation
-        }
-
-        // Legacy nil-ID replay suppression: if no ID provided and exact text was recently committed, drop duplicate.
-        if pendingPromotionID == nil,
-           recentCommittedSentenceHistory.contains(where: { $0.comparableText == comparable }) {
-            return nil
-        }
-
-        let bestOverlap = recentCommittedSentenceHistory
-            .suffix(3)
-            .map { leadingOverlapLength(previous: $0.rawText, current: trimmed) }
-            .max() ?? 0
-
-        let candidateText: String
-        // Only trim partial leading overlap if it does NOT drop the entire text when a distinct promotion ID is provided.
-        if shouldTrimLeadingOverlap(length: bestOverlap, in: trimmed) && (bestOverlap < trimmed.count || pendingPromotionID == nil) {
-            candidateText = dropLeadingCharacters(bestOverlap, from: trimmed)
-                .trimmingCharacters(in: Self.leadingOverlapTrimCharacterSet)
-        } else {
-            candidateText = trimmed
-        }
-
-        guard candidateText.isEmpty == false else {
-            return nil
-        }
-
-        let candidateComparable = comparableCommittedSentenceText(candidateText)
-        guard candidateComparable.isEmpty == false else {
-            return nil
-        }
-
-        if pendingPromotionID == nil,
-           recentCommittedSentenceHistory.contains(where: { $0.comparableText == candidateComparable }) {
-            return nil
-        }
-
-        let emissionPromotionID = pendingPromotionID ?? UUID()
-        rememberCommittedSentence(
-            candidateText,
-            isProvisionalSilence: isProvisionalSilence,
-            promotionSegmentID: emissionPromotionID,
-            rootPromotionSegmentID: emissionPromotionID,
-            audioRange: audioRange,
-            audioEndTime: audioEndTime
+        let captureRange = captureTimeRange(from: result.range)
+        let event = AnalyzerResultEvent(
+            lane: CaptionLaneID(
+                sessionID: captionSessionID,
+                languageID: languageID
+            ),
+            isFinal: result.isFinal,
+            rangeStartMs: (analyzerOriginAudioMs ?? 0)
+                + (result.range.isValid && result.range.start.isNumeric
+                    ? cmTimeMilliseconds(result.range.start) : 0),
+            rangeDurationMs: result.range.isValid && result.range.duration.isNumeric
+                ? cmTimeMilliseconds(result.range.duration) : 0,
+            finalizationMs: result.resultsFinalizationTime.isNumeric
+                ? (analyzerOriginAudioMs ?? 0)
+                    + cmTimeMilliseconds(result.resultsFinalizationTime)
+                : nil,
+            text: String(result.text.characters)
+                .replacingOccurrences(of: "\n", with: " "),
+            runs: runs,
+            audioFedMs: lastAnalyzerFedAudioMs,
+            speakerIndex: result.isFinal ? speakerIndex(for: captureRange) : nil
         )
-
-        return PreparedSentenceEmission(
-            text: candidateText,
-            promotionSegmentID: emissionPromotionID,
-            replacesPromotionSegmentID: nil,
-            speakerIndex: speakerIndex(for: audioRange)
-        )
+        emitEvent(.result(event))
     }
 
     /// Resolves the dominant speaker's display index for a capture-time audio
@@ -2077,165 +1771,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         )
     }
 
-    @MainActor
-    private func rememberCommittedSentence(
-        _ text: String,
-        isProvisionalSilence: Bool = false,
-        promotionSegmentID: UUID?,
-        rootPromotionSegmentID: UUID? = nil,
-        audioRange: CMTimeRange? = nil,
-        audioEndTime: TimeInterval? = nil
-    ) {
-        let comparable = comparableCommittedSentenceText(text)
-        guard comparable.isEmpty == false else {
-            return
-        }
 
-        let allowsContinuation = isProvisionalSilence
-            || (SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) == false)
 
-        recentCommittedSentenceHistory.append(
-            RecentCommittedSentence(
-                rawText: text,
-                comparableText: comparable,
-                time: Date(),
-                isProvisionalSilence: isProvisionalSilence,
-                allowsPrefixContinuation: allowsContinuation,
-                promotionSegmentID: promotionSegmentID,
-                rootPromotionSegmentID: rootPromotionSegmentID ?? promotionSegmentID,
-                audioRange: audioRange,
-                audioEndTime: audioEndTime
-            )
-        )
-        pruneRecentCommittedSentenceHistory()
-    }
 
-    @MainActor
-    private func committedContinuationOrRevision(
-        from text: String,
-        comparableText: String,
-        pendingPromotionID: UUID?,
-        isProvisionalSilence: Bool,
-        audioRange: CMTimeRange?,
-        audioEndTime: TimeInterval?
-    ) -> PreparedSentenceEmission? {
-        let now = Date()
 
-        for (index, previous) in recentCommittedSentenceHistory.enumerated().reversed() {
-            let elapsed = now.timeIntervalSince(previous.time)
-            guard elapsed <= Self.committedPrefixContinuationWindow else {
-                continue
-            }
-
-            let isAudioSpanMatch: Bool
-            if let prevRange = previous.audioRange, let currRange = audioRange {
-                let prevStart = cmTimeSeconds(prevRange.start)
-                let currStart = cmTimeSeconds(currRange.start)
-                isAudioSpanMatch = abs(prevStart - currStart) <= 0.35
-            } else if let prevEnd = previous.audioEndTime, let currEnd = audioEndTime {
-                isAudioSpanMatch = currEnd <= prevEnd + 0.15
-            } else {
-                isAudioSpanMatch = false
-            }
-
-            let prevStripped = canonicalSentencePunctuationStripped(previous.rawText)
-            let currStripped = canonicalSentencePunctuationStripped(text)
-
-            let isSameComparable = (previous.comparableText == comparableText) || (prevStripped == currStripped)
-            let isNearDup = isNearDuplicateCommittedText(prevStripped, currStripped)
-            let isPrefixExt = currStripped.hasPrefix(prevStripped)
-                && currStripped.count > prevStripped.count
-            let isFuzzyExt = isFuzzyPrefixMatch(previous: prevStripped, current: currStripped)
-            // Audio match must be gated by semantic relation, never unconditional.
-            let hasSemanticRelation = isSameComparable || isNearDup || isPrefixExt || isFuzzyExt
-            let isMatch: Bool
-            if pendingPromotionID == nil && isSameComparable {
-                return nil
-            } else if isAudioSpanMatch {
-                isMatch = hasSemanticRelation
-            } else if previous.isProvisionalSilence {
-                isMatch = hasSemanticRelation
-            } else if previous.allowsPrefixContinuation {
-                isMatch = isPrefixExt || isFuzzyExt || (isSameComparable && elapsed <= 1.5)
-            } else {
-                isMatch = false
-            }
-
-            guard isMatch else {
-                continue
-            }
-
-            let newPromotionID = pendingPromotionID ?? UUID()
-            let rootID = previous.rootPromotionSegmentID ?? previous.promotionSegmentID ?? newPromotionID
-            var updatedIDs = previous.acceptedPromotionIDs
-            updatedIDs.insert(newPromotionID)
-
-            recentCommittedSentenceHistory.remove(at: index)
-            recentCommittedSentenceHistory.append(
-                RecentCommittedSentence(
-                    rawText: text,
-                    comparableText: comparableText,
-                    time: now,
-                    isProvisionalSilence: isProvisionalSilence,
-                    allowsPrefixContinuation: isProvisionalSilence
-                        || (SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) == false),
-                    promotionSegmentID: newPromotionID,
-                    rootPromotionSegmentID: rootID,
-                    acceptedPromotionIDs: updatedIDs,
-                    audioRange: audioRange ?? previous.audioRange,
-                    audioEndTime: audioEndTime ?? previous.audioEndTime
-                )
-            )
-
-            return PreparedSentenceEmission(
-                text: text,
-                promotionSegmentID: newPromotionID,
-                replacesPromotionSegmentID: rootID,
-                speakerIndex: speakerIndex(for: audioRange ?? previous.audioRange)
-            )
-        }
-
-        return nil
-    }
-
-    private func canonicalSentencePunctuationStripped(_ text: String) -> String {
-        text.unicodeScalars.filter {
-            CharacterSet.punctuationCharacters.contains($0) == false
-                && CharacterSet.symbols.contains($0) == false
-        }
-        .map(String.init)
-        .joined()
-        .components(separatedBy: .whitespacesAndNewlines)
-        .filter { $0.isEmpty == false }
-        .joined(separator: " ")
-        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-    }
-
-    private func isNearDuplicateCommittedText(_ lhs: String, _ rhs: String) -> Bool {
-        let lhsClean = canonicalSentencePunctuationStripped(lhs)
-        let rhsClean = canonicalSentencePunctuationStripped(rhs)
-        if lhsClean == rhsClean {
-            return true
-        }
-        let maxLen = max(lhsClean.count, rhsClean.count)
-        guard maxLen >= 3 else {
-            return false
-        }
-        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(lhsClean, rhsClean)
-        return similarity >= 0.82
-    }
-
-    private func isFuzzyPrefixMatch(previous: String, current: String) -> Bool {
-        let prevClean = canonicalSentencePunctuationStripped(previous)
-        let currClean = canonicalSentencePunctuationStripped(current)
-        guard prevClean.count >= 2, currClean.count > prevClean.count else {
-            return false
-        }
-        let prevLen = prevClean.count
-        let currentPrefix = String(currClean.prefix(prevLen))
-        let similarity = CaptionLanguagePolicy.normalizedEditSimilarity(prevClean, currentPrefix)
-        return similarity >= 0.72
-    }
 
     private func cmTimeSeconds(_ time: CMTime) -> Double {
         time.isNumeric ? CMTimeGetSeconds(time) : 0
@@ -2253,70 +1792,10 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         )
     }
 
-    @MainActor
-    private func pruneRecentCommittedSentenceHistory() {
-        let now = Date()
-        recentCommittedSentenceHistory.removeAll { now.timeIntervalSince($0.time) > 8.0 }
-        if recentCommittedSentenceHistory.count > Self.recentCommittedSentenceLimit {
-            recentCommittedSentenceHistory.removeFirst(
-                recentCommittedSentenceHistory.count - Self.recentCommittedSentenceLimit
-            )
-        }
-    }
 
-    private func comparableCommittedSentenceText(_ text: String) -> String {
-        text
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { $0.isEmpty == false }
-            .joined(separator: " ")
-            .trimmingCharacters(in: Self.committedComparisonTrimCharacterSet)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-    }
 
-    private func leadingOverlapLength(previous: String, current: String) -> Int {
-        let previousCharacters = Array(previous)
-        let currentCharacters = Array(current)
-        let maxOverlap = min(previousCharacters.count, currentCharacters.count)
 
-        guard maxOverlap > 0 else {
-            return 0
-        }
 
-        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
-            if Array(previousCharacters.suffix(overlap)) == Array(currentCharacters.prefix(overlap)) {
-                return overlap
-            }
-        }
-
-        return 0
-    }
-
-    private func shouldTrimLeadingOverlap(length: Int, in text: String) -> Bool {
-        guard length > 0, text.isEmpty == false else {
-            return false
-        }
-
-        let minimumOverlap = text.containsCJKCharacters
-            ? Self.minimumCJKLeadingOverlapCharacters
-            : Self.minimumLatinLeadingOverlapCharacters
-        let overlapRatio = Double(length) / Double(text.count)
-        return length >= minimumOverlap && overlapRatio >= 0.35
-    }
-
-    private func dropLeadingCharacters(_ count: Int, from text: String) -> String {
-        guard count > 0 else {
-            return text
-        }
-
-        var index = text.startIndex
-        var remaining = count
-        while remaining > 0, index < text.endIndex {
-            index = text.index(after: index)
-            remaining -= 1
-        }
-
-        return String(text[index...])
-    }
 
     private func requestSpeechAuthorization() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -2326,457 +1805,73 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    private func splitRecognizedSentences(in text: String) -> [String] {
-        let normalizedText = text
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard normalizedText.isEmpty == false else {
-            return []
-        }
-
-        let nsText = normalizedText as NSString
-        let sentenceRanges = sentenceRanges(in: nsText)
-        guard sentenceRanges.isEmpty == false else {
-            return [normalizedText]
-        }
-
-        return sentenceRanges.compactMap { range in
-            let sentence = nsText.substring(with: range)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return sentence.isEmpty ? nil : sentence
-        }
-    }
-
-    private func sentenceRanges(in text: NSString) -> [NSRange] {
-        SentenceBoundaryHeuristics.sentenceRanges(in: text)
-    }
-    private func pendingModernText(from fullText: String) -> String {
-        guard modernCommittedPrefixText.isEmpty == false else {
-            return fullText
-        }
-        // A re-covering hypothesis starts at (not after) the audio it
-        // re-covers. A hypothesis starting past the committed end belongs to
-        // a new analyzer window and must never be trimmed: e.g. "Okay."
-        // committed, then a new window "Okay, let's start." keeps its words.
-        // 250 ms covers stamp rounding between the two clocks. Without usable
-        // window timing on either side (dual-lane drafts carry none;
-        // range-less timer commits store none), use recency inside the same
-        // continuation window the commit history uses, plus draft continuity:
-        // hypotheses for one utterance arrive as a chain where each extends
-        // or restates the previous shown draft, so a hypothesis related to
-        // the last draft is the same window even long after the last commit,
-        // while an unrelated one opens a new window.
-        let fullKey = CaptionLexicalKey(fullText)
-        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
-
-        // A re-covering hypothesis restarts at the window start, so its audio
-        // start can sit past the recorded committed end (the commit covered
-        // only a leading clause) and fail the timing gate below. An anchored
-        // prefix match in either direction is proof of re-coverage on its own:
-        // the hypothesis begins with the committed text, or is itself a prefix
-        // of it. Gated on the committed key's length so a short commit cannot
-        // hide an independent utterance that merely shares its opening words.
-        let minimumReCover = modernCommittedPrefixText.containsCJKCharacters
-            ? Self.minimumCJKLeadingOverlapCharacters
-            : Self.minimumLatinLeadingOverlapCharacters
-        let reCoversCommitted = committedKey.count >= minimumReCover
-            && (fullKey.hasPrefix(committedKey) || committedKey.hasPrefix(fullKey))
-
-        let hasTiming = modernCommittedPrefixAudioEndMs != nil && lastModernAudioStartMs != nil
-        let sameWindow: Bool
-        if hasTiming {
-            sameWindow = isSameCommittedWindow(hypothesisStartMs: lastModernAudioStartMs)
-        } else if let commitTime = modernCommittedPrefixCommitTime {
-            let recent = Date().timeIntervalSince(commitTime) <= Self.committedPrefixContinuationWindow
-            let previousKey = CaptionLexicalKey(modernLastDraftRawText)
-            let continuous = previousKey.isEmpty == false
-                && (fullKey.hasPrefix(previousKey) || previousKey.hasPrefix(fullKey))
-            sameWindow = recent || continuous
-        } else {
-            sameWindow = false
-        }
-        guard sameWindow || reCoversCommitted else {
-            return fullText
-        }
 
 
-        // The analyzer keeps emitting volatile hypotheses for a window after
-        // part (or all) of it committed. Those hypotheses restart at the
-        // window start and re-cover committed text, often with different
-        // spacing or punctuation ("大家早安謝謝各位" vs committed
-        // "大家早安 ，謝謝各位。"). Compare on the shared lexical key and map
-        // the match back with remainder(afterKeyPrefix:), which stays correct
-        // for multi-scalar characters.
-        if committedKey.isEmpty == false, fullKey.hasPrefix(committedKey) {
-            // Re-cover plus new text: drop the committed span, keep the tail.
-            return String(fullKey.remainder(afterKeyPrefix: committedKey.count))
-        }
-        if committedKey.isEmpty == false, committedKey.hasPrefix(fullKey) {
-            // The hypothesis covers only committed audio so far, or carries no
-            // words at all (a bare "。" between windows): nothing new to show.
-            // Gated above so an independent utterance that merely shares an
-            // opening word is never hidden.
-            return ""
-        }
-
-        let committedSentences = splitRecognizedSentences(in: modernCommittedPrefixText)
-        let nsFullText = fullText as NSString
-        let fullSentenceRanges = sentenceRanges(in: nsFullText)
-        let fullSentences = fullSentenceRanges.map {
-            nsFullText.substring(with: $0).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        guard committedSentences.isEmpty == false,
-              fullSentences.isEmpty == false else {
-            return fullText
-        }
-
-        let committedComparable = committedSentences.map { CaptionLexicalKey($0) }
-        let fullComparable = fullSentences.map { CaptionLexicalKey($0) }
-        let maxOverlap = min(committedComparable.count, fullComparable.count)
-
-        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
-            if Array(committedComparable.suffix(overlap)) == Array(fullComparable.prefix(overlap)) {
-                // Cut by key scalars, not the sentence range: the remainder
-                // starts at the next letter or digit, so a terminator that
-                // ended the matched sentence ("。", ".") never leaks onto the
-                // head of the pending tail.
-                let consumedScalars = fullComparable.prefix(overlap)
-                    .reduce(0) { $0 + $1.count }
-                return String(fullKey.remainder(afterKeyPrefix: consumedScalars))
-            }
-        }
 
 
-        return fullText
-    }
 
-    /// Whether a hypothesis or commit starting at `startMs` (capture-time
-    /// milliseconds, nil when the path carries no timing) belongs to the
-    /// committed window. A re-cover starts at — not after — the audio it
-    /// re-covers, so a start past the committed end means a new window. Paths
-    /// without timing fall back to recency inside the commit history's own
-    /// continuation window.
-    private func isSameCommittedWindow(hypothesisStartMs: Int?) -> Bool {
-        if let committedEnd = modernCommittedPrefixAudioEndMs,
-           let hypothesisStart = hypothesisStartMs {
-            return hypothesisStart < committedEnd + Self.modernCommittedPrefixWindowEndSlackMs
-        }
-        if let commitTime = modernCommittedPrefixCommitTime {
-            return Date().timeIntervalSince(commitTime) <= Self.committedPrefixContinuationWindow
-        }
-        return false
-    }
 
-    /// Same-window verdict for a commit: timing when the path carries it,
-    /// plus an anchored re-cover check. A commit whose text re-covers the
-    /// committed window — any emission unit the committed key has as a
-    /// prefix — belongs to it even when the commit's audio start lands past
-    /// the recorded committed end (a window-final restarts at the window
-    /// start, which can sit past the end of a leading-clause commit). The
-    /// check is anchored: a unit is covered only as a prefix of the committed
-    /// key, never by substring containment.
-    private func isSameCommittedWindowOrReCover(hypothesisStartMs: Int?, text: String) -> Bool {
-        if isSameCommittedWindow(hypothesisStartMs: hypothesisStartMs) {
-            return true
-        }
-        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
-        guard committedKey.isEmpty == false else {
-            return false
-        }
-        return splitCommittedEmissionUnits(in: text).contains { unit in
-            let unitKey = CaptionLexicalKey(unit)
-            return unitKey.isEmpty == false && committedKey.hasPrefix(unitKey)
-        }
-    }
 
-    /// Whether committing `committedText` consumes the live draft. Both are
-    /// compared on their words past what the window already committed (a
-    /// cumulative commit or a re-covering draft restates that span first):
-    /// the commit finalizes the draft when those new words begin the same way,
-    /// even if recognition revised a later word. A commit that brings no new
-    /// words consumes only a draft that brought none either. Containment is not
-    /// consumption: a short draft ("我們") recurs inside older sentences, and
-    /// clearing it or reusing its ID for their restatement drops live words.
-    /// An empty draft is always consumed.
-    private func commitConsumesLiveDraft(committedText: String) -> Bool {
-        let draftKey = keyPastCommittedWindow(lastDraftText)
-        guard draftKey.isEmpty == false else {
-            return true
-        }
-        let commitKey = keyPastCommittedWindow(committedText)
-        guard commitKey.isEmpty == false else {
-            return false
-        }
-        let sharedOpening = zip(commitKey.scalars, draftKey.scalars).prefix { $0 == $1 }.count
-        return sharedOpening >= min(Self.draftConsumptionSharedOpening, commitKey.count, draftKey.count)
-    }
 
-    /// `text`'s lexical key with the committed window's words removed from its
-    /// head when it restates them.
-    private func keyPastCommittedWindow(_ text: String) -> CaptionLexicalKey {
-        let key = CaptionLexicalKey(text)
-        let windowKey = CaptionLexicalKey(modernCommittedPrefixText)
-        guard windowKey.isEmpty == false, key.hasPrefix(windowKey) else {
-            return key
-        }
-        return CaptionLexicalKey(String(key.remainder(afterKeyPrefix: windowKey.count)))
-    }
 
-    /// Capture-time end of a hypothesis range, or nil when the range is
-    /// unusable for window gating.
-    private func committedWindowEndMs(from range: CMTimeRange) -> Int? {
-        guard range.isValid, range.duration.isNumeric, range.end.isNumeric else {
-            return nil
-        }
-        return cmTimeMilliseconds(range.end)
-    }
 
-    /// Text to actually emit for a modern commit: `text` minus units the
-    /// committed window already covers, or nil when nothing fresh remains (a
-    /// pure replay finalizes nothing new). Outside the window, or with no
-    /// window yet, everything is fresh. A unit that extends the committed
-    /// text is kept whole so the provisional-to-final revision can merge it.
-    private func freshCommitText(_ text: String, sameWindow: Bool) -> String? {
-        let committedKey = CaptionLexicalKey(modernCommittedPrefixText)
-        guard committedKey.isEmpty == false, sameWindow else {
-            return text
-        }
-        let freshUnits = splitCommittedEmissionUnits(in: text)
-            .filter { !committedKey.hasPrefix(CaptionLexicalKey($0)) }
-        return freshUnits.isEmpty ? nil : freshUnits.joined(separator: " ")
-    }
 
-    /// Records `emitted` (post-suppression) in the window prefix, tracking
-    /// only words the window actually newly committed. `incoming` is the raw
-    /// commit text, used to tell a cumulative re-render (supersedes) from an
-    /// incremental commit (appends); a repeat keeps what is there. Outside
-    /// the window the commit re-anchors the prefix on its own words.
-    private func recordCommittedPrefix(emitted: String, incoming: String, sameWindow: Bool) {
-        guard sameWindow else {
-            modernCommittedPrefixText = emitted
-            return
-        }
-        let currentKey = CaptionLexicalKey(modernCommittedPrefixText)
-        let incomingKey = CaptionLexicalKey(incoming)
-        if currentKey.hasPrefix(incomingKey) {
-            return
-        }
-        if incomingKey.hasPrefix(currentKey) {
-            modernCommittedPrefixText = incoming
-        } else {
-            modernCommittedPrefixText += emitted
-        }
-    }
 
-    private func committableModernText(in rawText: String) -> (committedRawText: String, remainingRawText: String)? {
-        let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedText.isEmpty == false else {
-            return nil
-        }
 
-        let nsText = rawText as NSString
-        let sentenceRanges = sentenceRanges(in: nsText)
-        guard sentenceRanges.isEmpty == false else {
-            return nil
-        }
 
-        if SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: trimmedText) {
-            return (rawText, "")
-        }
-
-        guard sentenceRanges.count >= 2,
-              let trailingSentenceRange = sentenceRanges.last,
-              trailingSentenceRange.location > 0 else {
-            return nil
-        }
-
-        let committedRawText = nsText.substring(to: trailingSentenceRange.location)
-        let remainingRawText = nsText.substring(from: trailingSentenceRange.location)
-        guard committedRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return nil
-        }
-
-        return (committedRawText, remainingRawText)
-    }
-
-    private func hasLikelyPunctuationBoundary(
-        afterSegmentAt index: Int,
-        in formattedText: NSString,
-        segments: [SFTranscriptionSegment]
-    ) -> Bool {
-        let currentRange = segments[index].substringRange
-        let boundaryEndLocation = index < segments.count - 1
-            ? segments[index + 1].substringRange.location
-            : formattedText.length
-
-        guard boundaryEndLocation > currentRange.location else {
-            return false
-        }
-
-        let boundaryText = formattedText.substring(
-            with: NSRange(location: currentRange.location, length: boundaryEndLocation - currentRange.location)
-        )
-        let nextText = index < segments.count - 1 ? segments[index + 1].substring : nil
-
-        return SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(
-            in: boundaryText,
-            followedBy: nextText
-        )
-    }
-
-    private func emittedTextRange(
-        in formattedText: NSString,
-        segments: [SFTranscriptionSegment],
-        from startIndex: Int,
-        to endIndex: Int
-    ) -> NSRange {
-        let startLocation = segments[startIndex].substringRange.location
-        let endLocation = endIndex < segments.count - 1
-            ? segments[endIndex + 1].substringRange.location
-            : formattedText.length
-
-        return NSRange(location: startLocation, length: max(0, endLocation - startLocation))
-    }
-
+    /// The legacy recognizer emits one volatile hypothesis per partial
+    /// callback; a final seals the request's span and the request restarts.
     private func processRecognitionResult(_ result: SFSpeechRecognitionResult) {
-        lastRecognitionResultTime = Date()
         // The recognizer is delivering again — forget any earlier failures.
         consecutiveRecognitionFailures = 0
-        let transcription = result.bestTranscription
-        let segments = transcription.segments
-        let formattedText = transcription.formattedString as NSString
-        var committedEmissions: [CommittedEmission] = []
-
-        // Always save the latest transcript so the silence timer can commit it
-        latestSegments = segments
-        latestFormattedText = formattedText
-
-        alignCommittedSegmentCount(to: segments)
-
-        guard committedSegmentCount < segments.count else {
-            cancelSilenceTimer()
-            // The task has no more pending text. If it just finished, restart it.
-            if result.isFinal { restartRecognitionTask() }
-            return
-        }
-
-        var sentenceStartIndex = committedSegmentCount
-
-        for index in committedSegmentCount..<segments.count {
-            let segment = segments[index]
-            let nextPauseDuration: TimeInterval?
-
-            if index < segments.count - 1 {
-                let nextSegment = segments[index + 1]
-                nextPauseDuration = nextSegment.timestamp - (segment.timestamp + segment.duration)
-            } else {
-                nextPauseDuration = nil
-            }
-
-            let currentSegmentCount = index - sentenceStartIndex + 1
-            let sentenceStartTimestamp = segments[sentenceStartIndex].timestamp
-            let sentenceEndTimestamp = segment.timestamp + segment.duration
-            let currentSentenceDuration = max(sentenceEndTimestamp - sentenceStartTimestamp, 0)
-            // Apple may place restored punctuation in the gap before the next segment
-            // rather than inside the current segment substring.
-            let punctuationBoundary = hasLikelyPunctuationBoundary(
-                afterSegmentAt: index,
-                in: formattedText,
-                segments: segments
-            )
-            // 0.85 s was too conservative and often merged two short sentences.
-            let strongPauseBoundary = (nextPauseDuration ?? 0) >= max(0.55, Double(modeConfig.minSilenceCommitMs) / 1000.0 + 0.24)
-            // Char-length limit removed: 40 chars is only ~6 English words and caused
-            // false mid-sentence cuts. Segment count + audio duration are sufficient.
-            let forcedBoundary = currentSegmentCount >= 18
-                || currentSentenceDuration >= modeConfig.maxChunkAudioSec
-            let finalBoundary = result.isFinal && index == segments.count - 1
-
-            guard punctuationBoundary || strongPauseBoundary || forcedBoundary || finalBoundary else {
-                continue
-            }
-
-            // When a purely forced cut lands close to the end of available segments,
-            // absorb the tiny tail rather than leaving a 1–2 word orphan that would
-            // be emitted as a meaningless standalone sentence by the silence timer.
-            var commitEndIndex = index
-            if forcedBoundary && !punctuationBoundary && !strongPauseBoundary && !finalBoundary {
-                let tailCount = (segments.count - 1) - index
-                if tailCount > 0 && tailCount <= 2 {
-                    commitEndIndex = segments.count - 1
-                }
-            }
-
-            let commitRange = emittedTextRange(
-                in: formattedText,
-                segments: segments,
-                from: sentenceStartIndex,
-                to: commitEndIndex
-            )
-
-            let sentenceText = formattedText.substring(with: commitRange)
-                .replacingOccurrences(of: "\n", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let committedDraftID = currentDraftId
-
-            if sentenceText.isEmpty == false {
-                committedEmissions.append(
-                    CommittedEmission(
-                        text: sentenceText,
-                        promotionSegmentID: committedDraftID,
-                        isProvisionalSilence: !result.isFinal,
-                        audioRange: legacyCaptureAudioRange(
-                            startSegment: segments[sentenceStartIndex],
-                            endSegment: segments[commitEndIndex]
-                        ),
-                        audioEndTime: segmentEndTime(for: segments[commitEndIndex])
-                    )
-                )
-            }
-
-            committedAudioBoundaryTime = segmentEndTime(for: segments[commitEndIndex])
-            sentenceStartIndex = commitEndIndex + 1
-            committedSegmentCount = sentenceStartIndex
-            resetDraftState()
-
-            // If we consumed all remaining segments (tail absorption or final boundary),
-            // stop iterating to avoid referencing segments beyond the committed range.
-            if commitEndIndex >= segments.count - 1 { break }
-        }
-
-        let shouldClearDraftAfterCommit = committedSegmentCount >= segments.count
-
-        // Emit draft update for the uncommitted tail
-        if committedSegmentCount < segments.count {
-            emitDraftUpdate(
-                draftRange: committedSegmentCount..<segments.count,
-                allSegments: segments,
-                formattedText: formattedText
-            )
-            // Schedule a silence-based commit: if no new ASR result arrives within
-            // silenceCommitDeadlineMs, the user has paused → commit whatever we have.
-            scheduleSilenceCommit()
-        } else {
-            cancelSilenceTimer()
-        }
-
-        if committedEmissions.isEmpty == false {
-            enqueueCommittedSequence(
-                committedEmissions,
-                clearDraftAfter: shouldClearDraftAfterCommit
-            )
-        } else if shouldClearDraftAfterCommit {
-            enqueuePartialDraft(nil)
-        }
-
-        // SFSpeechRecognizer marks isFinal = true when its internal session ends
-        // (after a long pause or utterance limit). Once final, the task delivers no
-        // more callbacks — new audio is silently ignored. Restart immediately so
-        // recognition continues without interruption.
+        let formattedText = result.bestTranscription.formattedString
+            .replacingOccurrences(of: "\n", with: " ")
+        let originMs = legacyRequestOriginAudioMs ?? Int(audioProcessedMs.rounded())
+        let nowMs = Int(audioProcessedMs.rounded())
+        emitEvent(.result(AnalyzerResultEvent(
+            lane: CaptionLaneID(
+                sessionID: captionSessionID,
+                languageID: configuredSourceLanguageID
+            ),
+            isFinal: result.isFinal,
+            rangeStartMs: originMs,
+            rangeDurationMs: max(nowMs - originMs, 0),
+            finalizationMs: nil,
+            text: formattedText,
+            runs: [],
+            audioFedMs: nowMs,
+            speakerIndex: result.isFinal
+                ? speakerIndex(for: finalAudioRange(
+                    firstSegment: result.bestTranscription.segments.first,
+                    lastSegment: result.bestTranscription.segments.last
+                  ))
+                : nil
+        )))
         if result.isFinal {
+            // The spent request produced its final; start a fresh one so
+            // recognition continues across long sessions.
             restartRecognitionTask()
         }
+    }
+
+    /// VAD offset on the legacy backend: 1.2 s without an onset ends the
+    /// current request's audio so the recognizer emits its final.
+    private func scheduleLegacyVADEndAudio() {
+        cancelLegacyVADEndAudioTimer()
+        let timer = DispatchSource.makeTimerSource(queue: captureQueue)
+        timer.schedule(deadline: .now() + .milliseconds(1_200))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.legacyVADEndAudioTimer = nil
+            self.recognitionRequest?.endAudio()
+        }
+        legacyVADEndAudioTimer = timer
+        timer.resume()
+    }
+
+    private func cancelLegacyVADEndAudioTimer() {
+        legacyVADEndAudioTimer?.cancel()
+        legacyVADEndAudioTimer = nil
     }
 
     /// Replaces the spent recognition task with a fresh one so recording continues
@@ -2791,8 +1886,7 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         // Cleanly end the old request before discarding it.
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
-        cancelSilenceTimer()
-        cancelVADSilenceTimer()
+        cancelLegacyVADEndAudioTimer()
         vadEngine?.reset()
 
         // Bump generation BEFORE creating the new handler so any late callbacks
@@ -2810,12 +1904,9 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         // Segment timestamps in this task's results are relative to the first
         // appended buffer; nil marks the origin pending until that append.
         legacyRequestOriginCaptureSeconds = nil
+        legacyRequestOriginAudioMs = nil
         // Reset the converter — new request may have a different nativeAudioFormat.
         resetAudioProcessingState()
-        resetLegacyTranscriptionState()
-        resetModernTranscriptionState()
-        resetDraftState()
-        enqueuePartialDraft(nil)
     }
 
     private func resetRecognitionFailureState() {
@@ -2932,424 +2023,16 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    @available(iOS 26.0, macOS 26.0, *)
-    private func processDualLaneStep(
-        _ step: DualLaneStep,
-        heardLanguageID: String
-    ) {
-        if let commitText = step.commitText {
-            let resolved = resolveHeardCaption(
-                text: commitText,
-                heardLanguageID: heardLanguageID,
-                evidence: step.evidence
-            )
-            currentHeardLanguageID = resolved.languageID
-            let text = resolved.text
-            guard text.isEmpty == false else {
-                enqueuePartialDraft(nil)
-                return
-            }
-            let commitRange = dualLaneCaptureAudioRange(step)
-            let commitStartMs: Int? = commitRange.flatMap { range in
-                range.isValid && range.start.isNumeric ? cmTimeMilliseconds(range.start) : nil
-            }
-            // The pairing hands over the lane's cumulative finalized text, so
-            // a commit can repeat spans the prefix already covers. Emit only
-            // uncovered units: a covered unit would re-commit an old sentence
-            // under the live draft's ID. The commit's own range gates this and
-            // stamps the window end, so same-window commits keep working no
-            // matter how many seconds apart they land; without timing, recency
-            // decides, and a commit outside the window re-anchors instead.
-            let sameDualWindow = isSameCommittedWindowOrReCover(
-                hypothesisStartMs: commitStartMs,
-                text: text
-            )
-            // One condition gates the draft's fate: whether this commit
-            // covers the live draft's words. A restatement of older sentences
-            // gets no draft ID and leaves the draft alone.
-            let consumesDraft = commitConsumesLiveDraft(committedText: text)
-            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
-            guard let textToEmit = freshCommitText(text, sameWindow: sameDualWindow) else {
-                if consumesDraft {
-                    cancelSilenceTimer()
-                    cancelVADSilenceTimer()
-                    resetDraftState()
-                    enqueuePartialDraft(nil)
-                }
-                return
-            }
-            let keptLatestText = latestModernText
-            let keptLastDraftRaw = modernLastDraftRawText
-            resetModernTranscriptionState()
-            if consumesDraft {
-                cancelSilenceTimer()
-                cancelVADSilenceTimer()
-                resetDraftState()
-            } else {
-                latestModernText = keptLatestText
-                modernLastDraftRawText = keptLastDraftRaw
-            }
-            recordCommittedPrefix(emitted: textToEmit, incoming: text, sameWindow: sameDualWindow)
-            // Never wipe a valid window end with a range-less commit; the
-            // recency fallback covers those.
-            if let endMs = commitRange.flatMap(committedWindowEndMs) {
-                modernCommittedPrefixAudioEndMs = endMs
-            }
-            modernCommittedPrefixCommitTime = Date()
-            enqueueCommittedSequence(
-                [
-                    CommittedEmission(
-                        text: textToEmit,
-                        promotionSegmentID: promotionID,
-                        heardLanguageID: resolved.languageID,
-                        dualLaneEvidence: step.evidence,
-                        isProvisionalSilence: false,
-                        audioRange: commitRange
-                    )
-                ],
-                clearDraftAfter: consumesDraft
-            )
-            return
-        }
-
-        guard let draftText = step.draftText, draftText.isEmpty == false else {
-            return
-        }
-        // Dual-lane drafts are volatile hypotheses for the same analyzer
-        // window; trim any span that re-covers the committed prefix before it
-        // reaches the live draft row.
-        let pendingText = pendingModernText(from: draftText)
-        guard pendingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            latestModernText = ""
-            // The hypothesis covered only committed text; clear the draft
-            // only when its own words are what was committed.
-            if commitConsumesLiveDraft(committedText: modernCommittedPrefixText) {
-                resetDraftState()
-                enqueuePartialDraft(nil)
-            }
-            return
-        }
-        // Anchor the continuity chain on hypotheses actually shown, so a
-        // withdrawn draft does not break it.
-        modernLastDraftRawText = draftText
-        let resolved = resolveHeardCaption(
-            text: pendingText,
-            heardLanguageID: heardLanguageID,
-            evidence: nil
-        )
-        currentHeardLanguageID = resolved.languageID
-        latestModernText = resolved.text
-        emitCorrectedDraft(resolved.text)
-    }
-
-    /// Builds a capture-time range for a dual-lane commit from the winning
-    /// lane's hypothesis times (analyzer-relative) plus the pinned origin.
-    @available(iOS 26.0, macOS 26.0, *)
-    private func dualLaneCaptureAudioRange(_ step: DualLaneStep) -> CMTimeRange? {
-        guard let start = step.commitStartSeconds,
-              let end = step.commitEndSeconds,
-              let origin = analyzerOriginCaptureSeconds,
-              end > start else {
-            return nil
-        }
-        return CMTimeRange(
-            start: CMTime(seconds: start + origin, preferredTimescale: 1000),
-            end: CMTime(seconds: end + origin, preferredTimescale: 1000)
-        )
-    }
-
-    private func resolveHeardCaption(
-        text: String,
-        heardLanguageID: String,
-        evidence: DualLaneEvidence? = nil
-    ) -> (text: String, languageID: String) {
-        var languageID = heardLanguageID.isEmpty ? configuredSourceLanguageID : heardLanguageID
-        if LanguageIdentity.isEnglish(languageID),
-           CaptionLanguagePolicy.shouldReverse(
-            configuredSourceLanguageID: configuredSourceLanguageID,
-            configuredTargetLanguageID: configuredTargetLanguageID,
-            heardLanguageID: languageID,
-            heardText: text,
-            evidence: evidence
-           ) == false {
-            languageID = configuredSourceLanguageID
-        }
-        return (text, languageID)
-    }
-
-    private func emitCorrectedDraft(_ text: String) {
-        let now = Date()
-        lastRecognitionResultTime = now
-        observeDraftText(text, at: now)
-        latestModernText = text
-        let draftStability = currentDraftStability(at: now)
-        let boundaryScore: Float = SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) ? 0.9 : 0.45
-        let draft = DraftSegment(
-            segmentId: currentDraftId,
-            sourceText: text,
-            stablePrefixLength: computeStablePrefixLength(text: text, now: now),
-            mutableTailText: String(text.dropFirst(min(computeStablePrefixLength(text: text, now: now), text.count))),
-            avgConfidence: 0.82,
-            startMs: lastModernAudioStartMs ?? 0,
-            lastUpdateMs: Int(now.timeIntervalSinceReferenceDate * 1000),
-            silenceMs: draftStability.silenceMs,
-            stabilityScore: draftStability.stabilityScore,
-            boundaryScore: boundaryScore,
-            chunkScore: ChunkScorer.score(
-                vadProbability: lastVADProbability,
-                stabilityScore: draftStability.stabilityScore,
-                boundaryScore: boundaryScore,
-                lengthFitScore: draftLengthFitScore(for: text),
-                confidenceScore: 0.82
-            ),
-            vadProbability: lastVADProbability,
-            words: [],
-            heardLanguageID: currentHeardLanguageID,
-            audioHypothesisStartMs: lastModernAudioStartMs
-        )
-        enqueuePartialDraft(draft)
-        scheduleSilenceCommit()
-    }
-
-    @available(iOS 26.0, macOS 26.0, *)
-    private func processModernRecognitionResult(_ result: SpeechTranscriber.Result) {
-        processModernRecognitionText(
-            normalizedTranscriberText(result.text),
-            isFinal: result.isFinal,
-            audioRange: result.range
-        )
-    }
-
-    private func processModernRecognitionText(_ fullText: String, isFinal: Bool, audioRange: CMTimeRange) {
-        let now = Date()
-        lastRecognitionResultTime = now
-        // The analyzer's clock starts at its first buffer; shift the range onto
-        // the capture-time axis the diarizer uses.
-        let captureAudioRange = captureTimeRange(from: audioRange)
-        lastModernAudioStartMs = cmTimeMilliseconds(captureAudioRange.start)
-        let pendingRawText = pendingModernText(from: fullText)
-        currentHeardLanguageID = configuredSourceLanguageID
-        let text = pendingRawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
 
-        if isFinal {
-            let identity = "\(cmTimeMilliseconds(captureAudioRange.start)):\(cmTimeMilliseconds(captureAudioRange.duration)):\(fullText)"
-            guard identity != lastModernCommittedResultIdentity else { return }
-            lastModernCommittedResultIdentity = identity
 
-            let fullUtteranceText = fullText
-            let hypothesisStartMs = lastModernAudioStartMs
-            // A window-final re-covers the whole window, including sentences
-            // committed long ago (the commit history only retains 8 s).
-            // freshCommitText drops covered units so a replay never duplicates
-            // a live row under a fresh, hence untranslated, promotion; a final
-            // that opens a new window emits everything and re-anchors.
-            let finalStartMs: Int? = captureAudioRange.isValid && captureAudioRange.start.isNumeric
-                ? cmTimeMilliseconds(captureAudioRange.start) : nil
-            let sameFinalWindow = isSameCommittedWindowOrReCover(
-                hypothesisStartMs: finalStartMs,
-                text: fullUtteranceText
-            )
-            // One condition gates the draft's fate: whether this commit
-            // covers the live draft's words. Only a consuming commit takes
-            // the draft's ID, clears the row, and resets draft state; a
-            // restatement of older sentences leaves the draft alone.
-            let consumesDraft = commitConsumesLiveDraft(committedText: fullUtteranceText)
-            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
-            guard let textToEmit = freshCommitText(fullUtteranceText, sameWindow: sameFinalWindow) else {
-                // Pure replay: the window-final re-covered only committed
-                // text. Keep the committed prefix so later volatile
-                // hypotheses for this window still trim against it.
-                if consumesDraft {
-                    cancelSilenceTimer()
-                    cancelVADSilenceTimer()
-                    resetDraftState()
-                    enqueuePartialDraft(nil)
-                }
-                return
-            }
-            let trimmedEmit = textToEmit.trimmingCharacters(in: .whitespacesAndNewlines)
-            let keptLatestText = latestModernText
-            let keptLastDraftRaw = modernLastDraftRawText
-            resetModernTranscriptionState()
-            guard trimmedEmit.isEmpty == false else {
-                if consumesDraft {
-                    cancelSilenceTimer()
-                    cancelVADSilenceTimer()
-                    resetDraftState()
-                    enqueuePartialDraft(nil)
-                }
-                return
-            }
-            if consumesDraft {
-                cancelSilenceTimer()
-                cancelVADSilenceTimer()
-                resetDraftState()
-            } else {
-                // The live draft survives: restore its pending text and the
-                // continuity anchor so it can still commit on silence.
-                latestModernText = keptLatestText
-                modernLastDraftRawText = keptLastDraftRaw
-            }
-            // Keep the committed window's text as the pending prefix: the
-            // analyzer keeps emitting volatile hypotheses for this window
-            // after isFinal, and they re-cover this text from its start.
-            recordCommittedPrefix(emitted: trimmedEmit, incoming: fullUtteranceText, sameWindow: sameFinalWindow)
-            if let endMs = committedWindowEndMs(from: captureAudioRange) {
-                modernCommittedPrefixAudioEndMs = endMs
-            }
-            modernCommittedPrefixCommitTime = now
-            enqueueCommittedSequence(
-                [
-                    CommittedEmission(
-                        text: trimmedEmit,
-                        promotionSegmentID: promotionID,
-                        heardLanguageID: currentHeardLanguageID,
-                        isProvisionalSilence: false,
-                        audioRange: captureAudioRange,
-                        audioStartMs: hypothesisStartMs
-                    )
-                ],
-                clearDraftAfter: consumesDraft
-            )
-            return
-        }
 
-        guard text.isEmpty == false else {
-            latestModernText = ""
-            // An empty hypothesis carries no new text but says nothing about
-            // the draft's newer utterance — clearing it would vanish a live
-            // row for a frame. Clear only when the draft's own text is what
-            // was committed; otherwise leave the draft and its timers alone.
-            if commitConsumesLiveDraft(committedText: modernCommittedPrefixText) {
-                cancelSilenceTimer()
-                cancelVADSilenceTimer()
-                resetDraftState()
-                enqueuePartialDraft(nil)
-            }
-            return
-        }
 
-        observeDraftText(text, at: now)
-        latestModernText = pendingRawText
-        if let split = committableModernText(in: pendingRawText),
-           split.remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text),
-           canFastCommitModernBoundary(at: now) {
-            let committedText = split.committedRawText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard committedText.isEmpty == false else {
-                latestModernText = ""
-                enqueuePartialDraft(nil)
-                return
-            }
-            let fastStartMs: Int? = captureAudioRange.isValid && captureAudioRange.start.isNumeric
-                ? cmTimeMilliseconds(captureAudioRange.start) : nil
-            let sameFastWindow = isSameCommittedWindowOrReCover(
-                hypothesisStartMs: fastStartMs,
-                text: committedText
-            )
-            let consumesDraft = commitConsumesLiveDraft(committedText: committedText)
-            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
-            guard let freshText = freshCommitText(committedText, sameWindow: sameFastWindow) else {
-                latestModernText = split.remainingRawText
-                return
-            }
-            recordCommittedPrefix(emitted: freshText, incoming: split.committedRawText, sameWindow: sameFastWindow)
-            if let endMs = committedWindowEndMs(from: captureAudioRange) {
-                modernCommittedPrefixAudioEndMs = endMs
-            }
-            modernCommittedPrefixCommitTime = now
-            latestModernText = split.remainingRawText
-            if consumesDraft {
-                cancelSilenceTimer()
-                resetDraftState()
-            }
-            enqueueCommittedSequence(
-                [
-                    CommittedEmission(
-                        text: freshText,
-                        promotionSegmentID: promotionID,
-                        isProvisionalSilence: true,
-                        audioRange: captureAudioRange,
-                        audioStartMs: lastModernAudioStartMs
-                    )
-                ],
-                clearDraftAfter: consumesDraft
-            )
-            return
-        }
-        // Anchor the continuity chain (see pendingModernText) on hypotheses
-        // actually shown.
-        modernLastDraftRawText = fullText
-        emitCorrectedDraft(text)
-    }
 
-    private func observeDraftText(_ text: String, at now: Date) {
-        if text != lastDraftText {
-            lastDraftText = text
-            lastDraftTextChangeTime = now
-            draftChangeHistory.append((text: text, time: now))
-        }
-        draftChangeHistory.removeAll { now.timeIntervalSince($0.time) > 0.4 }
-    }
 
-    private func currentDraftStability(at now: Date) -> (silenceMs: Int, stabilityScore: Float) {
-        let silenceMs = Int(now.timeIntervalSince(lastDraftTextChangeTime) * 1000)
-        let recentChanges = draftChangeHistory.count
-        let stabilityScore: Float
-        switch recentChanges {
-        case 0, 1: stabilityScore = 1.0
-        case 2:    stabilityScore = 0.7
-        default:   stabilityScore = max(0.1, 0.5 - Float(recentChanges - 2) * 0.15)
-        }
 
-        return (silenceMs, stabilityScore)
-    }
 
-    private func canFastCommitModernBoundary(at now: Date) -> Bool {
-        Int(now.timeIntervalSince(lastDraftTextChangeTime) * 1000) >= modernBoundaryCommitStabilityDelayMs
-    }
 
-    private func canVADCommitModernDraft(_ rawText: String, at now: Date) -> Bool {
-        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text.isEmpty == false else {
-            return false
-        }
-
-        guard shouldHoldModernVADCommit(for: text) == false else {
-            return false
-        }
-
-        guard SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) else {
-            return false
-        }
-
-        let stableForMs = Int(now.timeIntervalSince(lastDraftTextChangeTime) * 1000)
-        let minimumStableMs = max(vadSilenceCommitDeadlineMs, 260)
-        return stableForMs >= minimumStableMs
-    }
-
-    private func shouldHoldModernVADCommit(for text: String) -> Bool {
-        guard SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) == false else {
-            return false
-        }
-
-        if SentenceBoundaryHeuristics.endsWithLikelyNonTerminalAbbreviation(in: text) {
-            return true
-        }
-
-        switch activeHeuristicLanguage {
-        case .japanese:
-            return Self.modernVADDeferredJapaneseCommitSuffixes.contains(where: { text.hasSuffix($0) })
-        case .english:
-            let normalized = text.lowercased()
-            return Self.modernVADDeferredEnglishCommitSuffixes.contains(where: { normalized.hasSuffix($0) })
-        case .other:
-            // Mandarin and mixed speech often omit punctuation until isFinal.
-            // Hold the draft rather than freezing a short clause as its own turn.
-            return true
-        }
-    }
 
     private var activeHeuristicLanguage: RecognitionHeuristicLanguage {
         switch activeLanguageCode {
@@ -3374,112 +2057,11 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
             .lowercased()
     }
 
-    @available(iOS 26.0, macOS 26.0, *)
-    private func emitDraftUpdate(from result: SpeechTranscriber.Result, text: String) {
-        let now = Date()
-        observeDraftText(text, at: now)
-        let draftStability = currentDraftStability(at: now)
-        let silenceMs = draftStability.silenceMs
-        let stabilityScore = draftStability.stabilityScore
 
-        let boundaryScore: Float = SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) ? 0.9 : 0.45
-        let lengthFitScore = draftLengthFitScore(for: text)
-        let averageConfidence = transcriberAverageConfidence(result.text)
 
-        let chunkScore = ChunkScorer.score(
-            vadProbability: lastVADProbability,
-            stabilityScore: stabilityScore,
-            boundaryScore: boundaryScore,
-            lengthFitScore: lengthFitScore,
-            confidenceScore: averageConfidence
-        )
 
-        let stablePrefixLen = computeStablePrefixLength(text: text, now: now)
-        let mutableTail = String(text.dropFirst(min(stablePrefixLen, text.count)))
-        let timeRange = transcriberTimeRange(result.text).map { captureTimeRange(from: $0) }
-        let startMs = timeRange.map { cmTimeMilliseconds($0.start) } ?? 0
 
-        let draft = DraftSegment(
-            segmentId: currentDraftId,
-            sourceText: text,
-            stablePrefixLength: stablePrefixLen,
-            mutableTailText: mutableTail,
-            avgConfidence: averageConfidence,
-            startMs: startMs,
-            lastUpdateMs: Int(now.timeIntervalSinceReferenceDate * 1000),
-            silenceMs: silenceMs,
-            stabilityScore: stabilityScore,
-            boundaryScore: boundaryScore,
-            chunkScore: chunkScore,
-            vadProbability: lastVADProbability,
-            words: [],
-            audioHypothesisStartMs: timeRange.map { cmTimeMilliseconds($0.start) }
-        )
 
-        enqueuePartialDraft(draft)
-    }
-
-    @available(iOS 26.0, macOS 26.0, *)
-    private func normalizedTranscriberText(_ text: AttributedString) -> String {
-        String(text.characters)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    @available(iOS 26.0, macOS 26.0, *)
-    private func transcriberAverageConfidence(_ text: AttributedString) -> Float {
-        var total: Double = 0
-        var count = 0
-
-        for run in text.runs {
-            if let confidence = run.transcriptionConfidence {
-                total += confidence
-                count += 1
-            }
-        }
-
-        guard count > 0 else { return 0.82 }
-        return Float(total / Double(count))
-    }
-
-    @available(iOS 26.0, macOS 26.0, *)
-    private func transcriberTimeRange(_ text: AttributedString) -> CMTimeRange? {
-        for run in text.runs {
-            if let timeRange = run.audioTimeRange {
-                return timeRange
-            }
-        }
-
-        return nil
-    }
-
-    @available(iOS 26.0, macOS 26.0, *)
-    private func modernResultIdentity(for result: SpeechTranscriber.Result) -> String {
-        let startMs = cmTimeMilliseconds(result.range.start)
-        let durationMs = cmTimeMilliseconds(result.range.duration)
-        return "\(startMs):\(durationMs):\(normalizedTranscriberText(result.text))"
-    }
-
-    private func draftLengthFitScore(for text: String) -> Float {
-        let charCount = text.count
-        let isCJK = text.containsCJKCharacters
-
-        if isCJK {
-            switch charCount {
-            case 12...20: return 1.0
-            case 5..<12:  return Float(charCount) / 12.0 * 0.6
-            case 21...30: return 0.7
-            default:      return 0.3
-            }
-        }
-
-        switch charCount {
-        case 28...56: return 1.0
-        case 10..<28: return Float(charCount) / 28.0 * 0.6
-        case 57...84: return 0.7
-        default:      return 0.3
-        }
-    }
 
     private func cmTimeMilliseconds(_ time: CMTime) -> Int {
         guard time.isNumeric else { return 0 }
@@ -3488,247 +2070,18 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
 
     // MARK: - Silence-commit timer
 
-    /// Time after the last ASR callback before we force-commit pending text.
-    ///
-    /// 420 ms was too short: SFSpeechRecognizer can take 400–600 ms between consecutive
-    /// partial-result callbacks for the same utterance on a loaded device, causing the
-    /// timer to fire between two ASR deliveries for the same sentence.
-    ///
-    /// ~600–690 ms sits safely above:
-    ///   • inter-result ASR delivery gaps (typically 100–500 ms during speech)
-    ///   • natural within-sentence pauses in Mandarin/Japanese (200–450 ms)
-    /// and below clear sentence-ending silences (≥ 600 ms for most speakers).
-    ///
-    /// Follow ≈ 600 ms · Balanced ≈ 630 ms · Reading ≈ 690 ms.
-    private var silenceCommitDeadlineMs: Int {
-        max(600, modeConfig.minSilenceCommitMs + 350)
-    }
 
-    /// Require a short stable window before promoting a punctuation-ended partial.
-    /// This keeps the fast path responsive without freezing a still-revisable boundary.
-    private var modernBoundaryCommitStabilityDelayMs: Int {
-        max(160, min(modeConfig.minSilenceCommitMs, 240))
-    }
 
-    private var vadSilenceCommitDeadlineMs: Int {
-        max(280, modeConfig.minSilenceCommitMs)
-    }
 
-    private func scheduleSilenceCommit() {
-        scheduleSilenceCommit(trigger: .asrInactivity, afterMs: silenceCommitDeadlineMs)
-    }
 
-    private func cancelSilenceTimer() {
-        silenceCommitTimer?.cancel()
-        silenceCommitTimer = nil
-    }
 
     // MARK: - VAD-based silence commit
 
-    /// Schedules a fast commit based on Silero VAD detecting speech offset.
-    /// Uses the mode's minSilenceCommitMs (100–200 ms) — much faster than the
-    /// ASR-inactivity timer (700+ ms).
-    private func scheduleVADSilenceCommit() {
-        scheduleSilenceCommit(trigger: .vadOffset, afterMs: vadSilenceCommitDeadlineMs)
-    }
 
-    private func cancelVADSilenceTimer() {
-        vadSilenceCommitTimer?.cancel()
-        vadSilenceCommitTimer = nil
-    }
 
-    private func scheduleSilenceCommit(trigger: SilenceCommitTrigger, afterMs: Int) {
-        cancelSilenceCommitTimer(for: trigger)
-        let timer = DispatchSource.makeTimerSource(queue: captureQueue)
-        timer.schedule(deadline: .now() + .milliseconds(afterMs))
-        timer.setEventHandler { [weak self] in
-            self?.forceCommitOnSilence(trigger: trigger)
-        }
-        timer.resume()
 
-        switch trigger {
-        case .asrInactivity:
-            silenceCommitTimer = timer
-        case .vadOffset:
-            vadSilenceCommitTimer = timer
-        }
-    }
 
-    private func cancelSilenceCommitTimer(for trigger: SilenceCommitTrigger) {
-        switch trigger {
-        case .asrInactivity:
-            cancelSilenceTimer()
-        case .vadOffset:
-            cancelVADSilenceTimer()
-        }
-    }
 
-    /// Called by the silence timer when no new ASR result has arrived for
-    /// silenceCommitDeadlineMs — meaning the user has paused.
-    private func forceCommitOnSilence(trigger: SilenceCommitTrigger) {
-        switch trigger {
-        case .asrInactivity:
-            silenceCommitTimer = nil
-        case .vadOffset:
-            vadSilenceCommitTimer = nil
-        }
-
-        if recognitionBackend == .speechAnalyzer {
-            let committedRawText: String
-            let remainingRawText: String
-
-            switch trigger {
-            case .asrInactivity:
-                guard let split = committableModernText(in: latestModernText) else {
-                    return
-                }
-                committedRawText = split.committedRawText
-                remainingRawText = split.remainingRawText
-            case .vadOffset:
-                let now = Date()
-                guard canVADCommitModernDraft(latestModernText, at: now) else {
-                    return
-                }
-                committedRawText = latestModernText
-                remainingRawText = ""
-            }
-
-            let text = committedRawText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard text.isEmpty == false else {
-                latestModernText = remainingRawText
-                return
-            }
-
-            // Same replay guard as finals: the timer can fire on a hypothesis
-            // that re-covers already-committed audio. No range fires this
-            // timer, so the last hypothesis start (plus recency) gates it; a
-            // commit outside the window re-anchors instead of appending.
-            let sameTimerWindow = isSameCommittedWindowOrReCover(
-                hypothesisStartMs: lastModernAudioStartMs,
-                text: text
-            )
-            let consumesDraft = commitConsumesLiveDraft(committedText: committedRawText)
-            let promotionID: UUID? = consumesDraft ? currentDraftId : nil
-            guard let freshText = freshCommitText(text, sameWindow: sameTimerWindow) else {
-                latestModernText = remainingRawText
-                return
-            }
-            recordCommittedPrefix(emitted: freshText, incoming: committedRawText, sameWindow: sameTimerWindow)
-            latestModernText = remainingRawText
-            let hypothesisStartMs = lastModernAudioStartMs
-            modernCommittedPrefixCommitTime = Date()
-            if consumesDraft {
-                resetDraftState()
-            }
-            enqueueCommittedSequence(
-                [
-                    CommittedEmission(
-                        text: freshText,
-                        promotionSegmentID: promotionID,
-                        heardLanguageID: currentHeardLanguageID,
-                        isProvisionalSilence: true,
-                        audioStartMs: hypothesisStartMs
-                    )
-                ],
-                clearDraftAfter: consumesDraft
-                    && remainingRawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            )
-            return
-        }
-
-        let segments = latestSegments
-        let formattedText = latestFormattedText
-
-        guard committedSegmentCount < segments.count else { return }
-
-        let pendingSegments = Array(segments[committedSegmentCount...])
-        if let delayMs = requiredCommitDelayMs(trigger: trigger, pendingSegments: pendingSegments) {
-            scheduleSilenceCommit(trigger: trigger, afterMs: delayMs)
-            return
-        }
-
-        let lastIdx = segments.count - 1
-        let currentRange = combinedRange(for: segments, from: committedSegmentCount, to: lastIdx)
-        let sentenceText = (formattedText.substring(with: currentRange) as String)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let committedDraftID = currentDraftId
-
-        let commitStartIndex = committedSegmentCount
-        committedAudioBoundaryTime = segmentEndTime(for: segments[lastIdx])
-        committedSegmentCount = segments.count
-        resetDraftState()
-        if sentenceText.isEmpty == false {
-            enqueueCommittedSequence(
-                [
-                    CommittedEmission(
-                        text: sentenceText,
-                        promotionSegmentID: committedDraftID,
-                        heardLanguageID: currentHeardLanguageID,
-                        isProvisionalSilence: true,
-                        audioRange: legacyCaptureAudioRange(
-                            startSegment: segments[commitStartIndex],
-                            endSegment: segments[lastIdx]
-                        ),
-                        audioEndTime: committedAudioBoundaryTime
-                    )
-                ],
-                clearDraftAfter: true
-            )
-        } else {
-            enqueuePartialDraft(nil)
-        }
-    }
-    private func requiredCommitDelayMs(
-        trigger: SilenceCommitTrigger,
-        pendingSegments: [SFTranscriptionSegment]
-    ) -> Int? {
-        guard pendingSegments.isEmpty == false else {
-            return nil
-        }
-
-        let now = Date()
-        let lastUpdateTime = max(lastRecognitionResultTime, lastDraftTextChangeTime)
-        let elapsedMs = Int(now.timeIntervalSince(lastUpdateTime) * 1000)
-        let averageConfidence = pendingSegments.map(\.confidence).reduce(0, +) / Float(pendingSegments.count)
-
-        var settleWindowMs = trigger == .vadOffset ? 320 : 220
-        if pendingSegments.count <= 2 {
-            settleWindowMs += 80
-        }
-        if averageConfidence < 0.78 {
-            settleWindowMs += 120
-        }
-
-        guard elapsedMs < settleWindowMs else {
-            return nil
-        }
-
-        return settleWindowMs - max(elapsedMs, 0)
-    }
-
-    private func alignCommittedSegmentCount(to segments: [SFTranscriptionSegment]) {
-        if segments.count < committedSegmentCount {
-            resetLegacyTranscriptionState()
-            resetDraftState()
-            return
-        }
-
-        guard let committedAudioBoundaryTime else {
-            return
-        }
-
-        let alignedCount = segments.prefix {
-            segmentEndTime(for: $0) <= committedAudioBoundaryTime + committedBoundaryToleranceSec
-        }.count
-
-        guard alignedCount != committedSegmentCount else {
-            return
-        }
-
-        committedSegmentCount = alignedCount
-        resetDraftState()
-    }
 
     private func segmentEndTime(for segment: SFTranscriptionSegment) -> TimeInterval {
         segment.timestamp + segment.duration
@@ -3751,125 +2104,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         )
     }
 
+    /// Capture-time range of a legacy final, for speaker attribution.
+    private func finalAudioRange(
+        firstSegment: SFTranscriptionSegment?,
+        lastSegment: SFTranscriptionSegment?
+    ) -> CMTimeRange? {
+        guard let firstSegment, let lastSegment else { return nil }
+        return legacyCaptureAudioRange(startSegment: firstSegment, endSegment: lastSegment)
+    }
+
     // MARK: - Draft helpers (called on captureQueue)
 
-    private func resetDraftState() {
-        currentDraftId = UUID()
-        lastDraftText = ""
-        lastDraftTextChangeTime = Date.distantPast
-        lastRecognitionResultTime = Date.distantPast
-        draftChangeHistory = []
-        draftPrefixCandidate = ""
-        draftPrefixCandidateTime = Date.distantPast
-        confirmedStablePrefixLength = 0
-    }
 
-    private func emitDraftUpdate(
-        draftRange: Range<Int>,
-        allSegments: [SFTranscriptionSegment],
-        formattedText: NSString
-    ) {
-        let now = Date()
-        let lastIdx = draftRange.upperBound - 1
-        let draftNSRange = combinedRange(for: allSegments, from: draftRange.lowerBound, to: lastIdx)
-        let text = (formattedText.substring(with: draftNSRange) as String)
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !text.isEmpty else {
-            enqueuePartialDraft(nil)
-            return
-        }
 
-        observeDraftText(text, at: now)
-        let draftStability = currentDraftStability(at: now)
-        let silenceMs = draftStability.silenceMs
-        let stabilityScore = draftStability.stabilityScore
 
-        // Boundary score: sentence-terminating punctuation scores highest
-        let boundaryScore: Float = SentenceBoundaryHeuristics.endsWithLikelySentenceTerminator(in: text) ? 0.9 : 0.45
-
-        // Length fit score
-        let lengthFitScore = draftLengthFitScore(for: text)
-
-        let draftSegs = Array(allSegments[draftRange])
-        let avgConfidence = draftSegs.map(\.confidence).reduce(0, +) / Float(draftSegs.count)
-
-        let chunkScore = ChunkScorer.score(
-            vadProbability: lastVADProbability,
-            stabilityScore: stabilityScore,
-            boundaryScore: boundaryScore,
-            lengthFitScore: lengthFitScore,
-            confidenceScore: avgConfidence
-        )
-
-        let stablePrefixLen = computeStablePrefixLength(text: text, now: now)
-        let mutableTail = String(text.dropFirst(min(stablePrefixLen, text.count)))
-
-        let words = draftSegs.map { seg in
-            WordToken(
-                text: seg.substring,
-                startMs: Int(seg.timestamp * 1000),
-                endMs: Int((seg.timestamp + seg.duration) * 1000),
-                confidence: seg.confidence,
-                stable: seg.confidence >= 0.80
-            )
-        }
-
-        let draft = DraftSegment(
-            segmentId: currentDraftId,
-            sourceText: text,
-            stablePrefixLength: stablePrefixLen,
-            mutableTailText: mutableTail,
-            avgConfidence: avgConfidence,
-            startMs: Int(draftSegs[0].timestamp * 1000),
-            lastUpdateMs: Int(now.timeIntervalSinceReferenceDate * 1000),
-            silenceMs: silenceMs,
-            stabilityScore: stabilityScore,
-            boundaryScore: boundaryScore,
-            chunkScore: chunkScore,
-            vadProbability: lastVADProbability,
-            words: words
-        )
-
-        enqueuePartialDraft(draft)
-    }
-
-    /// Returns the character count of the stable (frozen) prefix.
-    /// A prefix is stable once it has been unchanged for >= 400 ms.
-    private func computeStablePrefixLength(text: String, now: Date) -> Int {
-        let mutableLen = mutableTailCharCount(for: text)
-        let candidateLen = max(0, text.count - mutableLen)
-        let candidate = String(text.prefix(candidateLen))
-
-        if candidate == draftPrefixCandidate {
-            if now.timeIntervalSince(draftPrefixCandidateTime) >= 0.4 {
-                confirmedStablePrefixLength = candidateLen
-            }
-        } else if text.hasPrefix(draftPrefixCandidate) {
-            // Text grew but prefix region unchanged — slide candidate forward
-            draftPrefixCandidate = candidate
-        } else {
-            // Prefix regressed — reset
-            draftPrefixCandidate = candidate
-            draftPrefixCandidateTime = now
-            confirmedStablePrefixLength = 0
-        }
-
-        return confirmedStablePrefixLength
-    }
-
-    /// Characters in the mutable tail: last 12 for CJK, last 35 for Latin (≈ 6 words).
-    private func mutableTailCharCount(for text: String) -> Int {
-        text.containsCJKCharacters ? min(12, text.count) : min(35, text.count)
-    }
-
-    private func combinedRange(for segments: [SFTranscriptionSegment], from startIndex: Int, to endIndex: Int) -> NSRange {
-        let firstRange = segments[startIndex].substringRange
-        let lastRange = segments[endIndex].substringRange
-        let endLocation = lastRange.location + lastRange.length
-        return NSRange(location: firstRange.location, length: endLocation - firstRange.location)
-    }
 
 #if os(macOS)
     private func mapApplicationCaptureError(_ error: ApplicationAudioCapture.CaptureError) -> SessionError {
@@ -3900,86 +2149,21 @@ final class LiveTranscriptionSession: NSObject, @unchecked Sendable {
         }
     }
 
-    @MainActor
-    func prepareCommittedSentenceForEmissionForTesting(
-        _ text: String,
-        pendingPromotionID: UUID? = nil,
-        isProvisionalSilence: Bool = false,
-        audioRange: CMTimeRange? = nil,
-        audioEndTime: TimeInterval? = nil
-    ) -> PreparedSentenceEmission? {
-        prepareCommittedSentenceForEmission(
-            text,
-            pendingPromotionID: pendingPromotionID,
-            isProvisionalSilence: isProvisionalSilence,
-            audioRange: audioRange,
-            audioEndTime: audioEndTime
-        )
-    }
-
-    @MainActor
-    func rememberCommittedSentenceForTesting(
-        _ text: String,
-        isProvisionalSilence: Bool = false,
-        promotionSegmentID: UUID? = nil,
-        rootPromotionSegmentID: UUID? = nil,
-        audioRange: CMTimeRange? = nil,
-        audioEndTime: TimeInterval? = nil
-    ) {
-        rememberCommittedSentence(
-            text,
-            isProvisionalSilence: isProvisionalSilence,
-            promotionSegmentID: promotionSegmentID,
-            rootPromotionSegmentID: rootPromotionSegmentID,
-            audioRange: audioRange,
-            audioEndTime: audioEndTime
-        )
-    }
-
-    func installTranscriptHandlerForTesting(_ handler: ((RecognizedSentence) -> Void)?) {
-        transcriptHandler = handler
-    }
-
-    func installPartialHandlerForTesting(_ handler: ((DraftSegment?) -> Void)?) {
-        partialHandler = handler
+    /// Replays a fixture event through the same ordered delivery path a real
+    /// recognizer event takes.
+    func emitEventForTesting(_ event: CaptionSessionEvent) {
+        emitEvent(event)
     }
 
 
-    func processModernRecognitionTextForTesting(
-        _ fullText: String,
-        isFinal: Bool,
-        audioRange: CMTimeRange,
-        sourceLanguageID: String = "en"
-    ) {
-        recognitionBackend = .speechAnalyzer
-        if configuredSourceLanguageID.isEmpty {
-            configuredSourceLanguageID = sourceLanguageID
-            currentHeardLanguageID = sourceLanguageID
-        }
-        processModernRecognitionText(fullText, isFinal: isFinal, audioRange: audioRange)
-    }
 
-    func forceCommitOnSilenceForTesting() {
-        recognitionBackend = .speechAnalyzer
-        forceCommitOnSilence(trigger: .asrInactivity)
-    }
 
-    func forceVADCommitOnSilenceForTesting() {
-        recognitionBackend = .speechAnalyzer
-        forceCommitOnSilence(trigger: .vadOffset)
-    }
 
-    func backdateLastDraftTextChangeForTesting(secondsAgo: TimeInterval) {
-        lastDraftTextChangeTime = Date().addingTimeInterval(-secondsAgo)
-    }
 
-    /// Drops the recent-commit history, modelling the passage of more than
-    /// the 8 s retention: a window-final that re-covers sentences committed
-    /// long ago must still not re-emit them.
-    @MainActor
-    func expireCommittedSentenceHistoryForTesting() {
-        recentCommittedSentenceHistory.removeAll()
-    }
+
+
+
+
 #endif
 }
 

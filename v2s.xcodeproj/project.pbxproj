@@ -19,7 +19,6 @@
 		A00000000000000000000055 /* LanguageOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000035 /* LanguageOption.swift */; };
 		A00000000000000000000056 /* OverlayPreviewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000036 /* OverlayPreviewState.swift */; };
 		A00000000000000000000057 /* OverlayStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000037 /* OverlayStyle.swift */; };
-		A000000000000000000000F2 /* CaptionLexicalKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000F3 /* CaptionLexicalKey.swift */; };
 		A00000000000000000000083 /* SubtitleDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000084 /* SubtitleDisplayMode.swift */; };
 		A00000000000000000000058 /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000038 /* SessionState.swift */; };
 		A00000000000000000000059 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000039 /* SettingsStore.swift */; };
@@ -32,11 +31,8 @@
 		A00000000000000000000060 /* StatusBarPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000040 /* StatusBarPopoverView.swift */; };
 		A00000000000000000000061 /* LiveTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000041 /* LiveTranscriptionSession.swift */; };
 		A00000000000000000000063 /* ModeConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000042 /* ModeConfig.swift */; };
-		A00000000000000000000064 /* SegmentStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000043 /* SegmentStateMachine.swift */; };
-		A00000000000000000000065 /* SubtitleSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000044 /* SubtitleSegment.swift */; };
 		A00000000000000000000067 /* GlossaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000046 /* GlossaryService.swift */; };
 		A00000000000000000000092 /* TranslationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000093 /* TranslationCoordinator.swift */; };
-		A00000000000000000000068 /* SpeedMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000047 /* SpeedMonitor.swift */; };
 		A00000000000000000000079 /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000007A /* TranscriptView.swift */; };
 		A0000000000000000000007B /* SileroVADEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000007C /* SileroVADEngine.swift */; };
 		A00000000000000000000080 /* SileroVAD.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000081 /* SileroVAD.mlpackage */; };
@@ -70,8 +66,15 @@
 		A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000D3 /* AudienceDisplayWindowController.swift */; };
 		A000000000000000000000E0 /* SpeechCorrectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E1 /* SpeechCorrectionService.swift */; };
 		A000000000000000000000E2 /* CaptionLanguagePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E3 /* CaptionLanguagePolicy.swift */; };
-		A000000000000000000000E4 /* DualLanePairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E5 /* DualLanePairing.swift */; };
-		A000000000000000000000E6 /* DualLaneCaptionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */; };
+		A00000000000000000000105 /* AnalyzerResultEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000101 /* AnalyzerResultEvent.swift */; };
+		A00000000000000000000106 /* CaptionLaneState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000102 /* CaptionLaneState.swift */; };
+		A00000000000000000000107 /* CaptionComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000103 /* CaptionComposer.swift */; };
+		A00000000000000000000108 /* CaptionCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000104 /* CaptionCore.swift */; };
+		A00000000000000000000112 /* CaptionLineBreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000109 /* CaptionLineBreaker.swift */; };
+		A00000000000000000000113 /* CaptionPaneProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000110 /* CaptionPaneProjection.swift */; };
+		A00000000000000000000114 /* CaptionViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000111 /* CaptionViewport.swift */; };
+		A00000000000000000000117 /* CaptionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000115 /* CaptionPipeline.swift */; };
+		A00000000000000000000118 /* CaptionSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000116 /* CaptionSurface.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,7 +92,6 @@
 		A00000000000000000000035 /* LanguageOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageOption.swift; sourceTree = "<group>"; };
 		A00000000000000000000036 /* OverlayPreviewState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPreviewState.swift; sourceTree = "<group>"; };
 		A00000000000000000000037 /* OverlayStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayStyle.swift; sourceTree = "<group>"; };
-		A000000000000000000000F3 /* CaptionLexicalKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLexicalKey.swift; sourceTree = "<group>"; };
 		A00000000000000000000084 /* SubtitleDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleDisplayMode.swift; sourceTree = "<group>"; };
 		A00000000000000000000038 /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
 		A00000000000000000000039 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
@@ -102,11 +104,8 @@
 		A00000000000000000000040 /* StatusBarPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarPopoverView.swift; sourceTree = "<group>"; };
 		A00000000000000000000041 /* LiveTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptionSession.swift; sourceTree = "<group>"; };
 		A00000000000000000000042 /* ModeConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeConfig.swift; sourceTree = "<group>"; };
-		A00000000000000000000043 /* SegmentStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentStateMachine.swift; sourceTree = "<group>"; };
-		A00000000000000000000044 /* SubtitleSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleSegment.swift; sourceTree = "<group>"; };
 		A00000000000000000000046 /* GlossaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlossaryService.swift; sourceTree = "<group>"; };
 		A00000000000000000000093 /* TranslationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationCoordinator.swift; sourceTree = "<group>"; };
-		A00000000000000000000047 /* SpeedMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedMonitor.swift; sourceTree = "<group>"; };
 		A0000000000000000000007A /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		A0000000000000000000007C /* SileroVADEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SileroVADEngine.swift; sourceTree = "<group>"; };
 		A00000000000000000000081 /* SileroVAD.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = SileroVAD.mlpackage; sourceTree = "<group>"; };
@@ -135,10 +134,17 @@
 		A000000000000000000000D3 /* AudienceDisplayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudienceDisplayWindowController.swift; sourceTree = "<group>"; };
 		A000000000000000000000E1 /* SpeechCorrectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCorrectionService.swift; sourceTree = "<group>"; };
 		A000000000000000000000E3 /* CaptionLanguagePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLanguagePolicy.swift; sourceTree = "<group>"; };
-		A000000000000000000000E5 /* DualLanePairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLanePairing.swift; sourceTree = "<group>"; };
-		A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualLaneCaptionRuntime.swift; sourceTree = "<group>"; };
 		A000000000000000000000E9 /* LiveDiarizationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDiarizationEngine.swift; sourceTree = "<group>"; };
 		A000000000000000000000EB /* Diarization */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Diarization; path = ../../../ios/Resources/Diarization; sourceTree = "<group>"; };
+		A00000000000000000000101 /* AnalyzerResultEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyzerResultEvent.swift; sourceTree = "<group>"; };
+		A00000000000000000000102 /* CaptionLaneState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLaneState.swift; sourceTree = "<group>"; };
+		A00000000000000000000103 /* CaptionComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionComposer.swift; sourceTree = "<group>"; };
+		A00000000000000000000104 /* CaptionCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionCore.swift; sourceTree = "<group>"; };
+		A00000000000000000000109 /* CaptionLineBreaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionLineBreaker.swift; sourceTree = "<group>"; };
+		A00000000000000000000110 /* CaptionPaneProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionPaneProjection.swift; sourceTree = "<group>"; };
+		A00000000000000000000111 /* CaptionViewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionViewport.swift; sourceTree = "<group>"; };
+		A00000000000000000000115 /* CaptionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionPipeline.swift; sourceTree = "<group>"; };
+		A00000000000000000000116 /* CaptionSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionSurface.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -185,6 +191,7 @@
 			isa = PBXGroup;
 			children = (
 				A0000000000000000000000D /* App */,
+				A00000000000000000000100 /* Captions */,
 				A00000000000000000000078 /* Localization */,
 				A0000000000000000000000E /* Models */,
 				A00000000000000000000082 /* Resources */,
@@ -234,12 +241,9 @@
 				A00000000000000000000035 /* LanguageOption.swift */,
 				A00000000000000000000042 /* ModeConfig.swift */,
 				A00000000000000000000036 /* OverlayPreviewState.swift */,
-				A000000000000000000000F3 /* CaptionLexicalKey.swift */,
 				A00000000000000000000037 /* OverlayStyle.swift */,
-				A00000000000000000000043 /* SegmentStateMachine.swift */,
 				A00000000000000000000038 /* SessionState.swift */,
 				A00000000000000000000084 /* SubtitleDisplayMode.swift */,
-				A00000000000000000000044 /* SubtitleSegment.swift */,
 				A000000000000000000000CD /* ConversationTurn.swift */,
 			);
 			path = Models;
@@ -251,8 +255,6 @@
 				A00000000000000000000046 /* GlossaryService.swift */,
 				A000000000000000000000E1 /* SpeechCorrectionService.swift */,
 				A000000000000000000000E3 /* CaptionLanguagePolicy.swift */,
-				A000000000000000000000E5 /* DualLanePairing.swift */,
-				A000000000000000000000E7 /* DualLaneCaptionRuntime.swift */,
 				A00000000000000000000093 /* TranslationCoordinator.swift */,
 				A00000000000000000000041 /* LiveTranscriptionSession.swift */,
 				A00000000000000000000091 /* SentenceBoundaryHeuristics.swift */,
@@ -261,7 +263,6 @@
 				A0000000000000000000007C /* SileroVADEngine.swift */,
 				A0000000000000000000008B /* SileroVADHysteresis.swift */,
 				A0000000000000000000003A /* SourceCatalogService.swift */,
-				A00000000000000000000047 /* SpeedMonitor.swift */,
 				A00000000000000000000085 /* UpdaterService.swift */,
 				A00000000000000000000096 /* TaigiASREngine.swift */,
 				A00000000000000000000098 /* TaiwanChineseNormalizer.swift */,
@@ -280,6 +281,7 @@
 		A00000000000000000000010 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				A00000000000000000000119 /* Captions */,
 				A00000000000000000000011 /* Overlay */,
 				A00000000000000000000075 /* Shared */,
 				A00000000000000000000012 /* Settings */,
@@ -335,6 +337,29 @@
 				A00000000000000000000015 /* Info.plist */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000100 /* Captions */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000101 /* AnalyzerResultEvent.swift */,
+				A00000000000000000000102 /* CaptionLaneState.swift */,
+				A00000000000000000000103 /* CaptionComposer.swift */,
+				A00000000000000000000104 /* CaptionCore.swift */,
+				A00000000000000000000109 /* CaptionLineBreaker.swift */,
+				A00000000000000000000110 /* CaptionPaneProjection.swift */,
+				A00000000000000000000111 /* CaptionViewport.swift */,
+				A00000000000000000000115 /* CaptionPipeline.swift */,
+			);
+			path = Captions;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000119 /* Captions */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000116 /* CaptionSurface.swift */,
+			);
+			path = Captions;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -459,12 +484,9 @@
 				A00000000000000000000055 /* LanguageOption.swift in Sources */,
 				A00000000000000000000063 /* ModeConfig.swift in Sources */,
 				A00000000000000000000056 /* OverlayPreviewState.swift in Sources */,
-				A000000000000000000000F2 /* CaptionLexicalKey.swift in Sources */,
 				A00000000000000000000057 /* OverlayStyle.swift in Sources */,
-				A00000000000000000000064 /* SegmentStateMachine.swift in Sources */,
 				A00000000000000000000058 /* SessionState.swift in Sources */,
 				A00000000000000000000083 /* SubtitleDisplayMode.swift in Sources */,
-				A00000000000000000000065 /* SubtitleSegment.swift in Sources */,
 				A00000000000000000000067 /* GlossaryService.swift in Sources */,
 				A00000000000000000000092 /* TranslationCoordinator.swift in Sources */,
 				A00000000000000000000090 /* SentenceBoundaryHeuristics.swift in Sources */,
@@ -474,7 +496,6 @@
 				A00000000000000000000080 /* SileroVAD.mlpackage in Sources */,
 				A0000000000000000000008A /* SileroVADHysteresis.swift in Sources */,
 				A0000000000000000000005A /* SourceCatalogService.swift in Sources */,
-				A00000000000000000000068 /* SpeedMonitor.swift in Sources */,
 				A0000000000000000000005B /* OverlayView.swift in Sources */,
 				A0000000000000000000005C /* OverlayWindowController.swift in Sources */,
 				A0000000000000000000008C /* QuickSettingsControls.swift in Sources */,
@@ -501,9 +522,16 @@
 				A000000000000000000000D2 /* AudienceDisplayWindowController.swift in Sources */,
 				A000000000000000000000E0 /* SpeechCorrectionService.swift in Sources */,
 				A000000000000000000000E2 /* CaptionLanguagePolicy.swift in Sources */,
-				A000000000000000000000E4 /* DualLanePairing.swift in Sources */,
-				A000000000000000000000E6 /* DualLaneCaptionRuntime.swift in Sources */,
 				A000000000000000000000E8 /* LiveDiarizationEngine.swift in Sources */,
+				A00000000000000000000105 /* AnalyzerResultEvent.swift in Sources */,
+				A00000000000000000000106 /* CaptionLaneState.swift in Sources */,
+				A00000000000000000000107 /* CaptionComposer.swift in Sources */,
+				A00000000000000000000108 /* CaptionCore.swift in Sources */,
+				A00000000000000000000112 /* CaptionLineBreaker.swift in Sources */,
+				A00000000000000000000113 /* CaptionPaneProjection.swift in Sources */,
+				A00000000000000000000117 /* CaptionPipeline.swift in Sources */,
+				A00000000000000000000114 /* CaptionViewport.swift in Sources */,
+				A00000000000000000000118 /* CaptionSurface.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

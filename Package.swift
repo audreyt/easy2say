@@ -39,7 +39,8 @@ let package = Package(
         .testTarget(
             name: "v2sTests",
             dependencies: ["v2s"],
-            path: "Tests/V2STests"
+            path: "Tests/V2STests",
+            resources: [.copy("Fixtures")]
         ),
     ]
 )

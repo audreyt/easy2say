@@ -32,11 +32,10 @@ struct OverlayView: View {
     private var subtitleContent: some View {
         CaptionFlowContentView(
             model: model,
+            role: .overlay,
             showsScrollbarPadding: true,
             updatesModelHistoryVisibleCount: true,
-            alignsTopDownCaptionsLeading: true,
-            animatesLiveCaptionLineEntrance: false,
-            stabilizesLiveCaptionLinePositions: true
+            alignsTopDownCaptionsLeading: true
         )
         .background(backgroundView)
         .overlay(
@@ -219,6 +218,7 @@ struct OverlayResetSizeButtonView: View {
 
 struct OverlayHistoryScrollbarView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var controller: CaptionSurfaceController
     @ObservedObject var interactionState: OverlayInteractionState
     var showTranscript: () -> Void = {}
 
@@ -283,8 +283,8 @@ struct OverlayHistoryScrollbarView: View {
     }
 
     private func scrollbarMetrics(trackHeight: CGFloat) -> OverlayHistoryScrollbarMetrics {
-        let totalCount = max(model.overlayState?.history.count ?? 0, 0)
-        let visibleCount = max(0, model.overlayHistoryVisibleCount)
+        let totalCount = max(model.displayedCaptionDocument.rows.count, 0)
+        let visibleCount = max(0, controller.visibleRowCount)
         let maxScrollOffset = max(0, totalCount - visibleCount)
         let clampedTrackHeight = max(trackHeight, OverlayHistoryScrollbarLayout.minimumThumbHeight)
         let visibilityRatio = totalCount > 0

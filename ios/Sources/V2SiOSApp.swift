@@ -68,17 +68,7 @@ private struct LiveCaptionPromotionUITestHarness: View {
             sourceName: "UI Test"
         )
         state.captionEpoch = isCommitted ? 2 : 1
-        state.committedPromotionID = isCommitted ? promotionID : precedingPromotionID
-
-        if isCommitted == false {
-            state.draftSourceText = Self.tentativeSourceText
-            state.draftPromotionID = promotionID
-            state.setDraftTranslation(
-                Self.tentativeTranslatedText,
-                sourceText: Self.tentativeSourceText,
-                promotionID: promotionID
-            )
-        }
+        state.phase = isCommitted ? .committed : .tentative
 
         return state
     }
