@@ -102,7 +102,7 @@ final class AppModelCaptionPipelineTests: XCTestCase {
             audioFedMs: 1_000
         )))
         await session.awaitPendingEmissionsForTesting()
-        await settlePipeline()
+        try await waitFor { model.captionDocument.rows.count == 1 }
 
         // The document keeps the live row; the displayed document does not.
         XCTAssertEqual(model.captionDocument.rows.count, 1)
