@@ -1,6 +1,6 @@
 # Easy2Say website
 
-Static bilingual product page continuously deployed from `main` through Cloudflare Pages at **https://easy2say.ai/**.
+Static bilingual product page continuously deployed from `main` through Cloudflare Pages at **https://easy2say.app/**.
 
 The page describes the iOS-first `audreyt/easy2say` fork. The upstream macOS product remains at **https://github.com/franklioxygen/v2s**.
 

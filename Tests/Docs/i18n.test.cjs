@@ -48,7 +48,6 @@ test("switches explicitly between English and native zh-TW copy", () => {
   assert.equal(i18n.t("brand.name"), "好說");
   assert.equal(document.documentElement.lang, "zh-TW");
   assert.equal(document.title, i18n.t("meta.title"));
-  assert.match(i18n.t("quickStart.lead"), /本分支建置/);
   assert.doesNotMatch(
     [i18n.t("meta.description"), i18n.t("quickStart.lead"), i18n.t("privacy.title")].join(" "),
     /實時|賬號/

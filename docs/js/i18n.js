@@ -38,6 +38,7 @@
         lead:
           "Easy2Say listens through one microphone, keeps both people visible, and drafts bilingual captions on device — without accounts, cloud transcription, or telemetry.",
         ctaDownload: "Download macOS",
+        ctaAppStore: "Download for iPhone & iPad",
         ctaSource: "Explore the source",
         artListen: "Listen",
         artUnderstand: "Understand",
@@ -137,10 +138,10 @@
         li4: "Voice activity detection and the optional bundled Taigi model run through Apple’s Core ML stack.",
       },
       quickStart: {
-        eyebrow: "05 · Build the app",
-        title: "From source to your iPhone in one quiet sitting.",
+        eyebrow: "05 · Get the app",
+        title: "Now on the App Store for iPhone and iPad.",
         lead:
-          "The iOS experience is built from this fork. Bring Xcode 26, an iOS 26 device or simulator, and your own signing team for a physical device.",
+          "Download Easy2Say from the App Store for iOS 26 or iPadOS 26. Prefer to build from source? Follow the optional developer steps below.",
         s1Title: "Prepare",
         s1Body:
           "Install Xcode 26, XcodeGen, and the Hugging Face CLI. A physical device also needs a local development team in Signing & Capabilities.",
@@ -171,7 +172,7 @@
       },
       cta: {
         title: "Let both sides of the conversation stay visible.",
-        body: "Open source, on device, and ready to install on Mac.",
+        body: "Open source, on device, and ready to install on iPhone, iPad, and Mac.",
         download: "Download macOS",
         readme: "Read the build notes",
         readmeHref: "https://github.com/audreyt/easy2say/blob/main/README.md",
@@ -222,6 +223,7 @@
         lead:
           "好說透過同一支麥克風聆聽，讓對話的兩個人都留在畫面上，並於裝置端起草雙語字幕；沒有帳號、雲端轉寫，也不追蹤你。",
         ctaDownload: "下載 macOS 版",
+        ctaAppStore: "下載 iPhone 與 iPad 版",
         ctaSource: "查看原始碼",
         artListen: "聽見",
         artUnderstand: "理解",
@@ -321,10 +323,10 @@
         li4: "語音活動偵測與選用的內建台語模型，皆透過 Apple Core ML 執行。",
       },
       quickStart: {
-        eyebrow: "05 · 建置應用程式",
-        title: "從原始碼到你的 iPhone，一次專心建置就能跑起來。",
+        eyebrow: "05 · 取得應用程式",
+        title: "iPhone 與 iPad 版已於 App Store 上架。",
         lead:
-          "這個 iOS 版要從本分支建置。請準備 Xcode 26、iOS 26 裝置或模擬器；若要安裝到實體裝置，還需要自己的簽署團隊。",
+          "從 App Store 下載好說，適用於 iOS 26 或 iPadOS 26。想從原始碼自行建置？可依照下方開發者步驟操作。",
         s1Title: "準備環境",
         s1Body:
           "安裝 Xcode 26、XcodeGen 與 Hugging Face CLI。實體裝置還需在 Signing & Capabilities 選擇本機開發團隊。",
@@ -355,7 +357,7 @@
       },
       cta: {
         title: "兩個人，兩種語言，都好說。",
-        body: "原始碼公開、於裝置端處理，現在也可直接安裝於 Mac。",
+        body: "原始碼公開、於裝置端處理，可直接安裝於 iPhone、iPad 與 Mac。",
         download: "下載 macOS 版",
         readme: "閱讀建置說明",
         readmeHref: "https://github.com/audreyt/easy2say/blob/main/README.zh-Hant.md",
